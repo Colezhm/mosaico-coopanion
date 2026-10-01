@@ -7,6 +7,7 @@
 #include "bsp/esp_mosaico.h"
 #include "esp_iris.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
@@ -20,6 +21,8 @@
 
 extern const uint8_t coo_start[] asm("_binary_coo_atlas_bin_start");
 extern const uint8_t coo_end[] asm("_binary_coo_atlas_bin_end");
+#define PAIRING_LIMIT 6144
+#define PAIRING_TIMEOUT_MS 30000
 typedef struct {
     uint32_t version, epoch;
     uint8_t resident, visible, transit, muted;
@@ -59,6 +62,12 @@ struct coop_board_t {
     unsigned battery_tick;
     float magnetic_baseline[BSP_MAGNETOMETER_NUM];
     uint64_t last_magnetic;
+    /* Owned only by the serial Iris RPC worker. Incomplete pairing is never persisted. */
+    uint8_t *pairing;
+    size_t pairing_size, pairing_received;
+    uint32_t pairing_session;
+    uint64_t pairing_deadline;
+    bool pairing_restarting;
 };
 static uint64_t now(void *ctx)
 {
@@ -429,19 +438,89 @@ static void poll(void *ctx, coop_state_handle_t s)
     if (h->led)
         bsp_led_set(view->listening);
 }
-static esp_err_t provision(const esp_iris_rpc_request_t *r, uint8_t *out, size_t capacity,
-                           size_t *size, void *ctx)
+static void restart_after_pairing(void *ctx)
 {
-    coop_board_handle_t h = ctx;
+    (void)ctx;
+    vTaskDelay(pdMS_TO_TICKS(750));
+    if (esp_iris_mark_planned_restart() == ESP_OK)
+        esp_restart();
+    vTaskDelete(NULL);
+}
+static esp_err_t save_pairing(coop_board_handle_t h, const uint8_t *data, size_t length,
+                             uint8_t *out, size_t capacity, size_t *size)
+{
     if (capacity < 32)
         return ESP_ERR_INVALID_SIZE;
-    esp_err_t err = coop_link_provision(h->link, r->payload, r->payload_size);
+    if (h->pairing_restarting)
+        return ESP_ERR_INVALID_STATE;
+    esp_err_t err = coop_link_provision(h->link, data, length);
     if (err == ESP_OK) {
+        if (xTaskCreate(restart_after_pairing, "coo_pair_restart", 2048, NULL, 5, NULL) != pdPASS)
+            return ESP_ERR_NO_MEM;
+        h->pairing_restarting = true;
         static const char reply[] = "{\"saved\":true,\"reboot\":true}";
         memcpy(out, reply, sizeof(reply) - 1);
         *size = sizeof(reply) - 1;
     }
     return err;
+}
+static void clear_pairing(coop_board_handle_t h)
+{
+    volatile uint8_t *data = h->pairing;
+    for (size_t i = 0; data && i < h->pairing_size; ++i)
+        data[i] = 0;
+    free(h->pairing);
+    h->pairing = NULL;
+    h->pairing_size = h->pairing_received = 0;
+}
+static esp_err_t provision(const esp_iris_rpc_request_t *r, uint8_t *out, size_t capacity,
+                           size_t *size, void *ctx)
+{
+    coop_board_handle_t h = ctx;
+    esp_iris_status_t status = {0};
+    if (esp_iris_get_status(&status) != ESP_OK || !status.session_ready ||
+        status.transport != ESP_IRIS_TRANSPORT_KIND_USB)
+        return ESP_ERR_NOT_ALLOWED;
+    return save_pairing(h, r->payload, r->payload_size, out, capacity, size);
+}
+static esp_err_t provision_chunk(const esp_iris_rpc_request_t *r, uint8_t *out, size_t capacity,
+                                 size_t *size, void *ctx)
+{
+    coop_board_handle_t h = ctx;
+    esp_iris_status_t status = {0};
+    if (esp_iris_get_status(&status) != ESP_OK || !status.session_ready ||
+        status.transport != ESP_IRIS_TRANSPORT_KIND_USB)
+        return ESP_ERR_NOT_ALLOWED;
+    if (r->payload_size <= 4 || r->payload_size > 1024 || capacity < 32 || h->pairing_restarting)
+        return ESP_ERR_INVALID_SIZE;
+    const uint8_t *p = r->payload;
+    size_t total = p[0] | ((size_t)p[1] << 8), offset = p[2] | ((size_t)p[3] << 8);
+    size_t length = r->payload_size - 4;
+    if (!total || total > PAIRING_LIMIT || offset > total || length > total - offset)
+        return ESP_ERR_INVALID_SIZE;
+    if (offset == 0) {
+        clear_pairing(h);
+        h->pairing = malloc(total);
+        if (!h->pairing)
+            return ESP_ERR_NO_MEM;
+        h->pairing_size = total;
+        h->pairing_session = status.session_id;
+        h->pairing_deadline = now(h) + PAIRING_TIMEOUT_MS;
+    }
+    if (!h->pairing || total != h->pairing_size || offset != h->pairing_received ||
+        status.session_id != h->pairing_session || now(h) > h->pairing_deadline) {
+        clear_pairing(h);
+        return ESP_ERR_INVALID_STATE;
+    }
+    memcpy(h->pairing + offset, p + 4, length);
+    h->pairing_received += length;
+    if (h->pairing_received == total) {
+        esp_err_t err = save_pairing(h, h->pairing, total, out, capacity, size);
+        clear_pairing(h);
+        return err;
+    }
+    *size = snprintf((char *)out, capacity, "{\"next\":%u}", (unsigned)h->pairing_received);
+    return ESP_OK;
 }
 esp_err_t coop_board_create(coop_board_handle_t *out)
 {
@@ -473,6 +552,7 @@ esp_err_t coop_board_create(coop_board_handle_t *out)
         nvs_close(nvs);
     }
     ESP_ERROR_CHECK(esp_iris_rpc_register(0x434f, 1, provision, h));
+    ESP_ERROR_CHECK(esp_iris_rpc_register(0x434f, 2, provision_chunk, h));
     if (xTaskCreate(output_worker, "coo_out", 4096, h, 4, NULL) != pdPASS)
         return ESP_ERR_NO_MEM;
     ESP_ERROR_CHECK_WITHOUT_ABORT(coop_audio_create(h->link, &h->audio));

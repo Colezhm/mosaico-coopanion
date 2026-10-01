@@ -19,7 +19,7 @@
 | ESP-SR / WebSocket client | `2.4.7` / `1.6.1` |
 | Electron / pnpm | `44.4.4` / `11.5.0` |
 | 保留 Vibe Mode | utils 评审包 `0.1.4` |
-| 板端应用描述符版本 | `1.0.0`（开发候选固件，并非硬件验收结论） |
+| 板端应用描述符版本 | `1.0.1`（开发候选固件，并非硬件验收结论） |
 
 桌面扩展遵循 [Cortina](https://github.com/Pal-AI-Lab/Cortina/tree/454895173ebbac408f0840679d79738185a9e202)
 的分层和三级验证流程。开发入口为 `desktop/coopanion/AGENTS.md`，实际接口以固定 Cortico 源码为准。
@@ -103,9 +103,16 @@ python projects/coopanion/tools/pair.py --device-id DEVICE_ID --directory /priva
 ```
 
 工具交互询问 Wi-Fi 密码，不将密码放进进程参数或日志。`--prepare-only` 仅生成私有文件。
+若已在 Vibe Mode 保存 Wi-Fi，添加 `--use-system-wifi`（需要固件 1.0.1+）。
+应用在板内只读访问保留的 `sysmeta/wifi`，密码不会发送到电脑，也不重复保存到应用配对配置。
 默认主机名 `coo-DEVICE_ID.local`、端口 19773。首次生成时可用 `--address 192.168.x.x`
 将固定 IP 写入证书 SAN；更换 IP 应使用新配对目录重新配置，不能只修改连接地址。
-RPC `0x434f/1` 保存后需要正常重启。TLS 要求正确时钟，当前通过 SNTP 设置，不绕过验证。
+工具通过 USB RPC `0x434f/2` 分块发送配对数据：每块不超过 Iris 的 1024 字节限制，
+四字节小端头为总长度和偏移，接收端检查顺序、会话与 30 秒事务期限；收齐并校验后才保存。
+固件 1.0.1 保存成功后自动正常重启。`0x434f/1` 保留短载荷兼容入口，两个入口均限 USB。
+TLS 要求正确时钟，当前通过 SNTP 设置，不绕过验证。
+软件命令进入 Vibe Mode 会持久选择 factory，单纯拔插不能返回应用。
+使用相同布局的 `iris app-update` 返回正常应用；它保留系统 Wi-Fi、配对和资源。
 `--deployment-dir` 必须指向已有 `config.json` 的部署目录；工具仅合并
 `CORTICO_MOSAICO_TOKEN` 到其 `.env`，保留其他密钥，拒绝覆盖不同的已有令牌。
 省略此项时，令牌保存在私有配对目录的 `.env`，需要导入部署 `.env`。

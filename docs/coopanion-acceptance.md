@@ -19,7 +19,10 @@
 | 完整镜像 | 16,777,216 字节；分区 MD5、保留布局、基础组件哈希、资源边界校验通过 | 整个 NOR 会被覆盖；普通应用 BIN 不用于零地址初装 |
 | 官方浏览器烧录 | 用户当次确认后写入完整 BIN；官方页面显示 100% 和 Firmware flashed successfully | 已释放浏览器串口；烧录完成不等于交互验收 |
 | 物理设备首次启动 | 重插 USB 后实时 Iris 握手确认 coopanion 1.0.0、normal、stale=false、crash_count=0；真实截图显示“等待 Coo 来访” | 配对未完成，Wi-Fi 和跨屏交互待验收 |
-| Vibe Mode | 同一 Device ID 成功从 normal 进入 recovery 0.1.4，新 Boot ID，具备 ota/system_update，crash_count=0；真实截图显示 USB Active | 返回 normal 的实时确认待完成 |
+| Vibe Mode 往返 | 同一 Device ID 从 normal 进入 recovery 0.1.4，再经 Iris app-update 返回健康 normal；每次重启均取得新 Boot ID、crash_count=0，OTA image_state=2 | 软件进入会持久选择 factory，拔插不能代替应用更新返回；修正了之前的错误指引 |
+| 保留 Wi-Fi 与配对 | 1.0.1 通过两块 USB RPC 完成证书与 token 配对，板内复用 Vibe 保存的 Wi-Fi；自动重启后 WSS、资源校验完成 | 密码未传回 Mac；首次单包超过 Iris 1024 字节上限的问题已修复，并增加载荷边界测试 |
+| 真机双向传送 | 最终 Mac .app 将 Coo 迁入物理板子，事务结束 owner=device、epoch=1；Iris 截图显示 Coo；返回完成 owner=desktop、epoch=2、transfer=null、ready=true | Wi-Fi DTIM 省电曾造成时钟质量反复失效，现使用 WIFI_PS_NONE；时序误差与功耗尚未量化 |
+| 1.0.1 修复验证 | 固件构建 `20261001-154951-build-20471` 成功，应用 2,255,904 字节；2 项 Python 配对分块与超限测试通过并纳入 CI | 设备应用描述符 SHA 与当前构建一致，正常运行无崩溃；不是 30 分钟稳定性结论 |
 | 首次公开源码 | `Colezhm/mosaico-coopanion` 提交 `d61fc0c15185734e4d51a2696bd33555eda6eb0a` 的树与本地 `944a5cc` 完全一致；GitHub CI 通过 | 源码树 `967a9539cdd52e5c591c7dd5b5b66acc67142e7d`；构建产物与私有配对文件不在源码中 |
 
 完整 BIN SHA-256：
@@ -32,8 +35,15 @@ Mac arm64 ZIP SHA-256：
 本机原始证据保存在 `artifacts/mosaico-coopanion/device-first-boot.{json,log,png}`、
 `device-enter-vibe.log`、`device-vibe.json` 和 `device-vibe.png`；这些文件不公开设备身份。
 
+1.0.1 增量更新仅写应用，保持完整分区表、Wi-Fi、配对及资源。
+另行导出的 `mosaico-coopanion-1.0.1-full.bin` 为 16,777,216 字节，SHA-256
+`317804deb1d7101c784372af861b1676dc2d7262ce9304268471356d86f7e6f6`；没有将它整盘写入设备，
+原获批准的完整镜像仍保留。实时证据补充于 `device-return-application.log`、
+`device-returned-ota-state.json`、`device-pair-101-chunks.log`、`device-101-final-status.json`、
+`device-coo-resident.png`。
+
 尚未通过：真实 500 ms 间隔 ±80 ms、板端 ≥30 fps、IMU 反馈 ≤100 ms、真实语音识别和
-扬声器自声、连续录音、真实低电量与运动校准、30 分钟稳定运行、同设备 normal → Vibe Mode → normal。
+扬声器自声、连续录音、真实低电量与运动校准、30 分钟稳定运行。
 截图、编译和模拟器日志不能替代这些结果。Windows、Intel Mac、Linux 构建运行亦未实测。
 
 重现命令、版本锁定、协议边界和已知功能限制见 [开发与使用](coopanion-implementation.md)。

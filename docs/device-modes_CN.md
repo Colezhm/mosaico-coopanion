@@ -21,6 +21,12 @@ Agent 可连接运行 ESP-Iris 的正常应用或 Vibe Mode。离线、握手失
 `python mosaico.py iris test enter-recovery` 从可达的正常应用进入已有
 Vibe Mode，不安装固件。应用更新命令会自动管理这一切换。
 
+这个软件入口会持久地把启动分区选择为 `factory`，拔插 USB 或普通重启不会撤销。
+返回应用应走应用更新流程：完整分区表不变时使用 `iris app-update`，布局或资源变化时
+使用 `iris system-update`。已核对且未改变的构建可以通过
+`iris app-update --project <project> --skip-build` 重装同一应用、恢复应用启动并验证健康，
+同时保留设置和资源。它与下文的 AI 键临时入口不同。
+
 `python mosaico.py recover` 写入基础固件，再验证 Vibe Mode 就绪。
 它可从已连接设备开始执行，仅在流程要求时手动进入 ROM。初始化条件及应用
 更新方式统一见[更新方式](mosaico-cli_CN.md#选择更新方式)，Wi-Fi 和 Download Ideas

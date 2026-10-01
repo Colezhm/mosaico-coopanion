@@ -43,5 +43,8 @@ jobs:
       - name: Check repository launcher
         run: python mosaico.py --version
 
+      - name: Check Coopanion USB pairing payload limits
+        run: python -B -m unittest discover -s projects/coopanion/tests -p 'test_pair.py'
+
       - name: Check workspace configuration, scaffolding and native game behavior
         run: python -m pytest -q tests/mosaico_cli_integration

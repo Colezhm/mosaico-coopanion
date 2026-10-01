@@ -20,6 +20,8 @@
 
 #define RX_LIMIT (32 * 1024)
 #define TX_LIMIT 16384
+#define SYSTEM_WIFI_PARTITION "sysmeta"
+#define SYSTEM_WIFI_NAMESPACE "wifi"
 typedef struct {
     char *text;
     size_t length;
@@ -47,6 +49,36 @@ static const char *str(cJSON *j, const char *key)
 {
     cJSON *v = cJSON_GetObjectItemCaseSensitive(j, key);
     return cJSON_IsString(v) ? v->valuestring : "";
+}
+typedef struct {
+    char ssid[33];
+    char password[64];
+} system_wifi_t;
+static void clear_secret(void *data, size_t size)
+{
+    volatile uint8_t *p = data;
+    while (size--)
+        *p++ = 0;
+}
+/* Vibe Mode 0.1.4 stores Wi-Fi in retained sysmeta/wifi. Read it only on
+ * explicit USB pairing opt-in; credentials never travel back to the host. */
+static esp_err_t system_wifi_read(system_wifi_t *wifi)
+{
+    memset(wifi, 0, sizeof(*wifi));
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open_from_partition(SYSTEM_WIFI_PARTITION, SYSTEM_WIFI_NAMESPACE, NVS_READONLY, &nvs);
+    if (err != ESP_OK)
+        return err;
+    size_t ssid_size = sizeof(wifi->ssid), password_size = sizeof(wifi->password);
+    err = nvs_get_str(nvs, "ssid", wifi->ssid, &ssid_size);
+    if (err == ESP_OK)
+        err = nvs_get_str(nvs, "password", wifi->password, &password_size);
+    nvs_close(nvs);
+    if (err == ESP_OK && !wifi->ssid[0])
+        err = ESP_ERR_INVALID_STATE;
+    if (err != ESP_OK)
+        clear_secret(wifi, sizeof(*wifi));
+    return err;
 }
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -178,9 +210,9 @@ static void worker(void *arg)
             if (h->connected && h->ws && item.generation == atomic_load(&h->generation)) {
                 int sent = item.binary
                                ? esp_websocket_client_send_bin(h->ws, item.text, item.length,
-                                                               pdMS_TO_TICKS(100))
+                                                               pdMS_TO_TICKS(500))
                                : esp_websocket_client_send_text(h->ws, item.text, item.length,
-                                                                pdMS_TO_TICKS(100));
+                                                                pdMS_TO_TICKS(500));
                 if (sent != (int)item.length && h->cfg.connection)
                     h->cfg.connection(h->cfg.ctx, false);
             }
@@ -223,12 +255,24 @@ esp_err_t coop_link_provision(coop_link_handle_t h, const uint8_t *data, size_t 
         return ESP_ERR_INVALID_ARG;
     const char *ssid = str(j, "ssid"), *password = str(j, "password"), *uri = str(j, "uri"),
                *token = str(j, "token"), *cert = str(j, "certificate");
-    bool valid = strlen(ssid) > 0 && strlen(ssid) <= 32 && strlen(password) <= 63 &&
+    bool system_wifi = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "use_system_wifi"));
+    bool valid = (system_wifi || (strlen(ssid) > 0 && strlen(ssid) <= 32 && strlen(password) <= 63)) &&
                  strlen(uri) < 256 && !strncmp(uri, "wss://", 6) && strlen(token) == 64 &&
                  strlen(cert) > 64 && strlen(cert) < 4096;
     if (!valid) {
         cJSON_Delete(j);
         return ESP_ERR_INVALID_ARG;
+    }
+    if (system_wifi) {
+        system_wifi_t wifi;
+        esp_err_t err = system_wifi_read(&wifi);
+        clear_secret(&wifi, sizeof(wifi));
+        if (err != ESP_OK) {
+            cJSON_Delete(j);
+            return err;
+        }
+        cJSON_DeleteItemFromObjectCaseSensitive(j, "ssid");
+        cJSON_DeleteItemFromObjectCaseSensitive(j, "password");
     }
     char *text = cJSON_PrintUnformatted(j);
     cJSON_Delete(j);
@@ -274,11 +318,24 @@ esp_err_t coop_link_start(coop_link_handle_t h)
     snprintf(h->uri, sizeof(h->uri), "%s", str(j, "uri"));
     snprintf(h->headers, sizeof(h->headers), "Authorization: Bearer %s\r\n", str(j, "token"));
     h->certificate = strdup(str(j, "certificate"));
-    strncpy((char *)h->wifi.sta.ssid, str(j, "ssid"), sizeof(h->wifi.sta.ssid));
-    strncpy((char *)h->wifi.sta.password, str(j, "password"), sizeof(h->wifi.sta.password));
+    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "use_system_wifi"))) {
+        system_wifi_t wifi;
+        err = system_wifi_read(&wifi);
+        if (err == ESP_OK) {
+            memcpy(h->wifi.sta.ssid, wifi.ssid, strlen(wifi.ssid));
+            memcpy(h->wifi.sta.password, wifi.password, strlen(wifi.password));
+        }
+        clear_secret(&wifi, sizeof(wifi));
+    } else {
+        strncpy((char *)h->wifi.sta.ssid, str(j, "ssid"), sizeof(h->wifi.sta.ssid));
+        strncpy((char *)h->wifi.sta.password, str(j, "password"), sizeof(h->wifi.sta.password));
+    }
     cJSON_Delete(j);
+    clear_secret(h->provision, size);
     free(h->provision);
     h->provision = NULL;
+    if (err != ESP_OK)
+        return err;
     if (!h->certificate)
         return ESP_ERR_NO_MEM;
     err = esp_netif_init();
@@ -292,6 +349,11 @@ esp_err_t coop_link_start(coop_link_handle_t h)
         return ESP_ERR_NO_MEM;
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);
+    if (err != ESP_OK)
+        return err;
+    /* DTIM sleep can add >200 ms on real APs, invalidating the <=100 ms
+     * transfer clock samples and repeatedly restarting the asset handshake. */
+    err = esp_wifi_set_ps(WIFI_PS_NONE);
     if (err != ESP_OK)
         return err;
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_handler_instance_register(

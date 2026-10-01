@@ -24,6 +24,14 @@ the [live evidence rules](project-gateway.md#live-evidence-and-next-steps).
 a reachable normal application without installing firmware. Application update
 commands manage this transition automatically.
 
+This software entry persistently selects `factory` as the boot partition.
+Unplugging USB or restarting does not undo that selection. Return through the
+application update workflow: `iris app-update` when the complete partition table
+is unchanged, otherwise `iris system-update`. For a verified, unchanged build,
+`iris app-update --project <project> --skip-build` can reinstall the same application,
+select it for boot and validate its health while preserving settings and resources.
+This differs from the temporary AI-button entry described below.
+
 `python mosaico.py recover` writes base firmware and then verifies Vibe Mode.
 It can start from a connected device; manual ROM entry is only needed when the
 workflow requests it. For provisioning conditions and application updates, follow

@@ -6,9 +6,16 @@ writes. Wi-Fi passwords are prompted without echo and never passed on a process
 command line. Raw RPC uses the official CLI's base64-stdin Gateway path.
 """
 from pathlib import Path
-import argparse, getpass, ipaddress, json, os, re, secrets, subprocess, sys
+import argparse, getpass, ipaddress, json, os, re, secrets, struct, subprocess, sys
 
 TOKEN_NAME = 'CORTICO_MOSAICO_TOKEN'
+
+def pairing_chunks(payload):
+    """Iris RPC has a 1024-byte ceiling, independently of its frame MTU."""
+    raw = json.dumps(payload, separators=(',', ':')).encode()
+    if not 0 < len(raw) <= 6144: raise ValueError('Pairing payload exceeds the firmware limit')
+    for offset in range(0, len(raw), 768):
+        yield struct.pack('<HH', len(raw), offset) + raw[offset:offset+768]
 
 def save_token(path, token):
     """Merge only our key; an existing deployment's other secrets stay intact."""
@@ -27,8 +34,10 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--device-id',required=True);p.add_argument('--directory',type=Path,required=True)
     p.add_argument('--address',help='Optional fixed LAN IPv4/IPv6 address; default uses paired mDNS hostname')
     p.add_argument('--port',type=int,default=19773);p.add_argument('--prepare-only',action='store_true');p.add_argument('--ssid')
+    p.add_argument('--use-system-wifi', action='store_true', help='Use Wi-Fi already saved in Vibe Mode; no password leaves the board (firmware 1.0.1+)')
     p.add_argument('--deployment-dir',type=Path,help='Existing Cortico deployment; merge the token into its .env')
     a=p.parse_args()
+    if a.use_system_wifi and a.ssid: p.error('Choose --use-system-wifi or --ssid, not both')
     if not a.device_id.isascii() or not all(c.isalnum() or c in '_-' for c in a.device_id) or len(a.device_id)>64: p.error('Invalid device ID')
     if not 1024<=a.port<=65535:p.error('Port must be 1024..65535')
     address=str(ipaddress.ip_address(a.address)) if a.address else None
@@ -59,12 +68,18 @@ def main():
     else: print('Import CORTICO_MOSAICO_TOKEN from the private .env into your deployment .env before enabling Mosaico.')
     print('Desktop pairing file:',pairing)
     if a.prepare_only:return 0
-    ssid=a.ssid or input('Wi-Fi SSID: ');password=getpass.getpass('Wi-Fi password (not displayed): ')
     target=address or config['hostname'];target='['+target+']' if ':' in target else target
-    payload={'ssid':ssid,'password':password,'uri':f"wss://{target}:{config['port']}/mosaico/v1",'token':token,'certificate':Path(config['certFile']).read_text()}
+    payload={'uri':f"wss://{target}:{config['port']}/mosaico/v1",'token':token,'certificate':Path(config['certFile']).read_text()}
+    if a.use_system_wifi: payload['use_system_wifi']=True
+    else:
+        payload['ssid']=a.ssid or input('Wi-Fi SSID: ')
+        payload['password']=getpass.getpass('Wi-Fi password (not displayed): ')
     root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root))
     import mosaico
-    result=mosaico.main(['iris','rpc','0x434f','1','--device-id',a.device_id,'--project',str(root/'projects/coopanion'),'--payload-hex',json.dumps(payload).encode().hex(),'--json'],tool_root=mosaico.TOOLS_ROOT)
-    if result==0:print('Saved. Restart Mosaico normally, then enable the extension using the pairing file above.')
+    result=0
+    for chunk in pairing_chunks(payload):
+        result=mosaico.main(['iris','rpc','0x434f','2','--device-id',a.device_id,'--project',str(root/'projects/coopanion'),'--payload-hex',chunk.hex(),'--json'],tool_root=mosaico.TOOLS_ROOT)
+        if result: break
+    if result==0:print('Saved. Firmware 1.0.1+ restarts automatically; older firmware needs a normal restart. Enable the desktop extension using the pairing file above.')
     return result
 if __name__=='__main__':raise SystemExit(main())
