@@ -1,0 +1,31 @@
+{
+  "format": "COO1",
+  "width": 192,
+  "height": 216,
+  "poses": [
+    "neutral",
+    "happy",
+    "wink",
+    "love",
+    "shy",
+    "surprised",
+    "angry",
+    "sad",
+    "sleepy",
+    "sleep",
+    "dizzy",
+    "dragged",
+    "thinking",
+    "sit",
+    "walk0",
+    "walk1",
+    "walk2",
+    "walk3",
+    "walk4",
+    "walk5",
+    "walk6",
+    "walk7"
+  ],
+  "bytes": 115998,
+  "skin": {}
+}

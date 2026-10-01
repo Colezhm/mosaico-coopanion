@@ -1,0 +1,6 @@
+node_modules/
+build/
+dist/
+scratch/
+*.log
+promo/assets/bgm.mp3

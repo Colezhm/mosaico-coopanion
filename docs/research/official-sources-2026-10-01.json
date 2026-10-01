@@ -1,0 +1,185 @@
+{
+  "checked_at_utc": "2026-10-01T15:07:35.063865+00:00",
+  "pages": [
+    {
+      "url": "https://mosaico.espressif.com/guide/",
+      "html_sha256": "7a5f37673f802a7f236bd3f3af12bb9b0ab70ee9098e42a39345bb569ed69549",
+      "text_characters": 2034,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/",
+      "html_sha256": "aa12ad40bd46c119a477f8c4c953491639a77e411f9d7589ddf908f26ff6635b",
+      "text_characters": 847,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/firmware-update/",
+      "html_sha256": "fc9f8c0bf40a1160b2861eee97a719e926944fef019fd553f025167c4e6aaf7e",
+      "text_characters": 1368,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s31/esp-mosaico/index.html",
+      "html_sha256": "aca8c0e748f8f86523252801acfda66b22c4fce5380705f37f19145044c49049",
+      "text_characters": 1199,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico-ideas.espressif.com/",
+      "html_sha256": "0e2e547236d86fcef32706906f2379b512c4489b651e510c0a7e7c48f57d6efd",
+      "text_characters": 30,
+      "read_method": "browser-rendered; raw HTTP is an app shell",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/chat-coding/",
+      "html_sha256": "25d3aa52e56b9ee02bf2588e4eb26915a2066ddb0a4d227e3a51d7516c6f685e",
+      "text_characters": 3972,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/vibe-coding/",
+      "html_sha256": "d7eaef1f4832b391c0d2854d516fb712456e7a834973c2e32b0da1b7352ae4dd",
+      "text_characters": 1941,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/idea-center/",
+      "html_sha256": "dc07f275d9723b18f71f2377230248ebc50041498e0089c623a990b859366f29",
+      "text_characters": 422,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/faq/",
+      "html_sha256": "cf155abf4fbfd958c1d82d99cf6549d433af12d3ba640d13923dad2d322ad05b",
+      "text_characters": 5251,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/glossary/",
+      "html_sha256": "f16d1063954870de224b43fa24ebee30ecc1ae6135331ae7aee957d578c2e988",
+      "text_characters": 1088,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/safety/",
+      "html_sha256": "968d2b682d8d86e65dec67046cec10fdb1bb3e066b90ea729432901d53df94b6",
+      "text_characters": 717,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/guide/hardware-docs/",
+      "html_sha256": "52f2c00460a216eafa534bd811692eda96d9be8de5a2c708ee3a9e49e072ddd2",
+      "text_characters": 361,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/chat-coding/",
+      "html_sha256": "2ec3b88221dd838e62cb8246b92635b542d3ef8326bb7f9ffa36ace70a428ba1",
+      "text_characters": 1583,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/vibe-coding/",
+      "html_sha256": "3f3c6c004979ab051500e9aa0c3758df36bd0fdcaaecc23de2b79d56fc643258",
+      "text_characters": 849,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/idea-center/",
+      "html_sha256": "5b6238d156ba111f9b458a3cfa36178692dee48a07d47655e41a407573bbaa3c",
+      "text_characters": 201,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/faq/",
+      "html_sha256": "a112b936867ff0cd7521840043f695b0ef4a2c673d37f8f900575fa6b731cb39",
+      "text_characters": 2332,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/glossary/",
+      "html_sha256": "c9f27c3454fb96e1afbbed42cdbb36bac2e7545bd875293df98ba41a806f0948",
+      "text_characters": 470,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/safety/",
+      "html_sha256": "b9f5c26ffcb9e68cd930a5a48fea0d37b6a3fc0cfab9f13bd50fa1cb1fed2c3a",
+      "text_characters": 271,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://mosaico.espressif.com/zh/guide/hardware-docs/",
+      "html_sha256": "56f8bdc0c71abdb4e69d8cb4ca2a4ca17af1934a0c47ff3720f0bbada61b8df8",
+      "text_characters": 171,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s31/esp-mosaico/user_guide.html",
+      "html_sha256": "0414b2528356ca1d6d14d86f595c153e3323cfc88580a5354623929c2abd2be7",
+      "text_characters": 10143,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s31/esp-mosaico/user_guide_v1.0.html",
+      "html_sha256": "d3442eec8bd7bcbaa8191b9b41768bf12bdd8f66903f98c66b928bb60c8a97ec",
+      "text_characters": 10035,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s31/esp-mosaico/user_guide_camera.html",
+      "html_sha256": "e78d7988dc7ccc5aad4ca33b1e8ab991ce4c9cc70f5e16317fabe7c15fe771dc",
+      "text_characters": 6887,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    },
+    {
+      "url": "https://docs.espressif.com/projects/esp-dev-kits/zh_CN/latest/esp32s31/esp-mosaico/user_guide_interact.html",
+      "html_sha256": "6d7623f41141594423bb8b94d66b256648b50f97759474386906c9f822e860b1",
+      "text_characters": 3207,
+      "read_method": "downloaded HTML text",
+      "scope": "page body; linked attachments not exhaustively reviewed"
+    }
+  ],
+  "flasher_script": {
+    "url": "https://mosaico.espressif.com/static/firmware-update.astro_astro_type_script_index_0_lang.CJ8xHd-h.js",
+    "sha256": "70495e6ff69c3616127bb35acecd184594c8a89f7898b4647010a0858d94b745"
+  },
+  "browser_only_pages": [
+    "https://mosaico-ideas.espressif.com/firmware/5807b118-10bb-4143-9f23-8d5c32306b78",
+    "https://mosaico-ideas.espressif.com/flash/project/5807b118-10bb-4143-9f23-8d5c32306b78?mode=wired",
+    "https://mosaico-ideas.espressif.com/flash/project/5807b118-10bb-4143-9f23-8d5c32306b78?mode=online",
+    "https://mosaico-ideas.espressif.com/rankings",
+    "https://mosaico-ideas.espressif.com/board/camera",
+    "https://mosaico-ideas.espressif.com/board/battery",
+    "https://mosaico-ideas.espressif.com/publish",
+    "https://mosaico-ideas.espressif.com/feedback",
+    "https://mosaico-ideas.espressif.com/explore"
+  ],
+  "limitations": [
+    "Publish and feedback forms require login; only public gates read.",
+    "Not an exhaustive audit of all community firmware, comments, repository history, or linked datasheet PDFs."
+  ]
+}

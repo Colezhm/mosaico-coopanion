@@ -1,0 +1,88 @@
+# 开发文档
+
+Coopanion 是用 [Cortico](https://github.com/Pal-AI-Lab/Cortico) 组装的 Electron 桌面应用:Cortico Core + Cormini Persona +
+[桌宠 World](../packages/cortico-world-desktop-pet) + [电脑操作 World](../packages/cortico-world-cua),
+模型经 Coo Pet Provider(`packages/cortico-provider-coo`)接 DeepSeek、通义千问、Kimi 等几家服务,默认 DeepSeek。每家一个端点,名字就是它在 `src/vendors.ts` 里的 id;0.1.x 的 `deepseek` 模块端点在启动时由 `core/seed.ts` 改成 `coo`。
+
+## 从源码构建
+
+需要 Git、Node.js 22 和 pnpm(`corepack enable`),在 Windows 或 macOS 上都能开发。
+
+```bash
+git clone --recursive https://github.com/Pal-AI-Lab/Coopanion.git
+cd Coopanion
+pnpm install
+pnpm run dev                # 准备 build/cortico 并启动应用,数据写在 build/data
+```
+
+已经 clone 过但没带 `--recursive` 的话,先补上 Cortico 子模块:
+
+```bash
+git submodule update --init --recursive
+```
+
+| 命令 | 作用 |
+|---|---|
+| `pnpm run dev` | 生成 `build/cortico` 并启动应用 |
+| `pnpm run start` | 直接启动应用(不重新生成 `build/cortico`) |
+| `pnpm run build:cortico` | 只生成 `build/cortico`(控制台改动后要重跑,并重启应用) |
+| `pnpm run test` | 主仓库单元测试 |
+| `pnpm run test:worlds` | 桌宠与电脑操作 World 的单元测试（使用本仓库锁定的 Cortico） |
+| `pnpm run typecheck:worlds` | 两个 World 的类型检查 |
+| `pnpm run typecheck` | 检查 Core 与 Electron 部分的类型 |
+| `pnpm run typecheck:web` | 检查控制台的类型(先跑 `build:cortico`) |
+| `pnpm run build:installer` | Windows 上打出 `dist/Coopanion-Setup-<版本>.exe`;Mac 上打出 `dist/Coopanion-<版本>-mac-<架构>.dmg` 和 `.zip`(`PACK_ARCH=x64` 在 Apple 芯片上打 Intel 版) |
+| `pnpm run build:icons` | 用桌宠的造型重画应用图标和默认头像 |
+
+想用一份干净的数据测试(比如看首次启动、引导、没填 Key 时的提醒),把 `CORTICO_COMPANION_DATA` 指向一个空目录再启动:
+
+```powershell
+$env:CORTICO_COMPANION_DATA = "$env:TEMP\coo-test"; pnpm run start
+```
+
+引导跑过(走完或点了 ×)之后,部署目录里会写一个 `guide.json`(`<数据目录>/home/companion/guide.json`),删掉它、并且没有 Key 时,下次启动引导会重新出现。已经有 Key 的旧安装升级上来直接算看过。引导本身在 `core/guide.ts`,一步一步经桌宠 World 的 `dialog` 画在 Coo 的气泡里。
+
+## 目录结构
+
+| 目录 | 内容 |
+|---|---|
+| `vendor/cortico` | Cortico 本体(子模块) |
+| `packages/cortico-world-desktop-pet`、`packages/cortico-world-cua` | 两个 World，源码由本仓库直接管理 |
+| `packages/cortico-provider-coo` | Coo Pet Provider:DeepSeek、千问、Kimi 等几家模型服务的 provider,DeepSeek 排第一 |
+| `core/` | Core 子进程的入口:装配 Cormini、World、provider;首次运行的种子文件;没填 Key 时让桌宠提醒;匿名使用统计(`telemetry.ts`,字段见 [TELEMETRY.md](TELEMETRY.md)) |
+| `console/` | 覆盖在 Cortico 控制台上的入口:普通/高级两种模式,「开始」「习惯」「装扮」「语音输入」四页,字标下的版本与更新提示(`features/release.ts`,版本号由 `scripts/stage.ts` 写进 `app-version.ts`) |
+| `app/` | Electron 主进程:托盘(Mac 上是菜单栏图标)、设置窗口(启动时不打开)、Core 子进程托管、桌宠窗口模式;`app/shims/` 是扩展安装用的 corepack 替身 |
+| `scripts/stage.ts` | 从 `vendor/cortico` 生成应用使用的 `build/cortico`:去掉内建的平台 World 与 llamacpp,叠加 `console/`,构建控制台 |
+| `scripts/pack.ts` | 组装扁平的 `build/app` 并调用 electron-builder;`installer/nsis.nsh` 定 Windows 默认安装位置、卸载时保留 `data`、卸载(非升级)时报告给统计服务;Mac 包是临时签名(ad hoc)的 dmg 与 zip |
+| `scripts/make-icons.cjs` | 用 Electron 把 pet-core 的造型画成 `app/icons` 与 `core/seed/avatar.png` |
+| `installer/install.ps1` | 一行命令安装用的脚本:下载最新 Release 的安装包并运行 |
+| `telemetry-server/` | 匿名使用统计的服务端(单文件 Node + SQLite),部署在 `survey.palailab.org`,说明见 [telemetry-server/README.md](../telemetry-server/README.md) |
+| `promo/` | 宣传片与仓库 banner,网页渲染,说明见 [promo/README.md](../promo/README.md) |
+
+## 发布
+
+1. 改 `package.json` 里的 `version`;
+2. 提交后打 `v<版本>` 标签并推送。
+
+GitHub Actions 会构建 Windows 安装包和两个 Mac 包(Apple 芯片、Intel,都在 Apple 芯片的 runner 上打),附到对应的 Release 上。
+
+## 提交改动
+
+- 提 PR 前先跑 `pnpm run test`、`pnpm run test:worlds`、`pnpm run typecheck`、`pnpm run typecheck:web` 和 `pnpm run typecheck:worlds`，CI 也会跑这些检查。
+- 改到用户能看到的行为时,同步更新 [README](../README.md)。
+
+## World 源码来源
+
+两个 World 从子模块转为本仓库的 workspace 包时，保留了原目录、包名和许可证。源码快照分别取自桌宠
+[`7ce70c271add681cbcb19cfebb07c40ac03215e3`](https://github.com/Pal-AI-Lab/cortico-world-desktop-pet/commit/7ce70c271add681cbcb19cfebb07c40ac03215e3)
+和 CUA [`ce44ed7fed92ec06b60df2609808110a73824fe5`](https://github.com/Pal-AI-Lab/cortico-world-cua/commit/ce44ed7fed92ec06b60df2609808110a73824fe5)。
+各包原有 Git 历史仍可从对应仓库查看；此后修改直接提交到 Coopanion。包内独立 lockfile 和 workspace 配置已移除，
+依赖统一由仓库根目录管理。`vendor/cortico` 仍是子模块。
+
+## 代理、主题与字标
+
+Core 使用内置 Electron 的 Node 环境代理支持，读取 HTTP_PROXY/HTTPS_PROXY 等变量。NO_PROXY 与 no_proxy 合并后补齐 localhost、127.0.0.1 和 IPv6 回环地址，避免本机控制台和桌宠通信被代理。变量必须存在于应用启动环境中；Finder 启动不自动读取 shell 配置。
+
+装扮页通过 URL 初始值和父窗口消息跟随控制台主题，消息校验精确来源与父窗口；桌宠配色独立保存。
+
+执行 `node promo/banner.mjs companion assets` 同步生成 README 明暗 banner 与 `console/branding.ts`。复用现有字母几何，Coopanion 仅开头两个 o 着品牌绿色。生成后重新构建控制台。

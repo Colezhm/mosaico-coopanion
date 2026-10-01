@@ -1,0 +1,210 @@
+{
+  "screen": "coop",
+  "w": 480,
+  "h": 480,
+  "screen_bg": "#000000",
+  "font": "fonts/NotoSansSC.ttf",
+  "default_font_size": 22,
+  "swipe": false,
+  "objects": [
+    {
+      "type": "image",
+      "parent": -1,
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "image": "canvas.png",
+      "codec": "lossless",
+      "bind": "canvas",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "poke"
+        },
+        {
+          "event": "long",
+          "action": "call",
+          "target_name": "menu_open"
+        }
+      ],
+      "name": "canvas"
+    },
+    {
+      "type": "label",
+      "parent": -1,
+      "x": 24,
+      "y": 30,
+      "w": 432,
+      "h": 100,
+      "text": "等待 Coo 来访",
+      "font_size": 22,
+      "fg_color": "#DDEFEA",
+      "text_align": "center",
+      "bind": "subtitle",
+      "font_charset_file": "charset.txt",
+      "name": "subtitle"
+    },
+    {
+      "type": "label",
+      "parent": -1,
+      "x": 24,
+      "y": 140,
+      "w": 432,
+      "h": 28,
+      "text": "MOSAICO × COO",
+      "font_size": 18,
+      "fg_color": "#59C9AA",
+      "text_align": "center",
+      "bind": "status",
+      "font_charset": "已连接离线传送中静音倾听识别思考播报 ·0123456789%MOSAICO×",
+      "name": "status"
+    },
+    {
+      "type": "container",
+      "parent": -1,
+      "x": 16,
+      "y": 318,
+      "w": 448,
+      "h": 146,
+      "bg_color": "#14221F",
+      "radius": 20,
+      "bind": "menu",
+      "bind_target": "visible",
+      "hidden": true,
+      "name": "menu"
+    },
+    {
+      "type": "button",
+      "parent": 3,
+      "x": 12,
+      "y": 12,
+      "w": 204,
+      "h": 56,
+      "text": "返回电脑",
+      "font_size": 22,
+      "bg_color": "#254D40",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "callback": "return_pc"
+    },
+    {
+      "type": "button",
+      "parent": 3,
+      "x": 224,
+      "y": 12,
+      "w": 204,
+      "h": 56,
+      "text": "静音切换",
+      "font_size": 22,
+      "bg_color": "#254D40",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "callback": "mute"
+    },
+    {
+      "type": "button",
+      "parent": 3,
+      "x": 12,
+      "y": 76,
+      "w": 204,
+      "h": 56,
+      "text": "摸摸头",
+      "font_size": 22,
+      "bg_color": "#254D40",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "callback": "petting"
+    },
+    {
+      "type": "button",
+      "parent": 3,
+      "x": 224,
+      "y": 76,
+      "w": 204,
+      "h": 56,
+      "text": "关闭菜单",
+      "font_size": 22,
+      "bg_color": "#254D40",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "callback": "menu_close"
+    },
+    {
+      "type": "button",
+      "parent": -1,
+      "x": 24,
+      "y": 175,
+      "w": 432,
+      "h": 50,
+      "text": "",
+      "font_size": 22,
+      "bg_color": "#163F31",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "bind": "answer_0",
+      "hidden": true,
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "answer",
+          "arg": 0
+        }
+      ],
+      "font_charset_file": "charset.txt",
+      "name": "answer_0"
+    },
+    {
+      "type": "button",
+      "parent": -1,
+      "x": 24,
+      "y": 232,
+      "w": 432,
+      "h": 50,
+      "text": "",
+      "font_size": 22,
+      "bg_color": "#163F31",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "bind": "answer_1",
+      "hidden": true,
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "answer",
+          "arg": 1
+        }
+      ],
+      "font_charset_file": "charset.txt",
+      "name": "answer_1"
+    },
+    {
+      "type": "button",
+      "parent": -1,
+      "x": 24,
+      "y": 289,
+      "w": 432,
+      "h": 50,
+      "text": "",
+      "font_size": 22,
+      "bg_color": "#163F31",
+      "fg_color": "#E8FFF5",
+      "radius": 12,
+      "bind": "answer_2",
+      "hidden": true,
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "answer",
+          "arg": 2
+        }
+      ],
+      "font_charset_file": "charset.txt",
+      "name": "answer_2"
+    }
+  ]
+}

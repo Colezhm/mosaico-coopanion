@@ -1,0 +1,37 @@
+{
+  "name": "cortico-provider-coo",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Coo Pet Provider: DeepSeek, Qwen, Kimi, GLM, Doubao, Baidu Qianfan, MiniMax, StepFun and OpenRouter for Cortico through their Responses endpoints",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pal-AI-Lab/Coopanion.git",
+    "directory": "packages/cortico-provider-coo"
+  },
+  "keywords": [
+    "cortico-provider",
+    "cortico",
+    "deepseek",
+    "qwen",
+    "kimi",
+    "glm",
+    "llm"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "./src/index.ts",
+  "cortico": {
+    "kind": "provider",
+    "api": 5
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  }
+}
