@@ -984,6 +984,9 @@ export class DesktopPetWorld implements World {
   }
 
   private notConnected(tool: string): ToolOutcome {
+    const presence = this.mosaico?.presence;
+    if (presence?.transferring) return { text: `[${tool} 没执行] 身体正在传送,落地后再做。`, failed: true };
+    if (presence?.owner === 'device' && !presence.deviceOnline) return { text: `[${tool} 没执行] 身体在 Mosaico 上,板子当前没有连接,${this.cfg.user}看不到。`, failed: true };
     const w = this.windowHost?.state();
     const why = w && w.phase !== 'running' && w.detail ? `(${w.detail})` : '';
     return { text: `[${tool} 没执行] 桌宠窗口没有连接${why},${this.cfg.user}看不到。`, failed: true };

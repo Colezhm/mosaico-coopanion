@@ -64,7 +64,7 @@ export class MosaicoTransport {
     this.timer = setInterval(() => {
       if (!this.peer) return;
       if (performance.now() - this.lastSeen > 6000) { this.peer.terminate(); return; }
-      // Samples age out: losing every quick sample in the window pauses transfers.
+      // Transfers pause once no quick sample remains in the window.
       if (this.clockReady && !this.clock.estimate(performance.now()).ready) {
         this.clockReady = false; this.send({ t: 'clock_quality', ready: false });
       }
@@ -92,8 +92,8 @@ export class MosaicoTransport {
         if (m.t === 'clock_pong') {
           const now = performance.now();
           if (m.echo !== this.pingAt || typeof m.at !== 'number' || !Number.isFinite(m.at)) return;
-          // Minimum-RTT filter: one slow sample (Wi-Fi jitter, modem sleep) no
-          // longer pauses transfers while a recent quick sample bounds the error.
+          // Readiness and offset come from the quickest recent sample, so a slow
+          // sample keeps the session ready while one within 100 ms is in the window.
           const clock = this.clock.add(this.pingAt, m.at, now);
           if (!clock.ready) { this.clockReady = false; this.send({ t: 'clock_quality', ready: false }); return; }
           this.clockOffset = clock.offset;

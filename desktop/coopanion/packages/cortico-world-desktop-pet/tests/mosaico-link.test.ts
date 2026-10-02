@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { createHash } from 'node:crypto';
 import { WebSocket } from 'ws';
-import { MosaicoBridge } from '../src/mosaico/bridge.ts';
+import { MosaicoBridge, recoveryEpoch } from '../src/mosaico/bridge.ts';
 import { AssetSync, validAtlas } from '../src/mosaico/assets.ts';
 import { MosaicoTransport } from '../src/mosaico/transport.ts';
 import type { Message } from '../src/mosaico/coordinator.ts';
@@ -15,6 +15,23 @@ function atlas():Buffer {
   const b=Buffer.alloc(188+22*5);b.write('COO1');b.writeUInt16LE(192,4);b.writeUInt16LE(216,6);b.writeUInt16LE(22,8);
   for(let i=0;i<22;i++){b.writeUInt32LE(188+i*5,12+i*8);b.writeUInt32LE(5,16+i*8);b.writeUInt16LE(192*216,188+i*5);b.writeUInt16LE(65535,190+i*5);b[192+i*5]=255;}return b;
 }
+describe('Mosaico presence journal',()=>{
+  it('sets an unreadable journal aside and gives the body to the desktop above any board epoch',()=>{
+    const directory=mkdtempSync(join(tmpdir(),'mosaico-journal-'));
+    try{
+      writeFileSync(join(directory,'presence.json'),'{"version":1,"owner":');
+      const errors:string[]=[];
+      const before=recoveryEpoch();
+      const bridge=new MosaicoBridge(directory,{sendDesktop:()=>true,input:()=>{},speech:()=>{},transcribe:async()=>({text:''}),voiceEnabled:()=>false,skin:()=>null,error:e=>errors.push(e)},()=>false);
+      const state=bridge.presence.snapshot();
+      expect(state.owner).toBe('desktop');expect(state.transfer).toBeNull();
+      expect(state.epoch).toBeGreaterThanOrEqual(before);expect(state.epoch).toBeLessThan(2**32);
+      expect(JSON.parse(readFileSync(join(directory,'presence.json'),'utf8'))).toEqual(state);
+      expect(readdirSync(directory).some(f=>f.startsWith('presence.json.corrupt-'))).toBe(true);
+      expect(errors).toHaveLength(1);
+    }finally{rmSync(directory,{recursive:true,force:true});}
+  });
+});
 describe('Mosaico resource channel',()=>{
   it('keeps the commit alive while hardware validates and writes NOR, but still bounds failure',()=>{
     const bytes=atlas(),sent:Message[]=[],errors:string[]=[];
