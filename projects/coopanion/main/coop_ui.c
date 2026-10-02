@@ -2,6 +2,7 @@
 #include "coop_ui.h"
 #include "coop_render.h"
 #include "coop_subtitle.h"
+#include "coop_hud.h"
 #define GSP_BUNDLE_ENABLE_RAW_IDS
 #include "bundle_gsp.h"
 #include <stdlib.h>
@@ -14,11 +15,11 @@ struct coop_ui_t {
     coop_render_handle_t render;
     void *timer;
     char text[2048], page_text[COOP_SUBTITLE_PAGE_BYTES], displayed[COOP_SUBTITLE_PAGE_BYTES];
-    char status[96], previous_status[96], question_id[64];
+    char status[COOP_HUD_STATUS_BYTES], previous_status[COOP_HUD_STATUS_BYTES], question_id[64];
     uint64_t subtitle_at;
     unsigned pages;
     int layout_edge;
-    bool menu, confirmation;
+    bool menu, confirmation, sitting;
     int answers;
     const char *receipt_type;
     char receipt_id[64];
@@ -80,15 +81,7 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
         gsp_coop_subtitle_2_set_position(gsp,24,top+64);
         gsp_coop_status_set_position(gsp,24,s->edge==2?444:4);
     }
-    snprintf(h->status, sizeof(h->status), "%s  ·  %u%%  %s  %u/%u",
-             s->transferring           ? "传送中"
-             : s->listening            ? "倾听"
-             : s->motion == COOP_THINK ? "思考"
-             : s->motion == COOP_SPEAK ? "回复"
-             : s->connected            ? "已连接"
-                                       : "离线",
-             s->battery, s->muted ? "静音" : "",page+1,h->pages?h->pages:1);
-    if(s->transferring)h->status[0]=0;
+    coop_hud_status(s, page, h->pages, h->status);
     if (strcmp(h->status, h->previous_status)) {
         gsp_coop_status_set_text(gsp, h->status);
         strcpy(h->previous_status, h->status);
@@ -96,6 +89,10 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
     if (h->menu != s->menu) {
         h->menu = s->menu;
         gsp_coop_menu_set_visible(gsp, h->menu);
+    }
+    if (h->sitting != (s->motion == COOP_SIT)) {
+        h->sitting = s->motion == COOP_SIT;
+        gsp_coop_rest_set_text(gsp, h->sitting ? "站起来" : "坐下歇会");
     }
     esp_gsp_canvas_invalidate(gsp, GSP_COOP_BIND_CANVAS);
     /* Submit the changed frame before asking the board's I/O worker to fence
@@ -123,8 +120,10 @@ static void event(esp_gsp_handle_t gsp, const esp_gsp_event_t *e, void *ctx)
         coop_state_menu(h->state, false);
     else if (gsp_coop_event_is_petting(e))
         coop_state_touch(h->state, true, now);
-    else if (gsp_coop_event_is_mute(e))
-        coop_state_mute(h->state, !s->muted);
+    else if (gsp_coop_event_is_rest(e)) {
+        coop_state_action(h->state, s->motion == COOP_SIT ? "stand" : "sit", now);
+        coop_state_menu(h->state, false);
+    }
     else if (gsp_coop_event_is_return_pc(e) && h->cfg.event) {
         const coop_event_t msg = {.type = "return", .at = now};
         h->cfg.event(h->cfg.ctx, &msg);

@@ -7,6 +7,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import type { Message } from './coordinator.ts';
 import { Bonjour, type ServiceConfig } from 'bonjour-service';
 import { createDiscoverySocket } from './discovery.ts';
+import { ClockFilter } from './clock.ts';
 
 export interface Pairing { deviceId: string; token: string; certFile: string; keyFile: string; port: number; hostname?:string; advertise?:boolean }
 export interface TransportHooks {
@@ -24,6 +25,7 @@ export class MosaicoTransport {
   private incoming = 0;
   private clockOffset = 0;
   private clockReady = false;
+  private readonly clock = new ClockFilter();
   private announced = false;
   private pingAt = 0;
   private timer: NodeJS.Timeout | null = null;
@@ -36,7 +38,9 @@ export class MosaicoTransport {
   constructor(private readonly pairing: Pairing, private readonly hooks: TransportHooks) {}
   get ready(): boolean { return this.peer?.readyState === 1 && this.clockReady; }
   async start(): Promise<void> {
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(this.pairing.deviceId) || !/^[a-f0-9]{64}$/.test(this.pairing.token)) throw new Error('配对文件无效');
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(this.pairing.deviceId)) throw new Error('配对文件无效：deviceId 缺失或格式不对');
+    if (!this.pairing.token) throw new Error('缺少 CORTICO_MOSAICO_TOKEN：运行 projects/coopanion/tools/pair.py 后把它写入部署的 .env');
+    if (!/^[a-f0-9]{64}$/.test(this.pairing.token)) throw new Error('CORTICO_MOSAICO_TOKEN 格式不对：应为 64 位十六进制');
     this.server = createServer({ cert: readFileSync(this.pairing.certFile), key: readFileSync(this.pairing.keyFile), minVersion: 'TLSv1.2' }, (_req, res) => { res.writeHead(404); res.end(); });
     this.wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024, perMessageDeflate: false });
     this.server.on('upgrade', (req, socket, head) => {
@@ -60,11 +64,15 @@ export class MosaicoTransport {
     this.timer = setInterval(() => {
       if (!this.peer) return;
       if (performance.now() - this.lastSeen > 6000) { this.peer.terminate(); return; }
+      // Samples age out: losing every quick sample in the window pauses transfers.
+      if (this.clockReady && !this.clock.estimate(performance.now()).ready) {
+        this.clockReady = false; this.send({ t: 'clock_quality', ready: false });
+      }
       this.ping();
     }, 2000);
   }
   private accept(ws: WebSocket): void {
-    this.peer = ws; this.session = randomUUID(); this.seq = this.incoming = 0; this.clockReady = false; this.announced = false; this.lastSeen = performance.now();
+    this.peer = ws; this.session = randomUUID(); this.seq = this.incoming = 0; this.clockReady = false; this.clock.reset(); this.announced = false; this.lastSeen = performance.now();
     this.send({ t: 'hello', deviceId: this.pairing.deviceId });
     ws.on('message', (data, binary) => {
       const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
@@ -84,11 +92,13 @@ export class MosaicoTransport {
         if (m.t === 'clock_pong') {
           const now = performance.now();
           if (m.echo !== this.pingAt || typeof m.at !== 'number' || !Number.isFinite(m.at)) return;
-          const rtt = now - this.pingAt;
-          if (rtt > 100) { this.clockReady = false; this.send({ t: 'clock_quality', ready: false }); return; }
-          this.clockOffset = m.at - (now + this.pingAt) / 2;
+          // Minimum-RTT filter: one slow sample (Wi-Fi jitter, modem sleep) no
+          // longer pauses transfers while a recent quick sample bounds the error.
+          const clock = this.clock.add(this.pingAt, m.at, now);
+          if (!clock.ready) { this.clockReady = false; this.send({ t: 'clock_quality', ready: false }); return; }
+          this.clockOffset = clock.offset;
           this.clockReady = true;
-          this.send({ t: 'clock_quality', ready: true, offset: this.clockOffset, rtt });
+          this.send({ t: 'clock_quality', ready: true, offset: this.clockOffset, rtt: clock.rtt });
           // A slow clock sample pauses transfer eligibility, not the WSS session.
           // Reannouncing here would discard capabilities that the board sends once
           // per connection and cancel an in-flight durable asset commit.

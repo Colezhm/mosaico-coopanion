@@ -1,5 +1,7 @@
 # 匿名使用统计
 
+> **Mosaico × Coopanion 分支：默认关闭。** 只有在设置窗口「习惯」页主动勾选「匿名使用统计」后才会发送；下文描述的是开启后的行为，数据发往上游 Coopanion 项目的服务器。
+
 从 v0.1.10 起，Coopanion 会向项目自己的服务器 `https://survey.palailab.org` 发送匿名使用统计，用来了解有多少人在用、用得多久、哪些功能有人用。本页列出发送的全部字段。客户端代码在 [`core/telemetry.ts`](../core/telemetry.ts)，服务端代码在 [`telemetry-server/`](../telemetry-server/)。
 
 **关掉**：设置窗口「习惯」页最下面，取消勾选「匿名使用统计」。关掉时会发最后一条 `telemetry_disabled`，没发出去的记录随即清空，之后不再计数也不再发送。重新勾上后沿用原来的安装编号。

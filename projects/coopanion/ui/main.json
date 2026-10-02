@@ -128,7 +128,7 @@
       "fg_color": "#59C9AA",
       "text_align": "center",
       "bind": "status",
-      "font_charset": "已连接离线传送中静音倾听识别思考播报 ·0123456789%MOSAICO×/回复",
+      "font_charset": "已连接离线传送中倾听思考回复电量低 ·0123456789%MOSAICO×/",
       "name": "status"
     },
     {
@@ -143,7 +143,10 @@
       "bind": "menu",
       "bind_target": "visible",
       "hidden": true,
-      "name": "menu"
+      "name": "menu",
+      "bg_opacity": 224,
+      "border_color": "#2F6F5C",
+      "border_width": 1
     },
     {
       "type": "button",
@@ -152,7 +155,7 @@
       "y": 12,
       "w": 204,
       "h": 56,
-      "text": "返回电脑",
+      "text": "回到电脑",
       "font_size": 22,
       "bg_color": "#254D40",
       "fg_color": "#E8FFF5",
@@ -166,12 +169,21 @@
       "y": 12,
       "w": 204,
       "h": 56,
-      "text": "语音已暂停",
+      "text": "坐下歇会",
       "font_size": 22,
       "bg_color": "#254D40",
       "fg_color": "#E8FFF5",
       "radius": 12,
-      "callback": "mute"
+      "bind": "rest",
+      "name": "rest",
+      "font_charset_file": "charset.txt",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "rest"
+        }
+      ]
     },
     {
       "type": "button",
@@ -194,7 +206,7 @@
       "y": 76,
       "w": 204,
       "h": 56,
-      "text": "关闭菜单",
+      "text": "收起",
       "font_size": 22,
       "bg_color": "#254D40",
       "fg_color": "#E8FFF5",

@@ -9,6 +9,7 @@
 #include "esp_iris.h"
 #include "esp_timer.h"
 #include "esp_system.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
@@ -26,6 +27,13 @@ extern const uint8_t coo_end[] asm("_binary_coo_atlas_bin_end");
 #define PAIRING_TIMEOUT_MS 30000
 #define RECEIPT_FENCE_BUDGET_MS 1500
 #define RECEIPT_SEND_ATTEMPTS 5
+/* Emotion changes are frequent; transfers persist immediately through their own
+ * state events, so an expression only needs to be durable within a few seconds. */
+#define EMOTION_PERSIST_DEBOUNCE_MS 5000
+/* Keep Wi-Fi awake after local input so a summon or voice press that usually
+ * follows a touch is not delayed by modem sleep, and briefly after connecting. */
+#define LOW_LATENCY_AFTER_INPUT_MS 30000
+#define LOW_LATENCY_AFTER_CONNECT_MS 60000
 typedef struct {
     uint32_t version, epoch;
     uint8_t resident, visible, transit, muted;
@@ -61,6 +69,9 @@ struct coop_board_t {
     atomic_bool journal_ok;
     bool motor, led, imu_ok, battery_ok, magnet_ok, nand_ok, capabilities_sent;
     char walk_id[64], last_emotion[24];
+    bool emotion_dirty;
+    uint64_t emotion_persisted_at, connected_at;
+    bool was_connected;
     journal_t restored, durable;
     unsigned battery_tick;
     float magnetic_baseline[BSP_MAGNETOMETER_NUM];
@@ -456,7 +467,9 @@ static void poll(void *ctx, coop_state_handle_t s)
             coop_state_connection(s, ready);
             if (ready && !h->capabilities_sent) {
                 cJSON *caps = message("capabilities");
-                cJSON_AddStringToObject(caps, "app", "mosaico-coopanion/1.1.0");
+                char app[48];
+                snprintf(app, sizeof(app), "mosaico-coopanion/%s", esp_app_get_description()->version);
+                cJSON_AddStringToObject(caps, "app", app);
                 cJSON_AddNumberToObject(caps, "width", 480);
                 cJSON_AddNumberToObject(caps, "height", 480);
                 cJSON_AddBoolToObject(caps, "imu", h->imu_ok);
@@ -494,9 +507,23 @@ static void poll(void *ctx, coop_state_handle_t s)
         cJSON *mood = message("pet_emotion");
         cJSON_AddStringToObject(mood, "face", view->expression);
         coop_link_send(h->link, mood);
+        h->emotion_dirty = true;
+    }
+    if (h->emotion_dirty && time - h->emotion_persisted_at >= EMOTION_PERSIST_DEBOUNCE_MS) {
+        h->emotion_dirty = false;
+        h->emotion_persisted_at = time;
         const coop_event_t save = {.type = "persist", .at = time};
         output(h, &save);
     }
+    bool online = atomic_load(&h->connected);
+    if (online && !h->was_connected)
+        h->connected_at = time;
+    h->was_connected = online;
+    coop_link_set_low_latency(
+        h->link, view->transferring || view->listening || view->menu ||
+                     coop_assets_busy(h->assets) || coop_audio_busy(h->audio) ||
+                     (online && time - h->connected_at < LOW_LATENCY_AFTER_CONNECT_MS) ||
+                     (view->interacted_at && time - view->interacted_at < LOW_LATENCY_AFTER_INPUT_MS));
     atomic_store(&h->active, view->resident || view->transferring);
     if (h->led)
         bsp_led_set(view->listening);

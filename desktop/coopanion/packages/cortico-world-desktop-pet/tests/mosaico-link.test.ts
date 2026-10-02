@@ -50,7 +50,7 @@ describe('paired WSS audio and asset integration',()=>{
     execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-config',join(directory,'tls.cnf'),'-keyout',join(directory,'key.pem'),'-out',join(directory,'cert.pem')],{stdio:'ignore'});
   });
   afterAll(async()=>{peer?.terminate();await bridge?.stop();rmSync(directory,{recursive:true,force:true});});
-  it('does not reset a paired session when clock quality recovers after one slow sample',async()=>{
+  it('keeps a paired session ready through one slow clock sample',async()=>{
     const connected=vi.fn(),quality:boolean[]=[];
     // Reserve a loopback port through the OS without exposing transport internals.
     const probe=createServer();await new Promise<void>(r=>probe.listen(0,'127.0.0.1',r));const port=(probe.address() as {port:number}).port;await new Promise<void>(r=>probe.close(()=>r()));
@@ -68,8 +68,10 @@ describe('paired WSS audio and asset integration',()=>{
           if(++pings===2)setTimeout(send,150);else send();
         }
       });
-      await vi.waitFor(()=>expect(quality).toContain(false),{timeout:4000});
-      await vi.waitFor(()=>expect(quality.slice(-1)).toEqual([true]),{timeout:4000});
+      // The minimum-RTT window still holds the first quick sample.
+      await vi.waitFor(()=>expect(pings).toBeGreaterThanOrEqual(3),{timeout:6000});
+      await vi.waitFor(()=>expect(quality.length).toBeGreaterThanOrEqual(3),{timeout:4000});
+      expect(quality).not.toContain(false);
       expect(live.ready).toBe(true);expect(connected).toHaveBeenCalledTimes(1);
     }finally{socket?.terminate();await live.stop();}
   },10000);

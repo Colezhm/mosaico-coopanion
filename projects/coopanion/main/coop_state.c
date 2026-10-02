@@ -13,6 +13,13 @@
 #define FALL_HOLD_MS 180
 #define EDGE_HOLD_MS 450
 #define REACTION_COOLDOWN_MS 15000
+/* System captions: owned by connection/presence state, replaced as soon as that
+ * state changes so the caption never contradicts the status line. */
+#define TEXT_OFFLINE_HERE "电脑未连接，先陪你玩一会儿"
+#define TEXT_BACK_ONLINE "电脑连上啦！按住 AI 键和我说话"
+#define TEXT_AWAY "Coo 在电脑上，按一下 AI 键请它过来"
+#define TEXT_AWAY_OFFLINE "电脑未连接，Coo 暂时过不来"
+#define TEXT_WAITING "等待 Coo 来访"
 
 struct coop_state_t {
     coop_snapshot_t view;
@@ -78,6 +85,26 @@ static void cancel_voice(coop_state_handle_t h)
         emit(h, "voice_cancel", "");
     }
 }
+static bool system_caption(const char *text)
+{
+    return !strcmp(text, TEXT_OFFLINE_HERE) || !strcmp(text, TEXT_BACK_ONLINE) ||
+           !strcmp(text, TEXT_AWAY) || !strcmp(text, TEXT_AWAY_OFFLINE) ||
+           !strcmp(text, TEXT_WAITING) || !strcmp(text, "电脑未连接");
+}
+/* Re-derive the caption from connection and residence. Content captions
+ * (replies, questions, feedback) are kept unless leaving makes them stale. */
+static void refresh_caption(coop_state_handle_t h, bool force)
+{
+    if (h->view.transferring || (!force && !system_caption(h->view.subtitle)))
+        return;
+    const char *text = h->view.resident ? (h->view.connected ? TEXT_BACK_ONLINE : TEXT_OFFLINE_HERE)
+                       : h->view.connected ? TEXT_AWAY
+                                           : TEXT_AWAY_OFFLINE;
+    /* The initial "waiting" caption stays until Coo has visited once. */
+    if (!h->view.resident && !strcmp(h->view.subtitle, TEXT_WAITING) && !h->view.epoch && !force)
+        return;
+    strcpy(h->view.subtitle, text);
+}
 esp_err_t coop_state_create(const coop_state_config_t *config, coop_state_handle_t *out)
 {
     if (!config || !out)
@@ -96,7 +123,7 @@ esp_err_t coop_state_create(const coop_state_config_t *config, coop_state_handle
     h->view.eye_color = 0x2fd59b;
     h->hidden = true;
     strcpy(h->view.expression, "neutral");
-    strcpy(h->view.subtitle, "等待 Coo 来访");
+    strcpy(h->view.subtitle, TEXT_WAITING);
     return ESP_OK;
 }
 void coop_state_delete(coop_state_handle_t h)
@@ -128,13 +155,16 @@ void coop_state_connection(coop_state_handle_t h, bool connected)
 {
     if (!h)
         return;
+    bool changed = h->view.connected != connected;
     h->view.connected = connected;
     if (!connected) {
         cancel_voice(h);
         h->pressed = false;
-        if (h->view.resident && !h->view.transferring)
-            strcpy(h->view.subtitle, "电脑未连接，陪你玩一会儿");
     }
+    /* A lost link replaces whatever was showing while Coo stays here; a
+     * restored link only replaces captions that described the outage. */
+    if (changed)
+        refresh_caption(h, !connected && h->view.resident);
 }
 void coop_state_presence(coop_state_handle_t h, bool resident, uint32_t epoch, bool in_transit)
 {
@@ -154,6 +184,9 @@ void coop_state_presence(coop_state_handle_t h, bool resident, uint32_t epoch, b
     }
     if (!resident || in_transit)
         cancel_voice(h);
+    /* Leaving makes any reply or question on screen stale. */
+    if (!in_transit && was_resident != resident)
+        refresh_caption(h, !resident);
     emit(h, "persist", "");
 }
 bool coop_state_transfer(coop_state_handle_t h, const char *command, const char *id, uint32_t epoch,
@@ -350,6 +383,7 @@ void coop_state_tick(coop_state_handle_t h, uint64_t now)
             h->view.visible = false;
             h->view.resident = false;
             h->view.glow = 0;
+            strcpy(h->view.subtitle, h->view.connected ? TEXT_AWAY : TEXT_AWAY_OFFLINE);
             emit(h, "persist", "");
             emit(h, "transfer_hidden", h->view.transfer_id);
         }
@@ -485,6 +519,7 @@ void coop_state_button(coop_state_handle_t h, bool down, uint64_t now)
     if (!h || h->pressed == down)
         return;
     h->now = now;
+    h->view.interacted_at = now;
     h->pressed = down;
     if (h->view.transferring)
         return;
@@ -493,7 +528,7 @@ void coop_state_button(coop_state_handle_t h, bool down, uint64_t now)
         if (h->summoned_press)
             return;
         if (!h->view.connected) {
-            feedback(h, "电脑未连接");
+            feedback(h, TEXT_OFFLINE_HERE);
             return;
         }
         if (coop_state_animation_busy(h) && h->view.motion != COOP_SPEAK)
@@ -517,6 +552,8 @@ void coop_state_button(coop_state_handle_t h, bool down, uint64_t now)
 }
 void coop_state_touch(coop_state_handle_t h, bool petting, uint64_t now)
 {
+    if (h)
+        h->view.interacted_at = now;
     if (!h || !h->view.resident || h->view.transferring)
         return;
     h->now = now;
@@ -607,8 +644,10 @@ void coop_state_battery(coop_state_handle_t h, uint8_t percent, bool charging)
 }
 void coop_state_menu(coop_state_handle_t h, bool open)
 {
-    if (h && !h->view.transferring)
+    if (h && !h->view.transferring) {
         h->view.menu = open;
+        h->view.interacted_at = h->now;
+    }
 }
 void coop_state_mute(coop_state_handle_t h, bool mute)
 {
