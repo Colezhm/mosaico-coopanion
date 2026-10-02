@@ -687,6 +687,9 @@ export function createPet(els, opts) {
   }
 
   function step(dt) {
+    // A duplicate/frozen clock tick has no motion to integrate. Dividing its
+    // displacement by zero poisons swing and the whale's deforming meshes.
+    if (!Number.isFinite(dt) || dt <= 0) return;
     T += dt; pet.modeT += dt;
     const m = pet.mode, mt = pet.modeT;
     let sqT = 0, strideT = 0, liftT = 0, leanT = 0, sitT = 0, bobT = 0, rate = 0, lookT = [0, 0], tiltT = 0;
