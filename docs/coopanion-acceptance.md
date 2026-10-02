@@ -4,6 +4,22 @@
 
 2026-10-02，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
 
+## 1.2.0 / 桌面 0.1.0-mosaico.4 候选（云端会话，未上板）
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 共享 C | 状态机、字幕分页（行首禁则、句末分页、英文按词）、系统字幕跟随连接/归属、渲染回执注入；ASan/UBSan 通过，0 警告（`-Wall -Wextra -Wshadow`） | 主机 gcc；未用 ESP-IDF 编译 `coop_link.c`、`coop_board.c`、`coop_assets.c`、`coop_ui.c` |
+| 画面预览 | `tools/preview_screen.py` 17 个场景 × Coo/大肥鱼，全部在消毒器下渲染；对比 1.1.x：双线性 Coo、放大、接触阴影、离开时的传送门、摔倒不出屏、重连字幕不再矛盾 | 画布像素与板端渲染器相同；文字为 Pillow 近似，不是 GSP 模拟器 |
+| 桌面 | 最小 RTT 对时、日志损坏恢复（tsx 实跑）、传送中工具回执；`tsc` 对改动文件无新错误（缺依赖类错误除外） | 云端无法安装 npm 依赖：vitest、`check:extension` 未运行 |
+| CI | 根目录新增原生消毒器、桌面测试与两次 `check:extension`；手动集成流程构建 `projects/coopanion` | 尚未在 GitHub 运行 |
+| 版本 | CMake 与 `CONFIG_APP_PROJECT_VER` 均为 1.2.0，`test_version.py` 防止再次分叉；能力消息读取应用描述符 | 1.1.1 构建实际报告 1.1.0，已安装设备以 SHA-256 为准 |
+
+待做（按顺序）：Mac 上跑 `docs/coopanion-implementation.md` 构建一节全部命令；官方 GSP 模拟器验证
+菜单「坐下歇会」、半透明面板与状态行字集；ESP-IDF 构建；确认后 `iris system-update`（UI 资源已变，
+不能 `app-update`）；真机复验两个 500 ms 间隔、modem sleep 下的对时与传送、断线重连字幕、30 分钟稳定性。
+官方在线烧录器现在提供 Mosaico 0.4.0（2026-09-28）；做下一次整机镜像前，先核对其保留布局与本仓库
+Vibe Mode 0.1.4 基线是否一致。
+
 ## 1.1.0 实机安装与 1.1.1 回执修复候选
 
 | 项目 | 已观察结果 | 边界 |
