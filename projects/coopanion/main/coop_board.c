@@ -467,7 +467,7 @@ static void poll(void *ctx, coop_state_handle_t s)
             coop_state_connection(s, ready);
             if (ready && !h->capabilities_sent) {
                 cJSON *caps = message("capabilities");
-                char app[48];
+                char app[sizeof("mosaico-coopanion/") + sizeof(esp_app_get_description()->version)];
                 snprintf(app, sizeof(app), "mosaico-coopanion/%s", esp_app_get_description()->version);
                 cJSON_AddStringToObject(caps, "app", app);
                 cJSON_AddNumberToObject(caps, "width", 480);
