@@ -2,6 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Message } from './coordinator.ts';
 import { validAnimationAtlas, ATLAS_LIMIT } from '../../web/atlas-codec.js';
 
+const RECEIPT_TIMEOUT_MS = 2000;
+// NOR erase/write plus validation of the full whale atlas takes longer than a
+// network receipt. Keep its transaction alive until durable readiness arrives.
+const CACHE_COMMIT_TIMEOUT_MS = 30000;
+const receiptTimeout = (m:Message) => m.t === 'asset_commit' ? CACHE_COMMIT_TIMEOUT_MS : RECEIPT_TIMEOUT_MS;
+
 export function validAtlas(bytes: Buffer): boolean {
   if(bytes.toString('ascii',0,4)==='COO2')return validAnimationAtlas(bytes);
   if(bytes.length<188||bytes.length>900*1024||bytes.toString('ascii',0,4)!=='COO1'||bytes.readUInt16LE(4)!==192||bytes.readUInt16LE(6)!==216||bytes.readUInt16LE(8)!==22)return false;
@@ -35,11 +41,11 @@ export class AssetSync {
   }
   tick():void{
     if(!this.id||!this.deadline||this.now()<this.deadline)return;
-    if(this.pending){if(++this.retry>3){this.fail('资源同步超时');return;}this.send(this.pending);this.deadline=this.now()+2000;return;}
+    if(this.pending){if(++this.retry>3){this.fail('资源同步超时');return;}this.send(this.pending);this.deadline=this.now()+receiptTimeout(this.pending);return;}
     if(!this.bytes){this.fail('桌面资源导出超时');return;}
     if(this.offset===this.bytes.length)this.issue({t:'asset_commit',id:this.id,sha256:this.hash});
     else this.issue({t:'asset_chunk',id:this.id,offset:this.offset,data:this.bytes.subarray(this.offset,this.offset+4096).toString('base64')});
   }
-  private issue(m:Message):void{this.pending=m;this.retry=0;this.send(m);this.deadline=this.now()+2000;}
+  private issue(m:Message):void{this.pending=m;this.retry=0;this.send(m);this.deadline=this.now()+receiptTimeout(m);}
   private fail(text:string):void{this.cancel();this.error(text);}
 }

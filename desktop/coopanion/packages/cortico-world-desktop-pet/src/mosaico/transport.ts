@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { Message } from './coordinator.ts';
-import { Bonjour } from 'bonjour-service';
+import { Bonjour, type ServiceConfig } from 'bonjour-service';
+import { createDiscoverySocket } from './discovery.ts';
 
 export interface Pairing { deviceId: string; token: string; certFile: string; keyFile: string; port: number; hostname?:string; advertise?:boolean }
 export interface TransportHooks {
@@ -23,6 +24,7 @@ export class MosaicoTransport {
   private incoming = 0;
   private clockOffset = 0;
   private clockReady = false;
+  private announced = false;
   private pingAt = 0;
   private timer: NodeJS.Timeout | null = null;
   private lastSeen = 0;
@@ -45,8 +47,15 @@ export class MosaicoTransport {
     await new Promise<void>((resolve, reject) => { this.server!.once('error', reject); this.server!.listen(this.pairing.port, '0.0.0.0', () => { this.server!.off('error', reject); resolve(); }); });
     this.server.on('error', e => this.hooks.error(e.message));
     if(this.pairing.advertise!==false){
-      this.bonjour=new Bonjour(undefined,(error:Error)=>this.hooks.error(`局域网发现: ${error.message}`));
-      this.bonjour.publish({name:`Mosaico Coo ${this.pairing.deviceId}`,type:'mosaico-coo',protocol:'tcp',port:this.pairing.port,host:this.pairing.hostname||`coo-${this.pairing.deviceId}.local`,txt:{device:this.pairing.deviceId,version:'1',path:'/mosaico/v1'}});
+      const hostname=this.pairing.hostname||`coo-${this.pairing.deviceId}.local`;
+      const reportError=(message:string)=>this.hooks.error(`局域网发现: ${message}`);
+      let published=false;
+      const socket=createDiscoverySocket(hostname,()=>published,reportError);
+      // bonjour-service forwards these options to multicast-dns, which owns the socket.
+      const options:Partial<ServiceConfig>&{socket:typeof socket}={socket};
+      this.bonjour=new Bonjour(options,(error:Error)=>reportError(error.message));
+      const service=this.bonjour.publish({name:`Mosaico Coo ${this.pairing.deviceId}`,type:'mosaico-coo',protocol:'tcp',port:this.pairing.port,host:hostname,txt:{device:this.pairing.deviceId,version:'1',path:'/mosaico/v1'}});
+      service.once('up',()=>{published=true;});
     }
     this.timer = setInterval(() => {
       if (!this.peer) return;
@@ -55,7 +64,7 @@ export class MosaicoTransport {
     }, 2000);
   }
   private accept(ws: WebSocket): void {
-    this.peer = ws; this.session = randomUUID(); this.seq = this.incoming = 0; this.clockReady = false; this.lastSeen = performance.now();
+    this.peer = ws; this.session = randomUUID(); this.seq = this.incoming = 0; this.clockReady = false; this.announced = false; this.lastSeen = performance.now();
     this.send({ t: 'hello', deviceId: this.pairing.deviceId });
     ws.on('message', (data, binary) => {
       const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
@@ -78,9 +87,12 @@ export class MosaicoTransport {
           const rtt = now - this.pingAt;
           if (rtt > 100) { this.clockReady = false; this.send({ t: 'clock_quality', ready: false }); return; }
           this.clockOffset = m.at - (now + this.pingAt) / 2;
-          const first = !this.clockReady; this.clockReady = true;
+          this.clockReady = true;
           this.send({ t: 'clock_quality', ready: true, offset: this.clockOffset, rtt });
-          if (first) this.hooks.connected();
+          // A slow clock sample pauses transfer eligibility, not the WSS session.
+          // Reannouncing here would discard capabilities that the board sends once
+          // per connection and cancel an in-flight durable asset commit.
+          if (!this.announced) { this.announced = true; this.hooks.connected(); }
           return;
         }
         if (typeof m.at === 'number') m.at -= this.clockOffset;

@@ -42,6 +42,7 @@ void app_main(void)
     esp_gsp_esp_lcd_config_t lcd = ESP_GSP_ESP_LCD_CONFIG_INIT();
     lcd.display = display;
     lcd.touch = touch;
+    lcd.perf_log = true;
 
     ESP_ERROR_CHECK(iris_screen_mirror_init());
 

@@ -4,6 +4,30 @@
 
 2026-10-02，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
 
+## 1.1.0 实机安装与 1.1.1 回执修复候选
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 保留数据升级 | 用户确认的 1.1.0 System Update 已通过官方 USB/Iris 完成；同一 Device ID 经 normal → Vibe Mode → normal，应用版本及 ELF 哈希验证成功 | 未执行整片擦除；分区布局、保留引导及 Vibe Mode 均未改变 |
+| Wi-Fi 与配对 | 复用板内 Wi-Fi、原证书和配对密钥，将旧 IP 地址改为证书内的同一 Mac 局域网主机名 | 未绕过 TLS 校验；主机 DHCP 地址变化由局域网发现处理 |
+| 桌面连接修复 | `0.1.0-mosaico.3` 已运行：兼容板端旧式 mDNS 单播回包；资源提交等待延长至 30 秒；时钟采样恢复不再清空设备能力 | 只放宽 NOR 提交等待，控制帧限流、低质量时钟禁迁入和过期会话检查保留 |
+| 大肥鱼显示 | 原版蓝色 atlas 已同步、校验并缓存；Iris 直接截图确认实机角色显示 | 不等于正常传送完成；实际往返遇到渲染回执丢失，经过事务核对恢复，无手工重置归属 |
+| 1.1.0 稳定性 | 配对后同一 Boot ID 的 30.8 分钟、58.3 分钟快照均无重启、crash_count=0；空闲 SPIRAM 保持 11,737,932 字节 | 是带传送重试的观测，不是全部动作/音频/性能的 30 分钟压力验收 |
+| 1.1.1 修复 | GSP 1.5.1 在 Canvas draw 活跃时会拒绝 flush；I/O 回执改为共享总期限内让出调度重试，成功后记录渲染时刻；发送入队短暂忙碌也重试，仍检查持久化归属 | 无成功渲染证明仍不确认；失败有明确日志。新增 GSP 性能日志用于后续实测；尚未安装 1.1.1 |
+| 本地验证 | 桌宠包 87 项通过、1 项平台跳过；类型检查及两个 Cortina 扩展检查通过；共享 C ASan/UBSan 与 Canvas 忙碌、超时、失败注入均通过 | 该缺陷涉及板端 GSP/FreeRTOS，主机注入测试不能代替新版实机往返 |
+| 固件构建 | `20261002-111147-build-31544` 成功，1.1.1 应用 2,244,608 字节；与已安装 1.1.0 的分区表、UI、语音资源逐项哈希相同 | 一条预期 factory 尺寸警告；仅可按同布局 `iris app-update` 安装，不能把应用 BIN 用作整机镜像 |
+| Mac 交付 | 最终 `.app` 已启动，`codesign --verify --deep --strict` 通过；导出 `-release-mac-arm64.zip` | ad hoc 签名，无 Apple 公证；产物目录中较早、不带 `-release-` 的 .3 ZIP 不是最终修复集合 |
+
+1.1.1 应用 SHA-256：`400e6e17d7ebbf5a51f8d734efc07d4810e16e16d43b9342fe254c09bb54daec`。
+Mac `Mosaico-Coopanion-0.1.0-mosaico.3-release-mac-arm64.zip`：167,737,677 字节，
+SHA-256 `4c252d4c362d5919153377d7100435db89089aa34c895667ad7d3b812e82165c`。
+1.1.1 的具体应用更新正在等待当次确认；此时实机仍为 1.1.0，最后核对归属为 desktop。
+
+证据位于本机 `artifacts/mosaico-coopanion/`：`110-system-update.log`、
+`110-installed-status.json`、`110-pair-hostname.log`、`110-whale-first.png/.json`、
+`110-status-30min.json`、`111-pre-update-status.json`；配对信息和完整设备标识不进入公开仓库。
+实际两个 500 ms 间隔、渲染 fps、IMU 延迟、真实录音及低电量仍待验收。
+
 ## 1.1.0 DeepSeek 大肥鱼迁移
 
 | 项目 | 已观察结果 | 边界 |
@@ -30,7 +54,7 @@
 | `mosaico-coopanion-1.1.0-system-update.irisfw` | 5,776,648 | `e3aa6a9c30d656d3415529668fa8c99b1ddb58f4d6be356c6804f5603b405d42` |
 | `Mosaico-Coopanion-0.1.0-mosaico.2-mac-arm64.zip` | 167,734,327 | `323c3f5d3924d5d1a2ef4a9e8ebdc9701fffa1214d7dd4bb2653980713556157` |
 
-本轮所有新固件均未安装。此前对其他哈希镜像的烧录确认不沿用到 1.1.0。
+以上为初次源码/模拟器交付记录；随后 1.1.0 已经用户确认安装，结果见上节。
 美术出处、导出方式和其他配色限制见[大肥鱼说明](coopanion-whale.md)。
 
 ## 1.0.2 运动、画面和静音修正

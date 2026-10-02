@@ -9,3 +9,6 @@ with tempfile.TemporaryDirectory(prefix='coopanion-test-') as tmp:
     cjson=root/'managed_components/espressif__cjson/cJSON'
     subprocess.run(['cc','-std=c11','-g','-O1','-fsanitize=address,undefined','-I',str(root/'main'),'-I',str(cjson),str(root/'tests/state_test.c'),str(root/'main/coop_state.c'),str(root/'main/coop_render.c'),str(root/'main/coop_animation.c'),str(root/'main/coop_script.c'),str(root/'main/coop_subtitle.c'),str(cjson/'cJSON.c'),'-lm','-o',str(binary)],check=True)
     subprocess.run([str(binary),str(root/'main/coo-atlas.bin'),*(sys.argv[1:] or [str(whale)])],check=True)
+    receipt=Path(tmp)/'receipt-test'
+    subprocess.run(['cc','-std=c11','-g','-O1','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(root/'main'),str(root/'tests/receipt_test.c'),str(root/'main/coop_receipt.c'),'-o',str(receipt)],check=True)
+    subprocess.run([str(receipt)],check=True)

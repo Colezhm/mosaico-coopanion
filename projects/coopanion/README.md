@@ -20,3 +20,10 @@ character: 36 clips, 121 samples, palette/LZ4 delta compression and alpha-aware 
 rendering. The existing 1 MiB resource partition is unchanged. Firmware retains default
 Coo; a selected whale is sent by the paired desktop and cached before transfer is enabled.
 See [the whale guide](../../docs/coopanion-whale.md) for format, export and validation details.
+
+Version 1.1.1 retries render fences that GSP 1.5.1 rejects while a Canvas callback
+is active. A single 1500 ms budget bounds admission and completion; failures never
+become successful receipts. Durable ownership checks remain mandatory. Critical
+network queue admission also retries briefly. Receipt and GSP performance logs
+support device diagnosis. This is a code-only update with identical resource and
+partition hashes; use the official `iris app-update` after device-write confirmation.

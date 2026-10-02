@@ -21,7 +21,7 @@
 | ESP-SR / WebSocket client | `2.4.7` / `1.6.1` |
 | Electron / pnpm | `44.4.4` / `11.5.0` |
 | 保留 Vibe Mode | utils 评审包 `0.1.4` |
-| 板端应用描述符版本 | `1.1.0`（开发候选固件，并非硬件验收结论） |
+| 板端应用描述符版本 | `1.1.1`（传送回执修复候选；实机当前为 `1.1.0`，并非硬件验收结论） |
 
 桌面扩展遵循 [Cortina](https://github.com/Pal-AI-Lab/Cortina/tree/454895173ebbac408f0840679d79738185a9e202)
 的分层和三级验证流程。开发入口为 `desktop/coopanion/AGENTS.md`，实际接口以固定 Cortico 源码为准。

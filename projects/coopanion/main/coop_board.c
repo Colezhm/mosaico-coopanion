@@ -4,6 +4,7 @@
 #include "coop_audio.h"
 #include "coop_assets.h"
 #include "coop_script.h"
+#include "coop_receipt.h"
 #include "bsp/esp_mosaico.h"
 #include "esp_iris.h"
 #include "esp_timer.h"
@@ -23,6 +24,8 @@ extern const uint8_t coo_start[] asm("_binary_coo_atlas_bin_start");
 extern const uint8_t coo_end[] asm("_binary_coo_atlas_bin_end");
 #define PAIRING_LIMIT 6144
 #define PAIRING_TIMEOUT_MS 30000
+#define RECEIPT_FENCE_BUDGET_MS 1500
+#define RECEIPT_SEND_ATTEMPTS 5
 typedef struct {
     uint32_t version, epoch;
     uint8_t resident, visible, transit, muted;
@@ -178,6 +181,34 @@ static void output(void *ctx, const coop_event_t *e)
         free(item);
     }
 }
+static coop_fence_result_t receipt_flush(void *ctx, uint32_t timeout_ms)
+{
+    coop_board_handle_t h = ctx;
+    uint32_t before = 0, after = 0;
+    gsp_err_t last = 0;
+    esp_gsp_render_error_stats(h->gsp, &before, &last);
+    esp_gsp_err_t result = esp_gsp_flush(h->gsp, timeout_ms);
+    if (result == ESP_GSP_OK) {
+        esp_gsp_render_error_stats(h->gsp, &after, &last);
+        if (after != before) {
+            ESP_LOGE("coo_receipt", "Render failed during fence: %d", (int)last);
+            return COOP_FENCE_FAILED;
+        }
+        return COOP_FENCE_OK;
+    }
+    if (result == ESP_ERR_INVALID_STATE)
+        return COOP_FENCE_BUSY;
+    if (result == ESP_ERR_TIMEOUT)
+        return COOP_FENCE_TIMEOUT;
+    ESP_LOGE("coo_receipt", "Fence rejected: 0x%x", (unsigned)result);
+    return COOP_FENCE_FAILED;
+}
+static void receipt_wait(void *ctx, uint32_t delay_ms)
+{
+    (void)ctx;
+    TickType_t ticks = pdMS_TO_TICKS(delay_ms);
+    vTaskDelay(ticks ? ticks : 1);
+}
 static void output_worker(void *ctx)
 {
     coop_board_handle_t h = ctx;
@@ -202,22 +233,36 @@ static void output_worker(void *ctx)
         }
         if (!h->journal_ok &&
             (!strncmp(e->type, "transfer_", 9) || !strncmp(e->type, "report_", 7))) {
+            ESP_LOGE("coo_receipt", "%s epoch=%lu withheld: journal unavailable",
+                     e->type, (unsigned long)e->epoch);
             free(e);
             continue;
         }
         if (!strcmp(e->type, "transfer_hidden") || !strcmp(e->type, "transfer_arrived") ||
             !strcmp(e->type, "glow_started") || !strcmp(e->type, "body_entered")) {
-            if (esp_gsp_flush(h->gsp, 1000) != ESP_GSP_OK) {
+            const coop_receipt_config_t cfg = {
+                .flush = receipt_flush, .now = now, .wait = receipt_wait, .ctx = h};
+            uint64_t started = now(NULL);
+            unsigned attempts = 0;
+            coop_fence_result_t result = coop_receipt_wait(
+                &cfg, RECEIPT_FENCE_BUDGET_MS, &e->at, &attempts);
+            if (result != COOP_FENCE_OK) {
+                ESP_LOGE("coo_receipt", "%s epoch=%lu withheld: fence=%d attempts=%u",
+                         e->type, (unsigned long)e->epoch, result, attempts);
                 free(e);
                 continue;
             }
-            e->at = now(NULL);
+            ESP_LOGI("coo_receipt", "%s epoch=%lu rendered_at=%llu wait=%llu attempts=%u",
+                     e->type, (unsigned long)e->epoch, (unsigned long long)e->at,
+                     (unsigned long long)(e->at - started), attempts);
         }
         if ((!strcmp(e->type, "transfer_hidden") || !strcmp(e->type, "transfer_arrived")) &&
             (h->durable.epoch != e->epoch || strcmp(h->durable.id, e->text) ||
              (!strcmp(e->type, "transfer_hidden") && h->durable.visible) ||
              (!strcmp(e->type, "transfer_arrived") &&
               (!h->durable.visible || !h->durable.resident)))) {
+            ESP_LOGE("coo_receipt", "%s epoch=%lu withheld: durable state mismatch",
+                     e->type, (unsigned long)e->epoch);
             free(e);
             continue;
         }
@@ -241,7 +286,23 @@ static void output_worker(void *ctx)
         } else if (!strcmp(type, "arrived")) {
             cJSON_AddStringToObject(m, "walkId", e->text);
         }
-        coop_link_send(h->link, m);
+        bool critical = !strncmp(type, "transfer_", 9) || !strcmp(type, "glow_started") ||
+                        !strcmp(type, "body_entered");
+        if (critical) {
+            /* send consumes its JSON even if the short queue/sequence lock is
+             * busy. Retry admission without losing the proven render time. */
+            bool sent = false;
+            for (unsigned i = 0; i < RECEIPT_SEND_ATTEMPTS && !sent; i++) {
+                sent = coop_link_send(h->link, cJSON_Duplicate(m, true));
+                if (!sent && i + 1 < RECEIPT_SEND_ATTEMPTS)
+                    receipt_wait(h, 10);
+            }
+            cJSON_Delete(m);
+            if (!sent)
+                ESP_LOGE("coo_receipt", "%s epoch=%lu not queued; awaiting reconciliation",
+                         type, (unsigned long)e->epoch);
+        } else
+            coop_link_send(h->link, m);
         free(e);
     }
 }
