@@ -1,10 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, openSync, closeSync, fsyncSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { PresenceCoordinator, type Body, type Message, type Presence } from './coordinator.ts';
+import { PresenceCoordinator, type Body, type CoordinatorOptions, type Message, type Presence } from './coordinator.ts';
 import { MosaicoTransport, type Pairing } from './transport.ts';
 import { AssetSync } from './assets.ts';
+import { VOCAB } from '../script.ts';
 
+/** Faces the board can show and carry across a transfer: every scripted expression plus the rig's own states. */
+const BOARD_FACES = new Set([...VOCAB.filter(v => v.kind === 'expression').map(v => v.id), 'sleep', 'dizzy', 'dragged']);
+
+/** Seconds since 1970: above any transfer count, inside the board's uint32 epoch until 2106. */
+export const recoveryEpoch = (): number => Math.floor(Date.now() / 1000);
 export interface BridgeHooks {
   sendDesktop(msg: Message): boolean;
   input(msg: Message): void;
@@ -42,8 +48,7 @@ export class MosaicoBridge {
     const emotionFile=join(directory,'emotion.json');
     if(existsSync(emotionFile)){try{const e=JSON.parse(readFileSync(emotionFile,'utf8'));if(typeof e.face==='string')this.emotion=e.face;}catch{}}
     const journal = join(directory, 'presence.json');
-    const saved = existsSync(journal) ? JSON.parse(readFileSync(journal, 'utf8')) as Presence : undefined;
-    this.presence = new PresenceCoordinator({
+    const options: CoordinatorOptions = {
       now: () => performance.now(),
       save: state => {
         writeFileSync(`${journal}.tmp`, JSON.stringify(state), { mode: 0o600 });
@@ -53,7 +58,25 @@ export class MosaicoBridge {
       },
       send: (to, msg) => {const message=msg.t==='transfer_arrive'?{...msg,emotion:this.emotion}:msg;return to === 'desktop' ? hooks.sendDesktop(typeof message.glowAt === 'number' ? { ...message, delayMs: Math.max(0, message.glowAt - performance.now()) } : message) : this.transport?.send(message) ?? false;},
       changed: () => { if (this.presence.transferring || this.presence.owner !== 'device') this.cancelVoice(); this.publishStatus(); },
-    }, saved);
+    };
+    this.presence = this.openJournal(journal, options);
+  }
+  /** An unreadable journal cannot say where the body is. It is kept aside and
+   * replaced by "desktop owns" at an epoch above any counter the board can hold,
+   * so the board's next presence update hides its copy instead of ignoring it. */
+  private openJournal(journal: string, options: CoordinatorOptions): PresenceCoordinator {
+    try {
+      const saved = existsSync(journal) ? JSON.parse(readFileSync(journal, 'utf8')) as Presence : undefined;
+      return new PresenceCoordinator(options, saved);
+    } catch (e) {
+      const backup = `${journal}.corrupt-${Date.now()}`;
+      renameSync(journal, backup);
+      const presence = new PresenceCoordinator(options, { version: 1, owner: 'desktop', epoch: recoveryEpoch(), transfer: null });
+      options.save(presence.snapshot());
+      this.error = `身体位置记录无法读取(${e instanceof Error ? e.message : String(e)}),已另存为 ${basename(backup)};Coo 归电脑所有,板端连接后会隐藏。`;
+      this.hooks.error(this.error);
+      return presence;
+    }
   }
   async start(pairingFile: string, token: string): Promise<void> {
     const pairing = JSON.parse(readFileSync(pairingFile, 'utf8')) as Pairing;
@@ -167,7 +190,7 @@ export class MosaicoBridge {
   }
   private report(e: unknown): void { this.error = e instanceof Error ? e.message : String(e); this.transport?.send({ t: 'voice_error', text: this.error }); }
   private rememberEmotion(face:unknown):void {
-    if(typeof face!=='string'||!['neutral','happy','wink','love','shy','surprised','angry','sad','sleepy','sleep','dizzy','dragged','thinking'].includes(face)||face===this.emotion)return;
+    if(typeof face!=='string'||!BOARD_FACES.has(face)||face===this.emotion)return;
     this.emotion=face;
     try{const file=join(this.directory,'emotion.json');writeFileSync(file+'.tmp',JSON.stringify({face}),{mode:0o600});renameSync(file+'.tmp',file);}catch(e){this.report(e);}
   }

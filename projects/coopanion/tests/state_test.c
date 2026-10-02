@@ -184,6 +184,81 @@ static void subtitle_test(void)
         assert(lines<=3);
     }
     assert(!strcmp(joined,text));
+    /* Every page concatenates back to the input; no line starts with closing
+     * punctuation; pages prefer a sentence end on their last line. */
+    const char *samples[]={
+        "这是多行字幕的测试。轻轻摇晃只会播放摇晃动画，不会触发语音。倾斜时我会努力站稳，摔倒后需要你摸摸头才能恢复心情。",
+        "一二三四五六七八九十一二三四五六七八，下一行不能以逗号开头。",
+        "Hello there, this caption mixes English words with 中文 so that words wrap at spaces instead of splitting letters apart.",
+        "第一句。\n第二句在新行。"};
+    for(unsigned i=0;i<sizeof(samples)/sizeof(samples[0]);i++){
+        const char *t=samples[i];char all[1024]={0};size_t m=0;
+        unsigned count=coop_subtitle_pages(t);
+        for(unsigned p=0;p<count;p++){
+            coop_subtitle_page(t,p,page);
+            assert(page[0]);
+            const char *line=page;
+            for(;;){
+                assert(strncmp(line,"，",3)&&strncmp(line,"。",3)&&strncmp(line,"！",3));
+                const char *next=strchr(line,'\n');if(!next)break;line=next+1;
+            }
+            for(const char *c=page;*c;c++)if(*c!='\n')all[m++]=*c;
+        }
+        char expect[1024]={0};size_t k=0;for(const char *c=t;*c;c++)if(*c!='\n')expect[k++]=*c;
+        assert(!strcmp(all,expect));
+    }
+    /* Page 1 of the first sample ends on a full stop, not mid-word. */
+    coop_subtitle_page(samples[0],0,page);
+    size_t len=strlen(page);
+    assert(len>=3&&(!strcmp(page+len-3,"。")||!strcmp(page+len-3,"，")));
+    /* ASCII words are not split across lines. */
+    coop_subtitle_page(samples[2],0,page);
+    for(const char *c=page;(c=strchr(c,'\n'));c++)
+        assert(c[-1]==' '||(unsigned char)c[-1]>=0x80||c[1]==' ');
+    /* A word adjoining Chinese text also stays whole at the line boundary. */
+    const char *adjoining[]={
+        "字幕分页测试：轻轻摇晃，慢慢倾斜。English words stay together.",
+        "一二三四五六七八九十一二三四五六七English"};
+    for(unsigned i=0;i<sizeof(adjoining)/sizeof(adjoining[0]);i++){
+        bool found=false;
+        for(unsigned p=0;p<coop_subtitle_pages(adjoining[i]);p++){
+            coop_subtitle_page(adjoining[i],p,page);
+            if(strstr(page,"English"))found=true;
+        }
+        assert(found);
+    }
+    assert(coop_subtitle_pages("")==1);
+}
+static void caption_test(void)
+{
+    events_t e = {0};
+    coop_state_handle_t h = create(&e);
+    coop_state_connection(h, true);
+    assert(!strcmp(coop_state_get(h)->subtitle, "等待 Coo 来访"));
+    coop_state_presence(h, true, 1, false);
+    coop_state_connection(h, false);
+    assert(strstr(coop_state_get(h)->subtitle, "电脑未连接"));
+    /* Reconnecting must not leave an "offline" caption under a "connected" status. */
+    coop_state_connection(h, true);
+    assert(!strstr(coop_state_get(h)->subtitle, "未连接"));
+    /* Content captions survive a reconnect. */
+    coop_state_say(h, "这是回复", false, 100);
+    coop_state_connection(h, false);
+    coop_state_connection(h, true);
+    assert(!strstr(coop_state_get(h)->subtitle, "未连接"));
+    coop_state_say(h, "这是回复", false, 200);
+    coop_state_tick(h, 300);
+    /* Leaving replaces the reply with the away caption, and it tracks the link. */
+    assert(coop_state_transfer(h, "transfer_depart", "out", 2, 0, 1000));
+    for (uint64_t t = 1000; t <= 2000; t += 33)
+        coop_state_tick(h, t);
+    coop_state_presence(h, false, 2, false);
+    assert(strstr(coop_state_get(h)->subtitle, "Coo 在电脑上"));
+    coop_state_connection(h, false);
+    assert(strstr(coop_state_get(h)->subtitle, "暂时过不来"));
+    coop_state_connection(h, true);
+    assert(strstr(coop_state_get(h)->subtitle, "Coo 在电脑上"));
+    coop_state_delete(h);
 }
 static void atlas_test(const char *path)
 {
@@ -265,6 +340,7 @@ int main(int argc, char **argv)
     motion_test();
     stumble_and_edges_test();
     subtitle_test();
+    caption_test();
     atlas_test(argv[1]);
     for(int i=2;i<argc;i++)atlas_test(argv[i]);
     puts("PASS: transfer timing, stale messages, button arbitration, IMU recovery, restart "

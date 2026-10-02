@@ -234,6 +234,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     thinking: 'sleep_mouth', run: ['happy_mouth', .7], angry: -1, sad: -1.2,
     worried: ['drag_mouth', .9], furious: 'jagged', smug: 1.5, pleading: ['happy_mouth', 1.1],
     curious: ['surprised_mouth', .6], excited: 'happy_mouth', crying: ['drag_mouth', .9], pout: -1.8,
+    flustered: 'wavy', delighted: 'grin', cheeky: 'fang',
   };
 
   function paintFace(fc, face, o, t) {
@@ -275,6 +276,23 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
       const x=766-FACE.x,y=768-FACE.y;
       fg.save();fg.fillStyle='#ef9ca6';fg.strokeStyle=INK;fg.lineWidth=3;fg.lineJoin='round';
       fg.beginPath();fg.moveTo(x-52,y+29);fg.lineTo(x-48,y-23);fg.lineTo(x-25,y-9);fg.lineTo(x-6,y-28);fg.lineTo(x+15,y-11);fg.lineTo(x+38,y-28);fg.lineTo(x+52,y+29);fg.closePath();fg.fill();fg.stroke();fg.restore();
+    }
+    else if (m === 'wavy') {
+      // A flustered, wobbling open mouth: wavy upper and lower lips around the mouth line.
+      const x=766-FACE.x,y=772-FACE.y,w=34,h=13,k=1+.06*Math.sin(t*14);
+      fg.save();fg.fillStyle='#ef9ca6';fg.strokeStyle=INK;fg.lineWidth=3;fg.lineJoin='round';
+      fg.beginPath();
+      for(let i=0;i<=12;i++){const u=i/12,px=x-w+2*w*u;fg[i?'lineTo':'moveTo'](px,y-h*k+4*Math.sin(u*Math.PI*4));}
+      for(let i=12;i>=0;i--){const u=i/12,px=x-w+2*w*u;fg.lineTo(px,y+h*k*.8+4*Math.sin(u*Math.PI*4+Math.PI));}
+      fg.closePath();fg.fill();fg.stroke();fg.restore();
+    }
+    else if (m === 'grin') sprite('happy_mouth', { sx: 1.35, sy: 1.45 });
+    else if (m === 'fang') {
+      sprite('happy_mouth', { s: 1.15 });
+      // one small fang at the upper lip, left of centre
+      const x=748-FACE.x,y=758-FACE.y;
+      fg.save();fg.fillStyle='#ffffff';fg.strokeStyle=INK;fg.lineWidth=1.5;fg.lineJoin='round';
+      fg.beginPath();fg.moveTo(x-8,y);fg.lineTo(x+8,y);fg.lineTo(x,y+14);fg.closePath();fg.fill();fg.stroke();fg.restore();
     }
     else if (typeof m === 'number') lineMouth(m,face==='pout'?1.7:1);
     else if (Array.isArray(m)) sprite(m[0], { s: m[1] });
@@ -370,6 +388,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     sleepy: [-.7, 0], sleep: [-.9, 0], dizzy: [-.3, 0], dragged: [.6, .6], content: [-.2, .25], listening: [.6, .2],
     thinking: [.1, .15], run: [.2, .4], waking: [-.4, 0], squeeze: [-.3, 0], neutral: [0, .25],
     worried:[-.8,.1],furious:[1,.25],smug:[.5,.4],pleading:[.8,.8],curious:[.6,.3],excited:[1,1],crying:[-1,0],pout:[-.5,.1],
+    flustered:[.7,.5],delighted:[1,1],cheeky:[.9,.8],
   };
   // brows by face, in master pixels: [lift of the whole brow, lift of its inner end (by the nose)];
   // a negative inner lift is the frown
@@ -378,6 +397,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     sleepy: [-1.5, 0], sleep: [-1.5, 0], dizzy: [1, 3], dragged: [2, 3.5], thinking: [0, 2], waking: [2, 1],
     listening: [1, 0], content: [-1, 0], squeeze: [-1, -2], run: [1, 0],
     worried:[1,6],furious:[-3,-8],smug:[1,0],pleading:[1,3],curious:[5,2],excited:[4,0],crying:[1,6],pout:[-2,-4],
+    flustered:[2,6],delighted:[3,0],cheeky:[3,-1],
   };
   const BROW_SPLIT = U(765);  // the near brow is left of this, the far brow right of it
   let browLift = 0, browInner = 0;
@@ -417,6 +437,8 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     if (face === 'curious') tiltT -= 10;
     if (face === 'worried' || face === 'crying') tiltT += 5;
     if (face === 'smug') tiltT -= 5;
+    if (face === 'flustered') tiltT += 4 + 2 * Math.sin(t * 9);
+    if (face === 'cheeky') tiltT -= 7;
     if (face === 'dizzy') tiltT += 3 * Math.sin(t * 4.5);
     if (held) tiltT += o.swing * .25;
     headTilt = sp.head.step(tiltT, dt);
@@ -464,6 +486,9 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     if (face === 'worried') { aN=55;aF=-8; }
     if (face === 'pleading') { aN=60+4*Math.sin(t*5);aF=-50; }
     if (face === 'excited') { aN=80+12*Math.sin(t*9);aF=-18; }
+    if (face === 'flustered') { aN=95+6*Math.sin(t*16);aF=-12; }
+    if (face === 'delighted') { aN=38+4*Math.sin(t*6);aF=-30-4*Math.sin(t*6); }
+    if (face === 'cheeky') { aN=112+5*Math.sin(t*7);aF=-16; }
     // Mosaico's finite clips use the same springs and part rig as desktop motion.
     if (mode === 'stumble') { aN=60+20*Math.sin(t*12);aF=-55; }
     if (mode === 'fall') { aN=80;aF=-70; }
@@ -576,6 +601,25 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
       for (let i = 0; i < 3; i++) {
         const k = (t * .8 + i / 3) % 1;
         s += `<circle fill="#e8f0ff" stroke="${ac}" stroke-width="3" cx="${f1(side[0] + 10 * i)}" cy="${f1(side[1] - 20 * i - 6 * k)}" r="${4 + 3 * i}" opacity="${f1(.4 + .6 * Math.sin(Math.PI * k))}"/>`;
+      }
+    }
+    if (fc.teary) {
+      // a tear gathered at the open near eye, trembling
+      const q=at(U(652),V(752)+1.5*Math.sin(t*12));
+      s+=`<path fill="#bfe8ff" stroke="#5279b6" stroke-width=".8" transform="translate(${f1(q[0])} ${f1(q[1])}) scale(1.2)" d="M0 -5Q6 2 0 4Q-6 2 0 -5Z"/>`;
+    }
+    if (fc.fluster) {
+      // comic scribble loops beside the head
+      for (const [px, py, k] of [[34, 58, 1], [214, 40, -1]]) {
+        const c = at(px, py + 2 * Math.sin(t * 10 + px)), w = 1 + .08 * Math.sin(t * 12 + py);
+        s += `<path fill="none" stroke="#252049" stroke-width="3" stroke-linecap="round" transform="translate(${f1(c[0])} ${f1(c[1])}) scale(${f1(k * w)} ${f1(w)})" d="M-10 12C-14 2 2 -2 -2 -8C-6 -14 8 -16 6 -6C4 4 14 2 12 -10"/>`;
+      }
+    }
+    if (fc.stars) {
+      // five-point stars twinkling around the raised hand side
+      for (let i = 0; i < 4; i++) {
+        const q = at(38 + i * 58, 26 + (i % 2) * 34), k = .75 + .25 * Math.sin(t * 7 + i * 1.7);
+        s += `<path fill="#ffd23f" stroke="#d59a37" stroke-width="1.2" stroke-linejoin="round" transform="translate(${f1(q[0])} ${f1(q[1])}) scale(${f1(k)})" d="M0 -7L2 -2L7 -2L3 1L4.5 6.5L0 3.3L-4.5 6.5L-3 1L-7 -2L-2 -2Z"/>`;
       }
     }
     if (fc.sweat) {

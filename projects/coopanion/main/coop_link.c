@@ -15,11 +15,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <time.h>
 #include <stdatomic.h>
 
 #define RX_LIMIT (32 * 1024)
 #define TX_LIMIT 16384
+/* A send that fails while the socket still reports connected is a busy client
+ * lock, not a dead link: real transport errors abort the connection inside
+ * esp_websocket_client and arrive as WEBSOCKET_EVENT_DISCONNECTED. */
+#define TX_ATTEMPTS 3
+#define TX_ATTEMPT_TIMEOUT_MS 400
 #define SYSTEM_WIFI_PARTITION "sysmeta"
 #define SYSTEM_WIFI_NAMESPACE "wifi"
 typedef struct {
@@ -40,9 +44,10 @@ struct coop_link_t {
     size_t rx_size, rx_expected;
     char session[48], uri[256], headers[100];
     uint32_t incoming, outgoing;
-    atomic_bool stop, connected;
+    atomic_bool stop, connected, low_latency;
     atomic_uint generation;
-    bool started;
+    bool started, power_save_applied, power_save_known;
+    unsigned dropped;
     wifi_config_t wifi;
 };
 static const char *str(cJSON *j, const char *key)
@@ -59,6 +64,15 @@ static void clear_secret(void *data, size_t size)
     volatile uint8_t *p = data;
     while (size--)
         *p++ = 0;
+}
+static void clear_json_secrets(cJSON *j)
+{
+    static const char *const keys[] = {"token", "password"};
+    for (unsigned i = 0; j && i < sizeof(keys) / sizeof(keys[0]); i++) {
+        cJSON *v = cJSON_GetObjectItemCaseSensitive(j, keys[i]);
+        if (cJSON_IsString(v) && v->valuestring)
+            clear_secret(v->valuestring, strlen(v->valuestring));
+    }
 }
 /* Vibe Mode 0.1.4 stores Wi-Fi in retained sysmeta/wifi. Read it only on
  * explicit USB pairing opt-in; credentials never travel back to the host. */
@@ -180,17 +194,32 @@ static void ws_event(void *arg, esp_event_base_t base, int32_t event, void *even
         }
     }
 }
+/* Modem sleep saves battery while Coo idles, but adds a DTIM wake (often
+ * 100-300 ms) to every downlink frame. The board asks for low latency whenever
+ * timing matters (transfer, voice, asset sync, recent touch/button); the
+ * desktop's minimum-RTT clock filter keeps the session usable in between. */
+static void apply_power_save(coop_link_handle_t h)
+{
+    bool want_awake = atomic_load(&h->low_latency) || !COOP_LINK_IDLE_POWER_SAVE;
+    if (h->power_save_known && h->power_save_applied == !want_awake)
+        return;
+    if (esp_wifi_set_ps(want_awake ? WIFI_PS_NONE : WIFI_PS_MIN_MODEM) == ESP_OK) {
+        h->power_save_applied = !want_awake;
+        h->power_save_known = true;
+    }
+}
 static void worker(void *arg)
 {
     coop_link_handle_t h = arg;
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     if (!h->stop) {
+        /* The desktop certificate is pinned (cert_pem is the only trust anchor),
+         * and ESP-IDF's default mbedTLS build does not check certificate dates.
+         * Wall time is only for logs, so SNTP runs in the background instead of
+         * delaying a LAN-only board by up to 30 s on every boot. */
         esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
         esp_sntp_setservername(0, "pool.ntp.org");
         esp_sntp_init();
-        /* TLS validity is checked; never disable verification to get past a bad clock. */
-        for (int i = 0; i < 60 && time(NULL) < 1700000000 && !h->stop; i++)
-            vTaskDelay(pdMS_TO_TICKS(500));
         esp_websocket_client_config_t c = {.uri = h->uri,
                                            .cert_pem = h->certificate,
                                            .headers = h->headers,
@@ -206,16 +235,25 @@ static void worker(void *arg)
     }
     tx_item_t item;
     while (!h->stop) {
+        apply_power_save(h);
         if (xQueueReceive(h->tx, &item, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (h->connected && h->ws && item.generation == atomic_load(&h->generation)) {
-                int sent = item.binary
-                               ? esp_websocket_client_send_bin(h->ws, item.text, item.length,
-                                                               pdMS_TO_TICKS(500))
-                               : esp_websocket_client_send_text(h->ws, item.text, item.length,
-                                                                pdMS_TO_TICKS(500));
-                if (sent != (int)item.length && h->cfg.connection)
-                    h->cfg.connection(h->cfg.ctx, false);
+            bool sent = false;
+            for (unsigned attempt = 0; attempt < TX_ATTEMPTS && !sent && !h->stop; attempt++) {
+                if (!h->connected || !h->ws || item.generation != atomic_load(&h->generation) ||
+                    !esp_websocket_client_is_connected(h->ws))
+                    break;
+                const TickType_t timeout = pdMS_TO_TICKS(TX_ATTEMPT_TIMEOUT_MS);
+                int written = item.binary
+                                  ? esp_websocket_client_send_bin(h->ws, item.text, item.length, timeout)
+                                  : esp_websocket_client_send_text(h->ws, item.text, item.length, timeout);
+                sent = written == (int)item.length;
             }
+            /* Never report "offline" here: only WEBSOCKET_EVENT_DISCONNECTED owns
+             * that state, otherwise a busy lock leaves the board stuck offline on a
+             * live session until the next reconnect. */
+            if (!sent && item.generation == atomic_load(&h->generation) && h->connected &&
+                (++h->dropped & 15) == 1)
+                ESP_LOGW("coo_link", "dropped %u frame(s) on a busy session", h->dropped);
             free(item.text);
         }
     }
@@ -260,6 +298,7 @@ esp_err_t coop_link_provision(coop_link_handle_t h, const uint8_t *data, size_t 
                  strlen(uri) < 256 && !strncmp(uri, "wss://", 6) && strlen(token) == 64 &&
                  strlen(cert) > 64 && strlen(cert) < 4096;
     if (!valid) {
+        clear_json_secrets(j);
         cJSON_Delete(j);
         return ESP_ERR_INVALID_ARG;
     }
@@ -268,6 +307,7 @@ esp_err_t coop_link_provision(coop_link_handle_t h, const uint8_t *data, size_t 
         esp_err_t err = system_wifi_read(&wifi);
         clear_secret(&wifi, sizeof(wifi));
         if (err != ESP_OK) {
+            clear_json_secrets(j);
             cJSON_Delete(j);
             return err;
         }
@@ -275,6 +315,7 @@ esp_err_t coop_link_provision(coop_link_handle_t h, const uint8_t *data, size_t 
         cJSON_DeleteItemFromObjectCaseSensitive(j, "password");
     }
     char *text = cJSON_PrintUnformatted(j);
+    clear_json_secrets(j);
     cJSON_Delete(j);
     if (!text)
         return ESP_ERR_NO_MEM;
@@ -286,6 +327,7 @@ esp_err_t coop_link_provision(coop_link_handle_t h, const uint8_t *data, size_t 
             err = nvs_commit(nvs);
         nvs_close(nvs);
     }
+    clear_secret(text, strlen(text));
     free(text);
     return err;
 }
@@ -310,27 +352,30 @@ esp_err_t coop_link_start(coop_link_handle_t h)
     }
     err = nvs_get_str(nvs, "config", h->provision, &size);
     nvs_close(nvs);
-    if (err != ESP_OK)
-        return err;
-    cJSON *j = cJSON_Parse(h->provision);
-    if (!j)
-        return ESP_ERR_INVALID_ARG;
-    snprintf(h->uri, sizeof(h->uri), "%s", str(j, "uri"));
-    snprintf(h->headers, sizeof(h->headers), "Authorization: Bearer %s\r\n", str(j, "token"));
-    h->certificate = strdup(str(j, "certificate"));
-    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "use_system_wifi"))) {
-        system_wifi_t wifi;
-        err = system_wifi_read(&wifi);
-        if (err == ESP_OK) {
-            memcpy(h->wifi.sta.ssid, wifi.ssid, strlen(wifi.ssid));
-            memcpy(h->wifi.sta.password, wifi.password, strlen(wifi.password));
+    cJSON *j = err == ESP_OK ? cJSON_Parse(h->provision) : NULL;
+    if (err == ESP_OK && !j)
+        err = ESP_ERR_INVALID_ARG;
+    if (j) {
+        snprintf(h->uri, sizeof(h->uri), "%s", str(j, "uri"));
+        snprintf(h->headers, sizeof(h->headers), "Authorization: Bearer %s\r\n", str(j, "token"));
+        h->certificate = strdup(str(j, "certificate"));
+        if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "use_system_wifi"))) {
+            system_wifi_t wifi;
+            err = system_wifi_read(&wifi);
+            if (err == ESP_OK) {
+                memcpy(h->wifi.sta.ssid, wifi.ssid, strlen(wifi.ssid));
+                memcpy(h->wifi.sta.password, wifi.password, strlen(wifi.password));
+            }
+            clear_secret(&wifi, sizeof(wifi));
+        } else {
+            strncpy((char *)h->wifi.sta.ssid, str(j, "ssid"), sizeof(h->wifi.sta.ssid));
+            strncpy((char *)h->wifi.sta.password, str(j, "password"), sizeof(h->wifi.sta.password));
         }
-        clear_secret(&wifi, sizeof(wifi));
-    } else {
-        strncpy((char *)h->wifi.sta.ssid, str(j, "ssid"), sizeof(h->wifi.sta.ssid));
-        strncpy((char *)h->wifi.sta.password, str(j, "password"), sizeof(h->wifi.sta.password));
+        clear_json_secrets(j);
+        cJSON_Delete(j);
     }
-    cJSON_Delete(j);
+    /* The provision copy holds the token and possibly a Wi-Fi password: wipe it
+     * on every path, including read and parse failures. */
     clear_secret(h->provision, size);
     free(h->provision);
     h->provision = NULL;
@@ -351,11 +396,14 @@ esp_err_t coop_link_start(coop_link_handle_t h)
     err = esp_wifi_init(&cfg);
     if (err != ESP_OK)
         return err;
-    /* DTIM sleep can add >200 ms on real APs, invalidating the <=100 ms
-     * transfer clock samples and repeatedly restarting the asset handshake. */
+    /* Start awake: pairing, clock sampling and the first asset sync all need
+     * low latency. apply_power_save() owns the mode afterwards. */
+    atomic_store(&h->low_latency, true);
     err = esp_wifi_set_ps(WIFI_PS_NONE);
     if (err != ESP_OK)
         return err;
+    h->power_save_known = true;
+    h->power_save_applied = false;
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_handler_instance_register(
         WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event, h, &h->wifi_handler));
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_handler_instance_register(
@@ -450,4 +498,9 @@ void coop_link_delete(coop_link_handle_t h)
     free(h->provision);
     free(h->rx);
     free(h);
+}
+void coop_link_set_low_latency(coop_link_handle_t h, bool low_latency)
+{
+    if (h)
+        atomic_store(&h->low_latency, low_latency);
 }

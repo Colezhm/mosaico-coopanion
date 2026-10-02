@@ -72,9 +72,8 @@ static void poll(void *ctx, coop_state_handle_t state)
         coop_state_transfer(state, "transfer_depart", "sim-out", 2, 0, time);
         break;
     case 11:
-        coop_state_connection(state, false);
         coop_state_presence(state, true, 3, false);
-        coop_state_say(state, "电脑未连接，陪你玩一会儿", false, time);
+        coop_state_connection(state, false);
         break;
     }
 }

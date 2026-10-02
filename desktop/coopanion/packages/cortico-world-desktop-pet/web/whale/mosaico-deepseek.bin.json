@@ -4,7 +4,7 @@
   "scheme": "deepseek",
   "width": 192,
   "height": 216,
-  "bytes": 967993,
+  "bytes": 1020422,
   "clips": [
     {
       "id": 0,
@@ -256,6 +256,27 @@
       "name": "pout",
       "count": 2,
       "ms": 2000,
+      "loop": true
+    },
+    {
+      "id": 40,
+      "name": "flustered",
+      "count": 2,
+      "ms": 1400,
+      "loop": true
+    },
+    {
+      "id": 41,
+      "name": "delighted",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 42,
+      "name": "cheeky",
+      "count": 2,
+      "ms": 1600,
       "loop": true
     }
   ]

@@ -17,5 +17,6 @@ The retained Vibe Mode partition layout is preserved; existing data is not prese
 - Original workspace documentation: [English](README.upstream.md) / [Chinese](README_CN.upstream.md).
 
 Version 1.1.0 adds the original DeepSeek whale rig, 36 device animation clips and expanded expressions; see the [whale guide](docs/coopanion-whale.md).
+Version 1.2.0 (desktop 0.1.0-mosaico.4) fixes false offline states, captions and version reporting, adds idle Wi-Fi power saving and refines board art; hardware acceptance is pending.
 No camera or external modules are included.
 Dependencies retain their original licenses. New desktop and application modules carry MIT licensing.

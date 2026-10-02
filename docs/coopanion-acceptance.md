@@ -4,6 +4,41 @@
 
 2026-10-02，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
 
+## 1.2.0 / 桌面 0.1.0-mosaico.4 候选（Mac 验证完成，未上板）
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 桌面第一、二级验证 | frozen-lockfile 安装成功；应用 22 项、桌宠 93 项、CUA 25 项通过，桌宠另有 1 项平台跳过；World 合计 118 项通过、1 项跳过；Node、World、网页、两包类型检查、console 构建和两个 `check:extension` 全部通过 | 扩展为隔离干装载，未调用模型、实际电脑任务或替换用户部署 |
+| 共享 C 与预览 | 状态、传送、渲染回执故障注入、ASan/UBSan 全部通过；20 个场景 × Coo/大肥鱼，共 40 个场景通过 | Apple Clang 对 vendored cJSON 有 6 条已知 `sprintf` 弃用警告，无 sanitizer 错误；不能代替 FreeRTOS/真机 |
+| 官方原生模拟器 | GSP 1.5.1、共享 C 后端，保存 16 张实际截图；真实长按及点击验证半透明菜单「回到电脑 / 坐下歇会↔站起来 / 摸摸头 / 收起」；状态行无「静音」，本轮所需字形完整 | 是实际 GSP 字体和原生交互；物理触摸、IMU、音频和设备帧率未验收 |
+| 连接与画面 | 实际测试 socket 断开再重连后显示「电脑连上啦」；电脑归属下显示 Coo/鲸鱼传送门；已加载提交的鲸鱼 atlas，`flustered`、`delighted`、`cheeky` 三表情可见 | 注入模拟连接状态，未完成本版本真实桌面与 USB 设备传送 |
+| 字幕和桌宠回归修复 | 修复紧邻中文的英文单词在换行时被拆开，新增两种边界回归并实看分页；保留桌宠零、负值及非有限运动步长防护，两个行为测试通过 | 不改变原三行分页和原身体模型 |
+| 固件与版本 | 固定 ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe` 构建 `20261002-143347-build-71659` 成功；应用描述符与 sdkconfig 均为 1.2.0；修复能力消息应用版本缓冲区编译截断错误；4 项 Python 配对/版本测试通过 | 一条预期 factory 尺寸警告；正常应用位于 `ota_0`，不是应用 BIN 整机烧录 |
+| 资源与更新包 | 提交的 COO2 atlas 1,020,422 字节、39 clips/127 frames，低于 1,024,000 字节上限；官方 System Update 离线打包、组件哈希及布局检查通过 | UI 资源已变，必须 `iris system-update`；本地包未签名，未执行设备写入 |
+| Electron 资源对比 | 隔离导出 1,019,134 字节，帧数/clip 数一致；RGB 平均绝对差 0.674，最大通道差的 p99 为 18；三张逐帧对比已目视检查 | 含量化和抗锯齿差异，未证明所有差异均仅来自抗锯齿；未替换提交的 Chromium atlas |
+| Mac 候选交付 | `0.1.0-mosaico.4` arm64 `.app` 与 ZIP 构建成功，搬到交付目录后 `codesign --verify --deep --strict` 通过 | ad hoc 签名，无 Apple 公证；本轮未启动此最终 `.app`，原运行实例未替换 |
+| 真机只读预检 | 复用已有 Iris gateway；正常运行 1.1.0，`stale=false`、`crash_count=0`，操作队列空闲 | 没有写入或重启；1.2.0 尚待当次具体设备更新确认，完整身份信息仅保存在本机 |
+
+最终产物：
+
+| 文件 | 字节 | SHA-256 |
+|---|---:|---|
+| `projects/coopanion/build/coopanion.bin` | 2,247,952 | `5677b8cbdee174d962e6716d634ec8a703891667219dbacc464da3f3fb84f2fb` |
+| `mosaico-coopanion-1.2.0-system-update.irisfw` | 5,779,250 | `a9524760a193ef5702a6243ed2cd6993cbe3a87b867a32c21db62f22dbb4ca95` |
+| `Coopanion-0.1.0-mosaico.4-mac-arm64.zip` | 166,454,478 | `e56aae530973a74a1bb34840677c2e7fbcde46c38e6fb6ba6dc2bad7d8389ff0` |
+
+本机交付目录 `artifacts/mosaico-coopanion/1.2.0-handoff/`（Git 忽略）：
+`validation/desktop-summary.json`、`final-desktop-summary.json`、`native-final.log`、
+`python-tests.log`、`firmware-hashes.json`、`system-update-inspection.json`、
+`deliverable-hashes.json`、`desktop-installer-build.log`、`atlas-comparison.json`；
+`sim/report.json`、`sim/contact-sheet.png` 及 16 张原始截图；`desktop-macos/`。
+配对凭据、完整设备标识和本机路径不进入新公开证据。
+
+尚待真机：确认后保留数据升级到 1.2.0，核对同一设备身份、新 Boot ID、版本与应用 ELF 哈希，
+并通过官方 CLI 取屏；两个实际跨设备 500±80 ms 间隔、modem-sleep 下的对时和传送、
+真实录音/IMU/低电量、断线重连字幕和 30 分钟稳定性均未宣称通过。
+GitHub CI 的实时结果以候选 PR 的检查页为准，本机通过不等同远端通过。
+
 ## 1.1.0 实机安装与 1.1.1 回执修复候选
 
 | 项目 | 已观察结果 | 边界 |

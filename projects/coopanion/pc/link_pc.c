@@ -115,7 +115,7 @@ static void command(coop_ui_handle_t ui, cJSON *m, uint64_t now)
         if (ready && !capabilities_sent) {
             cJSON *caps = cJSON_CreateObject();
             cJSON_AddStringToObject(caps, "t", "capabilities");
-            cJSON_AddStringToObject(caps, "app", "mosaico-coopanion/1.1.0-simulator");
+            cJSON_AddStringToObject(caps, "app", "mosaico-coopanion/" COOP_APP_VERSION "-simulator");
             cJSON_AddNumberToObject(caps, "width", 480);
             cJSON_AddNumberToObject(caps, "height", 480);
             cJSON_AddItemToObject(caps, "assetFormats", cJSON_Parse("[\"COO1\",\"COO2\"]"));

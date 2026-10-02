@@ -16,4 +16,5 @@ FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸和情�
 - 原工作区文档：[中文](README_CN.upstream.md) / [English](README.upstream.md)。
 
 1.1.0 新增大肥鱼原版角色、36 段板端动画及扩展表情，见[大肥鱼说明](docs/coopanion-whale.md)。
+1.2.0（桌面 0.1.0-mosaico.4）修复误报离线、字幕与版本号问题，空闲时 Wi-Fi 省电并改进板端画面；真机验收待完成。
 不含摄像头和外接模块。依赖保留各自许可证，新增桌面与应用模块使用 MIT。

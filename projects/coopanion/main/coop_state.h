@@ -46,6 +46,7 @@ typedef struct {
     uint8_t edge; /* 0 bottom, 1 left, 2 top, 3 right; screen gravity = (-ax, ay). */
     uint8_t battery;
     uint32_t epoch, utterance;
+    uint64_t interacted_at; /* last local button/touch/menu input, ms */
     uint32_t body_color, eye_color;
     char expression[24], subtitle[2048], transfer_id[64];
 } coop_snapshot_t;

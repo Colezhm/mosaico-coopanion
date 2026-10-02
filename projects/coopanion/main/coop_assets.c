@@ -20,7 +20,7 @@ struct coop_assets_t {
     coop_assets_config_t cfg;
     QueueHandle_t queue;
     const esp_partition_t *partition;
-    uint8_t *bytes;
+    uint8_t *volatile bytes;
     size_t size, offset;
     char id[64], hash[65], cached_hash[65];
 };
@@ -182,4 +182,8 @@ void coop_assets_message(coop_assets_handle_t h, cJSON *m)
 {
     if (!h || xQueueSend(h->queue, &m, 0) != pdTRUE)
         cJSON_Delete(m);
+}
+bool coop_assets_busy(coop_assets_handle_t h)
+{
+    return h && h->bytes;
 }

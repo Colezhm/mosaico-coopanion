@@ -105,7 +105,7 @@ const COMPANION_GROUP: ConfigGroup = {
       [TELEMETRY_KEY]: {
         type: 'boolean',
         title: '匿名使用统计',
-        description: '发送不含对话内容的使用次数与设置,帮助改进 Coopanion。字段见 docs/TELEMETRY.md。',
+        description: '默认关闭（Mosaico 分支）。开启后发送不含对话内容的使用次数与设置给上游 Coopanion 项目。字段见 docs/TELEMETRY.md。',
       },
     },
   },
@@ -290,7 +290,8 @@ export async function main(): Promise<void> {
     version: process.env.COOPANION_VERSION ?? 'dev',
     // development runs point it at a local telemetry-server
     url: process.env.COOPANION_TELEMETRY_URL || undefined,
-    enabled: () => getByPath(loaded.config as unknown as Record<string, unknown>, TELEMETRY_KEY) !== false,
+    // The Mosaico fork never reports unless the person opts in.
+    enabled: () => getByPath(loaded.config as unknown as Record<string, unknown>, TELEMETRY_KEY) === true,
     snapshot: () => snapshotOf(loaded.config, loaded.memoryDir),
     extensions: () => reportedExtensions(extensions),
   });
