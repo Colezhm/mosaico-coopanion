@@ -259,13 +259,14 @@ int main(int argc, char **argv)
     assert(!strcmp(coop_state_get(qs)->subtitle,"第二句"));
     coop_script_delete(script);
     coop_state_delete(qs);
-    assert(argc == 2);
+    assert(argc >= 2);
     transfer_test();
     input_test();
     motion_test();
     stumble_and_edges_test();
     subtitle_test();
     atlas_test(argv[1]);
+    for(int i=2;i<argc;i++)atlas_test(argv[i]);
     puts("PASS: transfer timing, stale messages, button arbitration, IMU recovery, restart "
          "snapshot and atlas bounds");
     return 0;

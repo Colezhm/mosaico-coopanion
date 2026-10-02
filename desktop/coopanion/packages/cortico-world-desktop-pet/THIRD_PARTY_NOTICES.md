@@ -29,6 +29,11 @@ DeepSeek 女仆装二创参考 ZipZipPipe。围裙上的标志是 DeepSeek、Ope
 阿里云(通义千问)、月之暗面(Kimi)、MiniMax 的商标图形,归各自的公司所有,只用来标明配色对应哪一家,
 与这些公司没有关联,也不代表其认可。
 
+Mosaico 1.1.0 的 `mosaico-deepseek.bin` 从上述原版部件模型采样生成。
+新增 `sulk-back.png` 为 OpenAI 图像生成工具参考原版渲染和用户提供的角色图制作的透明背身立绘，
+用于生闷气动作；未将用户原始参考图打包发布。来源说明与生成要求见
+[大肥鱼资源记录](../../../../docs/coopanion-whale.md)。
+
 ## 其他运行时依赖
 
 - `ws`:MIT

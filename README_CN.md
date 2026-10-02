@@ -2,8 +2,8 @@
 
 [English](README.md) · [开发与使用](docs/coopanion-implementation.md) · [验收记录](docs/coopanion-acceptance.md)
 
-让同一个 Coo 在电脑与 ESP-Mosaico 之间传送。电脑保留 Coopanion 的对话、记忆、
-FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸、情绪反馈和 Xiaole 中文语音。
+让同一个 Coo 或 DeepSeek 大肥鱼在电脑与 ESP-Mosaico 之间传送。电脑保留 Coopanion 的对话、记忆、
+FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸和情绪反馈。语音输出暂时关闭，保留麦克风输入。
 独立配对 WSS 通道维护唯一身体归属，传送包含两个 500 ms 间隔。
 
 **当前为开发候选版，真机验收尚待完成。** 烧录前阅读验收记录。
@@ -15,4 +15,5 @@ FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸、情�
 - 构建、私有配对、双端预览和整包导出：[使用说明](docs/coopanion-implementation.md)。
 - 原工作区文档：[中文](README_CN.upstream.md) / [English](README.upstream.md)。
 
-首版仅集成 Coo，不含大肥鱼、摄像头和外接模块。依赖保留各自许可证，新增桌面与应用模块使用 MIT。
+1.1.0 新增大肥鱼原版角色、36 段板端动画及扩展表情，见[大肥鱼说明](docs/coopanion-whale.md)。
+不含摄像头和外接模块。依赖保留各自许可证，新增桌面与应用模块使用 MIT。

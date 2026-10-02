@@ -60,7 +60,7 @@ export class MosaicoBridge {
     // Runtime secrets come from the host's deployment, never from the package or public config.
     pairing.token = token;
     this.transport = new MosaicoTransport(pairing, {
-      connected: () => { this.presence.connected('device', false); this.assets.start(this.hooks.skin()); this.publishStatus(); },
+      connected: () => { this.capabilities=null;this.presence.connected('device', false); this.startAssets(); this.publishStatus(); },
       disconnected: () => { this.assets.cancel(); this.deviceReady = false; this.cancelVoice(); this.presence.disconnected('device'); this.publishStatus(); },
       message: msg => this.deviceMessage(msg),
       audio: (id, seq, pcm) => this.audio(id, seq, pcm),
@@ -85,7 +85,7 @@ export class MosaicoBridge {
     const key = JSON.stringify(state);
     if (key !== this.statusKey) { this.statusKey = key; this.hooks.status?.(state); }
   }
-  desktopConnected(): void { this.presence.connected('desktop');if(this.transport?.ready)this.assets.start(this.hooks.skin()); }
+  desktopConnected(): void { this.presence.connected('desktop');if(this.transport?.ready)this.startAssets(); }
   desktopDisconnected(): void { this.presence.disconnected('desktop'); }
   desktopMessage(msg: Message): boolean {
     if(msg.t==='pet_emotion'){if(this.presence.owner==='desktop'&&!this.presence.transferring)this.rememberEmotion(msg.face);return true;}
@@ -95,7 +95,18 @@ export class MosaicoBridge {
     return false;
   }
   setBusy(busy: boolean): void { this.desktopBusy = busy; if (busy) this.presence.activity(); }
-  syncSkin(): void { if(this.presence.deviceOnline)this.assets.start(this.hooks.skin()); }
+  private startAssets():void {
+    const skin=this.hooks.skin();
+    if(skin&&typeof skin==='object'&&'figure' in skin&&skin.figure==='whale'){
+      this.assets.cancel();
+      if(!this.capabilities)return; // The board advertises formats after clock synchronization.
+      if(!Array.isArray(this.capabilities.assetFormats)||!this.capabilities.assetFormats.includes('COO2')){
+        this.error='大肥鱼需要 Mosaico 1.1.0 或更新固件，请先更新板端';this.hooks.error(this.error);return;
+      }
+    }
+    this.assets.start(skin);
+  }
+  syncSkin(): void { if(this.presence.deviceOnline)this.startAssets(); }
   send(msg: Message): boolean {
     if (this.presence.transferring) return false;
     if (this.presence.owner === 'desktop') return this.hooks.sendDesktop(msg);
@@ -109,7 +120,7 @@ export class MosaicoBridge {
   }
   computerFinished(): void { this.computerBusy = false; this.presence.activity(); }
   private deviceMessage(msg: Message): void {
-    if(msg.t==='capabilities'){this.capabilities=msg;return;}
+    if(msg.t==='capabilities'){const first=!this.capabilities;this.capabilities=msg;const skin=this.hooks.skin();if(first&&skin&&typeof skin==='object'&&'figure' in skin&&skin.figure==='whale')this.startAssets();return;}
     if(this.assets.receive(msg))return;
     if (msg.t.startsWith('transfer_')) { this.presence.receive('device', msg); return; }
     if (msg.t === 'battery') { this.presence.setBattery(Number(msg.percent)); return; }

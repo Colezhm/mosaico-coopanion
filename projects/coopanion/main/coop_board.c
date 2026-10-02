@@ -395,7 +395,7 @@ static void poll(void *ctx, coop_state_handle_t s)
             coop_state_connection(s, ready);
             if (ready && !h->capabilities_sent) {
                 cJSON *caps = message("capabilities");
-                cJSON_AddStringToObject(caps, "app", "mosaico-coopanion/0.1.0-mosaico.1");
+                cJSON_AddStringToObject(caps, "app", "mosaico-coopanion/1.1.0");
                 cJSON_AddNumberToObject(caps, "width", 480);
                 cJSON_AddNumberToObject(caps, "height", 480);
                 cJSON_AddBoolToObject(caps, "imu", h->imu_ok);
@@ -406,6 +406,8 @@ static void poll(void *ctx, coop_state_handle_t s)
                 cJSON_AddBoolToObject(caps, "audio", h->audio != NULL);
                 cJSON_AddBoolToObject(caps, "nand", h->nand_ok);
                 cJSON_AddStringToObject(caps, "resourceStore", "NOR/coo_assets");
+                cJSON_AddItemToObject(caps, "assetFormats", cJSON_Parse("[\"COO1\",\"COO2\"]"));
+                cJSON_AddNumberToObject(caps, "assetMaxBytes", 1000 * 1024);
                 h->capabilities_sent = coop_link_send(h->link, caps);
             }
         } else if (!strcmp(t, "pet_command"))

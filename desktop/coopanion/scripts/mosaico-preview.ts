@@ -15,6 +15,11 @@ import { DESKTOP_PET_DEFAULTS } from '../packages/cortico-world-desktop-pet/src/
 import type { Message } from '../packages/cortico-world-desktop-pet/src/mosaico/coordinator.ts';
 
 const directory=resolve(process.env.COOP_PREVIEW_DIR||'../../artifacts/mosaico-coopanion/preview');
+const httpPort=Number(process.env.COOP_PREVIEW_PORT||5199);
+const petPort=Number(process.env.COOP_PREVIEW_PET_PORT||7798);
+const visualPort=Number(process.env.COOP_PREVIEW_VISUAL_PORT||3222);
+for(const port of [httpPort,petPort,visualPort])if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('Invalid preview port');
+const previewOrigin=`http://127.0.0.1:${httpPort}`;
 mkdirSync(directory,{recursive:true});
 const pairingFile=resolve(directory,'pairing/pairing.json');
 const pairing=JSON.parse(readFileSync(pairingFile,'utf8'));
@@ -23,9 +28,9 @@ if (!pairingToken) throw new Error('Run the pairing helper with --prepare-only f
 pairing.advertise=false;writeFileSync(pairingFile,JSON.stringify(pairing),{mode:0o600});
 const assetFile=resolve(directory,'sim-atlas.bin');
 const log=(side:string,m:Message)=>{if(!['clock_ping','clock_pong','clock_quality','asset_chunk'].includes(m.t))appendFileSync(resolve(directory,'events.jsonl'),JSON.stringify({observedAt:performance.now(),side,...m,data:undefined})+'\n');};
-let skin=DESKTOP_PET_DEFAULTS.skin;
+let skin={...DESKTOP_PET_DEFAULTS.skin,...(process.env.COOP_PREVIEW_FIGURE==='whale'?{figure:'whale',scheme:'deepseek'}:{})};
 let bridge:MosaicoBridge;
-const pet=new PetServer({port:()=>7798,webDir:resolve('packages/cortico-world-desktop-pet/web'),
+const pet=new PetServer({port:()=>petPort,webDir:resolve('packages/cortico-world-desktop-pet/web'),
   snapshot:()=>({skin,roam:'off',sound:false,theme:'dark',scale:1.7,mic:false,user:'伙伴',hoverButtons:[],bot:{name:'Coo'},mosaico:bridge?.presence.snapshot()}),
   onPetMessage:m=>{log('desktop',m);bridge.desktopMessage(m);},onAudio:()=>{},
   onPetConnect:()=>bridge.desktopConnected(),onPetDisconnect:()=>bridge.desktopDisconnected(),
@@ -73,14 +78,14 @@ const html=`<!doctype html><html lang="zh"><meta charset="utf-8"><title>Mosaico 
 <style>body{margin:0;background:#12181e;color:#eaf5f0;font:15px system-ui}main{max-width:1100px;margin:24px auto}h1{font-size:24px}p{color:#9dafae}.screens{display:flex;gap:20px}.screen{flex:1}iframe{width:100%;height:570px;border:1px solid #334944;border-radius:20px;background:#202e32}button{background:#233e39;color:#d8fff0;border:1px solid #487b69;border-radius:8px;padding:10px 14px;margin:5px;cursor:pointer}pre{white-space:pre-wrap;color:#9edbc2}.badge{color:#8ef5bf}</style>
 <style>main{padding:0 16px}.screen{min-width:0}iframe{box-sizing:border-box}@media(max-width:1000px){main{max-width:600px}.screens{flex-direction:column}}</style>
 <main><h1>Mosaico × Coo <span class="badge">双端联调</span></h1><p>电脑画面为原版桌宠渲染器，Mosaico 画面为共享 C 状态机的 GSP 模拟器。声音与传感器输入在此模拟，未连接真实硬件。</p>
-<div class="screens"><section class="screen"><h3>电脑 · 椭圆传送门</h3><iframe src="${pet.origin}/pet"></iframe></section><section class="screen"><h3>Mosaico · 480 × 480</h3><iframe src="http://127.0.0.1:3222/"></iframe></section></div>
+<div class="screens"><section class="screen"><h3>电脑 · 椭圆传送门</h3><iframe src="${pet.origin}/pet"></iframe></section><section class="screen"><h3>Mosaico · 480 × 480</h3><iframe src="http://127.0.0.1:${visualPort}/"></iframe></section></div>
 <div id="controls">${[['device','前往 Mosaico'],['desktop','返回电脑'],['sway','摇晃'],['stumble','踉跄'],['fall','摔倒'],['cry','哭泣'],['sulk','生闷气'],['soothe','摸头安抚'],['say','中文字幕'],['offline','断开连接'],['online','重新连接']].map(([id,title])=>`<button data-command="${id}">${title}</button>`).join('')}<button id="talk">按住 AI 键</button></div><pre id="status">连接中…</pre><p id="result"></p></main>
 <script>async function command(action){try{const r=await fetch('/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});document.querySelector('#result').textContent=await r.text();}catch(e){document.querySelector('#result').textContent=e.message;}}document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>command(b.dataset.command));const talk=document.querySelector('#talk');talk.onpointerdown=e=>{talk.setPointerCapture(e.pointerId);command('down');};talk.onpointerup=()=>command('up');talk.onpointercancel=()=>command('up');setInterval(async()=>{document.querySelector('#status').textContent=JSON.stringify(await(await fetch('/status')).json(),null,2);},500);</script></html>`;
 const server=createServer(async(req,res)=>{
-  if(!/^127\.0\.0\.1:5199$/.test(req.headers.host||'')){res.writeHead(403);res.end();return;}
+  if(req.headers.host!==`127.0.0.1:${httpPort}`){res.writeHead(403);res.end();return;}
   if(req.url==='/status'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(bridge.state()));return;}
   if(req.url==='/command'&&req.method==='POST'){
-    if(req.headers.origin!=='http://127.0.0.1:5199'){res.writeHead(403);res.end();return;}
+    if(req.headers.origin!==previewOrigin){res.writeHead(403);res.end();return;}
     let input='';for await(const part of req){input+=part;if(input.length>1024){res.writeHead(413);res.end();return;}}
     try{const {action}=JSON.parse(input);log('control',{t:action});
       if(action==='desktop'||action==='device')await bridge.transfer(action);
@@ -96,6 +101,6 @@ const server=createServer(async(req,res)=>{
   }
   res.setHeader('Content-Type','text/html; charset=utf-8');res.end(html);
 });
-server.listen(5199,'127.0.0.1',()=>console.log('Preview: http://127.0.0.1:5199/'));
+server.listen(httpPort,'127.0.0.1',()=>console.log('Preview: '+previewOrigin+'/'));
 async function stop(){if(stopping)return;stopping=true;native?.destroy();ws?.terminate();server.close();await bridge.stop();await pet.stop();process.exit(0);}
 process.on('SIGINT',()=>void stop());process.on('SIGTERM',()=>void stop());

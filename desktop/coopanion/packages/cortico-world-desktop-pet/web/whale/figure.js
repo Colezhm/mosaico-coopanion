@@ -80,6 +80,16 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
   }
   let scheme = schemeInfo(opts.scheme).id;
   let { tex, img } = await loadScheme(scheme);
+  // A dedicated rear view completes the original model's missing sulk pose.
+  // Other vendor palettes keep their original rig rather than silently changing colour.
+  const back=await loadImage(asset('sulk-back.png'));
+  const backCv=document.createElement('canvas');backCv.width=back.width;backCv.height=back.height;
+  const backCtx=backCv.getContext('2d');backCtx.drawImage(back,0,0);
+  const backPixels=backCtx.getImageData(0,0,back.width,back.height).data;
+  let bx=back.width,by=back.height,br=0,bb=0;
+  for(let y=0;y<back.height;y++)for(let x=0;x<back.width;x++)if(backPixels[(y*back.width+x)*4+3]>16){bx=Math.min(bx,x);by=Math.min(by,y);br=Math.max(br,x);bb=Math.max(bb,y);}
+  const backCrop=document.createElement('canvas');backCrop.height=512;backCrop.width=Math.round(512*(br-bx+1)/(bb-by+1));
+  backCrop.getContext('2d').drawImage(back,bx,by,br-bx+1,bb-by+1,0,0,backCrop.width,512);const backHref=backCrop.toDataURL();
   const box = Object.fromEntries(model.parts.map(p => [p.id, p.box]));
   const rectOf = id => { const [x, y, w, h] = box[id]; return [x, y, x + w, y + h]; };
 
@@ -222,6 +232,8 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     surprised: 'surprised_mouth', sleepy: 'sleep_mouth', sleep: 'sleep_mouth', dizzy: 'dizzy_mouth', dragged: 'drag_mouth',
     content: 'neutral_mouth', waking: ['surprised_mouth', .6], squeeze: 'sleep_mouth', listening: 'neutral_mouth',
     thinking: 'sleep_mouth', run: ['happy_mouth', .7], angry: -1, sad: -1.2,
+    worried: ['drag_mouth', .9], furious: 'jagged', smug: 1.5, pleading: ['happy_mouth', 1.1],
+    curious: ['surprised_mouth', .6], excited: 'happy_mouth', crying: ['drag_mouth', .9], pout: -1.8,
   };
 
   function paintFace(fc, face, o, t) {
@@ -258,14 +270,20 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     const m = MOUTH[face] ?? 'neutral_mouth';
     const open = Math.max(talk * (.45 + .45 * Math.abs(Math.sin(t * 17))), face === 'sleepy' || face === 'waking' ? gapOpen : 0);
     if (open > .12) sprite(face === 'surprised' ? 'surprised_mouth' : 'happy_mouth', { sy: .35 + .65 * open, sx: .85 + .15 * open });
-    else if (typeof m === 'number') lineMouth(m);
+    else if (m === 'jagged') {
+      // Reference's comic outburst: a broad, jagged mouth, anchored to the original mouth line.
+      const x=766-FACE.x,y=768-FACE.y;
+      fg.save();fg.fillStyle='#ef9ca6';fg.strokeStyle=INK;fg.lineWidth=3;fg.lineJoin='round';
+      fg.beginPath();fg.moveTo(x-52,y+29);fg.lineTo(x-48,y-23);fg.lineTo(x-25,y-9);fg.lineTo(x-6,y-28);fg.lineTo(x+15,y-11);fg.lineTo(x+38,y-28);fg.lineTo(x+52,y+29);fg.closePath();fg.fill();fg.stroke();fg.restore();
+    }
+    else if (typeof m === 'number') lineMouth(m,face==='pout'?1.7:1);
     else if (Array.isArray(m)) sprite(m[0], { s: m[1] });
     else sprite(m);
   }
 
   /* ---------- mounting inside the pet's SVG group ---------- */
   const VIEW = model.view;
-  let fo = null, canvas = null, fxG = null, rig = null, mountedIn = null, pxScale = 0, frameN = 0;
+  let fo = null, canvas = null, fxG = null, backG = null, rig = null, mountedIn = null, pxScale = 0, frameN = 0;
   function mount(petG) {
     petG.textContent = '';
     const box = (el) => { el.setAttribute('x', VIEW[0]); el.setAttribute('y', VIEW[1]); el.setAttribute('width', VIEW[2] - VIEW[0]); el.setAttribute('height', VIEW[3] - VIEW[1]); return el; };
@@ -279,7 +297,10 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
       fo.appendChild(canvas);
     }
     fxG = document.createElementNS(SVGNS, 'g');
-    petG.append(fo, fxG);
+    backG = document.createElementNS(SVGNS, 'g');
+    const backWidth=230*backCrop.width/backCrop.height;
+    backG.innerHTML=`<image href="${backHref}" x="${-backWidth/2}" y="-230" width="${backWidth}" height="230"/>`;
+    petG.append(fo, fxG, backG);
     rig = createRig(canvas, { deformers, parts, view: VIEW });
     for (const n in tex) rig.upload(n, tex[n]);
     if (fade) for (const n in fade.set.tex) rig.upload(n + '@mix', fade.set.tex[n]);
@@ -348,6 +369,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     happy: [.8, 1], love: [.9, 1], wink: [.5, .7], surprised: [1, .2], angry: [.9, .15], sad: [-1, 0], shy: [-.5, .3],
     sleepy: [-.7, 0], sleep: [-.9, 0], dizzy: [-.3, 0], dragged: [.6, .6], content: [-.2, .25], listening: [.6, .2],
     thinking: [.1, .15], run: [.2, .4], waking: [-.4, 0], squeeze: [-.3, 0], neutral: [0, .25],
+    worried:[-.8,.1],furious:[1,.25],smug:[.5,.4],pleading:[.8,.8],curious:[.6,.3],excited:[1,1],crying:[-1,0],pout:[-.5,.1],
   };
   // brows by face, in master pixels: [lift of the whole brow, lift of its inner end (by the nose)];
   // a negative inner lift is the frown
@@ -355,6 +377,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     surprised: [6, 0], angry: [-1, -5], sad: [1, 5], shy: [1, 2.5], happy: [2, 0], love: [2, 0], wink: [1, 0],
     sleepy: [-1.5, 0], sleep: [-1.5, 0], dizzy: [1, 3], dragged: [2, 3.5], thinking: [0, 2], waking: [2, 1],
     listening: [1, 0], content: [-1, 0], squeeze: [-1, -2], run: [1, 0],
+    worried:[1,6],furious:[-3,-8],smug:[1,0],pleading:[1,3],curious:[5,2],excited:[4,0],crying:[1,6],pout:[-2,-4],
   };
   const BROW_SPLIT = U(765);  // the near brow is left of this, the far brow right of it
   let browLift = 0, browInner = 0;
@@ -370,6 +393,10 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
 
   function draw(petG, fc, o) {
     if (mountedIn !== petG || !petG.contains(fo)) mount(petG);
+    const rear=o.face==='sulking'&&scheme==='deepseek';
+    fo.setAttribute('opacity',rear?'0':'1');fxG.setAttribute('opacity',rear?'0':'1');
+    backG.setAttribute('opacity',rear?'1':'0');
+    if(rear){backG.setAttribute('transform',`translate(128 256) scale(1 ${1+.008*Math.sin(o.t*3)}) rotate(${1.5*Math.sin(o.t*2)})`);return;}
     if (frameN++ % 20 === 0) fitCanvas();
     const t = o.t, dt = lastT == null ? 1 / 60 : clamp(t - lastT, 0, .05);
     lastT = t;
@@ -387,6 +414,9 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     if (mode === 'sleep') tiltT += 6;
     if (face === 'shy') tiltT += 7;
     if (face === 'thinking') tiltT -= 8;
+    if (face === 'curious') tiltT -= 10;
+    if (face === 'worried' || face === 'crying') tiltT += 5;
+    if (face === 'smug') tiltT -= 5;
     if (face === 'dizzy') tiltT += 3 * Math.sin(t * 4.5);
     if (held) tiltT += o.swing * .25;
     headTilt = sp.head.step(tiltT, dt);
@@ -429,6 +459,15 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     if (sitK > .5 && !walking) { aN = lerp(aN, -4, sitK); aF = lerp(aF, -6, sitK); }
     if (face === 'happy' || face === 'love') { aN += 12 + 5 * Math.sin(t * 8); aF -= 8 + 4 * Math.sin(t * 8); }
     if (face === 'angry') { aN = 20 + 3 * Math.sin(t * 30); aF = -18 - 3 * Math.sin(t * 30); }
+    if (face === 'furious') { aN=55+8*Math.sin(t*20);aF=-30; }
+    if (face === 'smug' || face === 'pout') { aN=25;aF=-22; }
+    if (face === 'worried') { aN=55;aF=-8; }
+    if (face === 'pleading') { aN=60+4*Math.sin(t*5);aF=-50; }
+    if (face === 'excited') { aN=80+12*Math.sin(t*9);aF=-18; }
+    // Mosaico's finite clips use the same springs and part rig as desktop motion.
+    if (mode === 'stumble') { aN=60+20*Math.sin(t*12);aF=-55; }
+    if (mode === 'fall') { aN=80;aF=-70; }
+    if (mode === 'getup') { aN=50*(1-clamp(o.progress||0,0,1));aF=-aN; }
     const armN = sp.armN.step(aN, dt), armF = sp.armF.step(aF, dt);
 
     /* deformer states */
@@ -518,6 +557,9 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     let s = '';
     const ac = accent();
     const top = at(124, 34), side = at(204, 52);
+    if(fc.tears){for(const x of [U(640),U(850)]){const q=at(x,V(770)+6+(t*28)%14);s+=`<path fill="#95daff" stroke="#5279b6" stroke-width=".7" transform="translate(${f1(q[0])} ${f1(q[1])})" d="M0 -5Q6 2 0 4Q-6 2 0 -5Z"/>`;}}
+    if(fc.sparkle){for(let i=0;i<3;i++){const q=at(72+i*70,30+(i%2)*16),k=.8+.2*Math.sin(t*6+i);s+=`<path fill="#ffda68" stroke="#d59a37" stroke-width="1" transform="translate(${f1(q[0])} ${f1(q[1])}) scale(${f1(k)})" d="M0 -7L2 -2L7 0L2 2L0 7L-2 2L-7 0L-2 -2Z"/>`;}}
+    if(fc.emit==='heart'){for(let i=0;i<2;i++){const q=at(78+i*112,55-12*((t+i*.5)%1));s+=`<path fill="#f58db3" opacity=".85" transform="translate(${f1(q[0])} ${f1(q[1])}) scale(.7)" d="M0 7C-18 -4 -4 -12 0 -4C4 -12 18 -4 0 7Z"/>`;}}
     if (fc.orbit) {
       for (let i = 0; i < 3; i++) {
         const a = t * 3.2 + i * 2.094, sn = Math.sin(a);
@@ -553,6 +595,9 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
 
   return {
     draw,
+    /** Export/capture clients retain one context and use the identical rig at a fixed resolution. */
+    resolution(value) { fixedRes=value; if(canvas)fitCanvas(); },
+    dispose() { if(rig)rig.gl.getExtension('WEBGL_lose_context')?.loseContext();rig=null;mountedIn=null; },
     groupTilt,
     setScheme,
     /** Forgets the motion state (springs, clocks), for callers that replay a timeline from its start. */

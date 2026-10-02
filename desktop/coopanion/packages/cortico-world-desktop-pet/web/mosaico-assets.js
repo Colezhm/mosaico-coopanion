@@ -1,8 +1,19 @@
 import { figure, FACES, STAND, normalizeSkin, skinVars } from './pet-core.js';
+import {base64,validAnimationAtlas} from './atlas-codec.js';
 
 export const COOP_POSES = ['neutral','happy','wink','love','shy','surprised','angry','sad','sleepy','sleep','dizzy','dragged','thinking','sit',...Array.from({length:8},(_,i)=>`walk${i}`)];
 /** Export the original SVG geometry into the board's bounded RGB565+alpha atlas. */
 export async function exportCoo(skin) {
+  if(skin?.figure==='whale'){
+    if(!skin.scheme||skin.scheme==='deepseek'){
+      const response=await fetch(new URL('./whale/mosaico-deepseek.bin',import.meta.url));
+      if(!response.ok)throw Error('大肥鱼预编译动画资源缺失，请重新安装桌面端');
+      const bytes=new Uint8Array(await response.arrayBuffer());
+      if(!validAnimationAtlas(bytes))throw Error('大肥鱼动画资源损坏');
+      return base64(bytes);
+    }
+    return (await import('./whale/mosaico.js')).exportWhale(skin);
+  }
   const s=normalizeSkin(skin), css=(await (await fetch('/web/pet.css')).text()).split('\n').filter(line=>/^\.(ink|c-|f-)/.test(line)).join('\n');
   const canvas=document.createElement('canvas');canvas.width=192;canvas.height=216;
   const ctx=canvas.getContext('2d',{willReadFrequently:true}), chunks=[];

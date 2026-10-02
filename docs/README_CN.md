@@ -4,6 +4,7 @@
 
 - [Mosaico × Coopanion 开发与使用](coopanion-implementation.md)
 - [Mosaico × Coopanion 验收记录](coopanion-acceptance.md)
+- [DeepSeek 大肥鱼：动作、表情与资源格式](coopanion-whale.md)
 - [本工作区 Vibe Coding 完整工作流](vibe-coding-workflow_CN.md)
 - [官方资料核对与阅读范围](official-sources_CN.md)
 - [本机环境与验证记录](validation-baseline_CN.md)

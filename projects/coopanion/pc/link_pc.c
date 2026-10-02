@@ -15,6 +15,7 @@ static coop_script_handle_t script;
 static int listener = -1, peer = -1;
 static char *buffer;
 static size_t used;
+static bool capabilities_sent;
 static uint8_t *cached;
 /* The PC backend is single-instance and UI-thread owned. Hold injected sensors
  * between frames, exactly like the board's latest physical samples. */
@@ -108,8 +109,21 @@ static void command(coop_ui_handle_t ui, cJSON *m, uint64_t now)
         cJSON_AddNumberToObject(r, "echo", num(m, "at", 0));
         cJSON_AddNumberToObject(r, "at", now);
         send_json(r);
-    } else if (!strcmp(t, "clock_quality"))
-        coop_state_connection(s, cJSON_IsTrue(cJSON_GetObjectItem(m, "ready")));
+    } else if (!strcmp(t, "clock_quality")) {
+        bool ready = cJSON_IsTrue(cJSON_GetObjectItem(m, "ready"));
+        coop_state_connection(s, ready);
+        if (ready && !capabilities_sent) {
+            cJSON *caps = cJSON_CreateObject();
+            cJSON_AddStringToObject(caps, "t", "capabilities");
+            cJSON_AddStringToObject(caps, "app", "mosaico-coopanion/1.1.0-simulator");
+            cJSON_AddNumberToObject(caps, "width", 480);
+            cJSON_AddNumberToObject(caps, "height", 480);
+            cJSON_AddItemToObject(caps, "assetFormats", cJSON_Parse("[\"COO1\",\"COO2\"]"));
+            cJSON_AddNumberToObject(caps, "assetMaxBytes", 1000 * 1024);
+            send_json(caps);
+            capabilities_sent = true;
+        }
+    }
     else if (!strcmp(t, "presence"))
         coop_state_presence(s, !strcmp(str(m, "owner"), "device"), num(m, "epoch", 0),
                             cJSON_IsObject(cJSON_GetObjectItem(m, "transfer")));
@@ -129,8 +143,11 @@ static void command(coop_ui_handle_t ui, cJSON *m, uint64_t now)
         cJSON_AddNumberToObject(r,"motion",v->motion);cJSON_AddNumberToObject(r,"edge",v->edge);
         cJSON_AddNumberToObject(r,"orientation",v->orientation);cJSON_AddNumberToObject(r,"at",now);
         cJSON_AddBoolToObject(r,"muted",v->muted);cJSON_AddBoolToObject(r,"visible",v->visible);
+        cJSON_AddBoolToObject(r,"connected",v->connected);cJSON_AddBoolToObject(r,"listening",v->listening);
         cJSON_AddNumberToObject(r,"x",v->x);cJSON_AddNumberToObject(r,"y",v->y);
         cJSON_AddNumberToObject(r,"scale_x",v->scale_x);cJSON_AddNumberToObject(r,"scale_y",v->scale_y);
+        cJSON_AddStringToObject(r,"expression",v->expression);cJSON_AddNumberToObject(r,"phase",v->phase);
+        cJSON_AddNumberToObject(r,"glow",v->glow);
         cJSON_AddBoolToObject(r,"busy",coop_state_animation_busy(s));send_json(r);
     } else if (!strcmp(t,"sim_battery"))
         coop_state_battery(s,num(m,"percent",100),false);
@@ -138,17 +155,19 @@ static void command(coop_ui_handle_t ui, cJSON *m, uint64_t now)
         coop_state_action(s, str(m, "action"), now);
     else if (!strcmp(t, "sim_touch"))
         coop_state_touch(s, true, now);
-    else if (!strcmp(t, "sim_offline"))
+    else if (!strcmp(t, "sim_offline")) {
         coop_state_connection(s, false);
+        capabilities_sent = false;
+    }
     else if (!strcmp(t, "asset_apply")) {
-        const char *path = getenv("COOP_SIM_ASSET_PATH");
+        const char *path = cJSON_IsTrue(cJSON_GetObjectItem(m,"builtin")) ? COOP_ATLAS_PATH : getenv("COOP_SIM_ASSET_PATH");
         bool ok = false;
         FILE *f = path ? fopen(path, "rb") : NULL;
         if (f) {
             fseek(f, 0, SEEK_END);
             long n = ftell(f);
             rewind(f);
-            uint8_t *data = n >= 188 && n <= 900 * 1024 ? malloc(n) : NULL;
+            uint8_t *data = n >= 188 && n <= 1000 * 1024 ? malloc(n) : NULL;
             if (data && fread(data, 1, n, f) == (size_t)n && coop_ui_atlas(ui, data, n)) {
                 free(cached);
                 cached = data;
@@ -184,6 +203,7 @@ void coop_pc_link_poll(coop_ui_handle_t ui, uint64_t now)
         if (peer >= 0) {
             fcntl(peer, F_SETFL, O_NONBLOCK);
             used = 0;
+            capabilities_sent = false;
         }
         return;
     }

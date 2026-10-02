@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "coop_render.h"
+#include "coop_animation.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +12,7 @@ struct coop_render_t {
     size_t size;
     int pose;
     uint16_t *rgb;
-    uint8_t *alpha, *light;
+    uint8_t *alpha, *light, *indices, *scratch;
 };
 static uint16_t u16(const uint8_t *p)
 {
@@ -35,8 +36,10 @@ esp_err_t coop_render_create(coop_render_handle_t *out)
     (*out)->rgb = calloc(ATLAS_PIXELS, 2);
     (*out)->alpha = calloc(ATLAS_PIXELS, 1);
     (*out)->light = calloc(480 * 480, 1);
+    (*out)->indices = calloc(ATLAS_PIXELS,1);
+    (*out)->scratch = calloc(ATLAS_PIXELS,1);
     (*out)->pose = -1;
-    if (!(*out)->rgb || !(*out)->alpha || !(*out)->light) {
+    if (!(*out)->rgb || !(*out)->alpha || !(*out)->light || !(*out)->indices || !(*out)->scratch) {
         coop_render_delete(*out);
         *out = NULL;
         return ESP_ERR_NO_MEM;
@@ -59,11 +62,14 @@ void coop_render_delete(coop_render_handle_t h)
         free(h->rgb);
         free(h->alpha);
         free(h->light);
+        free(h->indices);
+        free(h->scratch);
         free(h);
     }
 }
 bool coop_atlas_validate(const uint8_t *p, size_t n)
 {
+    if(p && n>=4 && !memcmp(p,"COO2",4))return coop_animation_validate(p,n);
     if (!p || n < 188 || memcmp(p, "COO1", 4) || u16(p + 4) != ATLAS_W || u16(p + 6) != ATLAS_H ||
         u16(p + 8) != 22)
         return false;
@@ -114,11 +120,35 @@ static int pose_for(const coop_snapshot_t *s)
             return i;
     return 0;
 }
+static unsigned clip_for(const coop_snapshot_t *s)
+{
+    switch(s->motion){
+    case COOP_WALK:return 14; case COOP_RUN:return 15;case COOP_SIT:return 13;
+    case COOP_SLEEP:return 9;case COOP_JUMP:return 16;case COOP_SWAY:return 17;
+    case COOP_STUMBLE:return 18;case COOP_FALL:return 19;case COOP_GETUP:return 20;
+    case COOP_CRY:return 21;case COOP_SULK:return 22;case COOP_LISTEN:return 23;
+    case COOP_THINK:return 12;case COOP_DEPART:return 25;case COOP_ARRIVE:return 26;
+    case COOP_SETTLE:return 27;default:break;
+    }
+    static const char *const faces[]={"neutral","happy","wink","love","shy","surprised","angry","sad","sleepy","sleep","dizzy","dragged","thinking","sit"};
+    static const char *const extra[]={"worried","furious","smug","pleading","curious","excited","crying","pout"};
+    if(!strcmp(s->expression,"sulking"))return 22;
+    if(s->motion==COOP_SPEAK&&!strcmp(s->expression,"neutral"))return 24;
+    for(unsigned i=0;i<8;i++)if(!strcmp(s->expression,extra[i]))return 32+i;
+    for(unsigned i=0;i<14;i++)if(!strcmp(s->expression,faces[i]))return i;
+    return 0;
+}
 static void decode(coop_render_handle_t h, int pose)
 {
     if (!h->atlas || h->pose == pose)
         return;
     const uint8_t *p = h->atlas;
+    if(p[3]=='2'){
+        if(!coop_animation_decode(p,pose,h->pose,h->indices,h->scratch))return;
+        const uint8_t *palette=coop_animation_palette(p);
+        for(unsigned i=0;i<ATLAS_PIXELS;i++){unsigned at=h->indices[i]*3;h->rgb[i]=u16(palette+at);h->alpha[i]=palette[at+2];}
+        h->pose=pose;return;
+    }
     uint32_t o = u32(p + 12 + pose * 8), len = u32(p + 16 + pose * 8);
     size_t j = 0;
     for (size_t i = o; i < o + len; i += 5) {
@@ -139,13 +169,21 @@ static uint16_t blend(uint16_t a, uint16_t b, unsigned opacity)
                       (((((a >> 5) & 63) * inv + ((b >> 5) & 63) * opacity) / 255) << 5) |
                       (((a & 31) * inv + (b & 31) * opacity) / 255));
 }
+static uint16_t sampled(coop_render_handle_t h, uint16_t background, int x, int y)
+{
+    if(x<0||y<0||x>=ATLAS_W||y>=ATLAS_H)return background;
+    size_t at=(size_t)y*ATLAS_W+x;
+    return blend(background,h->rgb[at],h->alpha[at]);
+}
 void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t *dst,
                       size_t stride, int x0, int y0, int w, int height)
 {
     if (!h || !s || !dst)
         return;
-    decode(h, pose_for(s));
-    const float angle = s->angle * .017453293f, c = cosf(angle), sn = sinf(angle), scale = 1.18f;
+    bool whale=h->atlas && h->atlas[3]=='2';
+    decode(h,whale?coop_animation_frame(h->atlas,clip_for(s),s->phase):pose_for(s));
+    /* The detailed maid silhouette uses the space below three caption rows. */
+    const float angle = s->angle * .017453293f, c = cosf(angle), sn = sinf(angle), scale = whale ? 1.65f : 1.18f;
     float orientation=s->orientation*.017453293f,oc=cosf(orientation),os=sinf(orientation);
     /* On side edges, roam below the horizontal caption area. Blend the
      * supporting point during rotation so changing edges never teleports it. */
@@ -173,10 +211,17 @@ void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t
                 if (ix >= 0 && ix < ATLAS_W && iy >= 0 && iy < ATLAS_H) {
                     size_t at = (size_t)iy * ATLAS_W + ix;
                     bool back =
-                        s->motion == COOP_SULK && ix > 75 && ix < 132 && iy > 72 && iy < 129;
-                    if (!back)
+                        !whale && s->motion == COOP_SULK && ix > 75 && ix < 132 && iy > 72 && iy < 129;
+                    if(whale){
+                        /* Filter premultiplied samples against this pixel's background;
+                         * transparent texels cannot introduce a dark fringe around the hair. */
+                        unsigned fx=(unsigned)((px-ix)*255),fy=(unsigned)((py-iy)*255);
+                        uint16_t top=blend(sampled(h,color,ix,iy),sampled(h,color,ix+1,iy),fx);
+                        uint16_t bottom=blend(sampled(h,color,ix,iy+1),sampled(h,color,ix+1,iy+1),fx);
+                        color=blend(top,bottom,fy);
+                    }else if (!back)
                         color = blend(color, h->rgb[at], h->alpha[at]);
-                    if (s->motion == COOP_CRY && iy > 114 && iy < 153) {
+                    if (!whale && s->motion == COOP_CRY && iy > 114 && iy < 153) {
                         int drop = 118 + ((int)(s->phase * 45) % 30);
                         if ((abs(ix - 88) < 2 || abs(ix - 118) < 2) && abs(iy - drop) < 5)
                             color = rgb565(105, 207, 247);

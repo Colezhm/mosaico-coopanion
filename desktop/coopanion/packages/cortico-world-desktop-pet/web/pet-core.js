@@ -220,9 +220,18 @@ export const FACES = {
   squeeze:   { label: '回神', f: () => ({ gap: [44, 44], eyes: [{ shape: 'lid', ry: 0 }, { shape: 'lid', ry: 0 }] }) },
   listening: { label: '倾听', f: () => ({ gap: [44, 44], eyes: [ring({ rx: 17, ry: 18, dy: -1 }), ring({ rx: 17, ry: 18, dy: -1 })], listen: true }) },
   thinking:  { label: '思考', f: t => ({ gap: [46, 46], eyes: [ring({ rx: 14, ry: 15, dx: 3, dy: -4 }), ring({ rx: 14, ry: 15, dx: 3, dy: -4 })], think: true }) },
+  worried:   { label: '委屈', f: () => ({ gap: [40, 46], eyes: [ring({ry:12}), {shape:'lid',ry:4}], brows:'sad', blush:.4, sweat:true }) },
+  furious:   { label: '炸毛', f: () => ({ gap:[64,64], eyes:[{shape:'gt'},{shape:'lt'}], brows:'angry', anger:true, shake:true, blush:.3 }) },
+  smug:      { label: '得意', f: () => ({ gap:[46,46], eyes:[{shape:'down'},{shape:'down'}], blush:.35 }) },
+  pleading:  { label: '撒娇', f: () => ({ gap:[52,52], eyes:[{shape:'up'},{shape:'up'}], blush:.85, emit:'heart' }) },
+  curious:   { label: '好奇', f: () => ({ gap:[54,50], eyes:[ring({rx:20,ry:22}),ring({rx:20,ry:22})], think:true }) },
+  excited:   { label: '雀跃', f: () => ({ gap:[62,62], eyes:[ring({rx:19,ry:21}),{shape:'up'}], blush:.65, sparkle:true }) },
+  crying:    { label: '哭泣', f: () => ({ gap:[46,46], eyes:[{shape:'down'},{shape:'down'}], brows:'sad', blush:.55, emit:'tear', tears:true }) },
+  pout:      { label: '鼓脸', f: () => ({ gap:[38,38], eyes:[{shape:'lid',ry:7},{shape:'lid',ry:7}], brows:'angry', blush:.7 }) },
+  sulking:   { label: '生闷气', f: () => ({ gap:[38,38], eyes:[{shape:'lid',ry:5},{shape:'lid',ry:5}], brows:'angry' }) },
   run:       { label: '冲刺', f: t => { const g = 55 + 4 * Math.sin(t * 16); return { gap: [g, g], eyes: [ring(), ring()], sweat: true }; } },
 };
-export const GALLERY = ['neutral', 'happy', 'wink', 'love', 'shy', 'surprised', 'angry', 'sad', 'sleepy', 'sleep', 'dizzy', 'dragged'];
+export const GALLERY = ['neutral', 'happy', 'wink', 'love', 'shy', 'surprised', 'angry', 'sad', 'sleepy', 'sleep', 'dizzy', 'dragged', 'worried', 'furious', 'smug', 'pleading', 'curious', 'excited', 'crying', 'pout'];
 
 /** One frame of the figure as SVG markup, in logo units. */
 export function figure(fc, o) {

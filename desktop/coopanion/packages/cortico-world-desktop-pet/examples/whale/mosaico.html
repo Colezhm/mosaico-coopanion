@@ -1,0 +1,16 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>大肥鱼 · Mosaico 动作预览</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101827;color:#eaf3ff;font:16px system-ui;padding:32px}main{max-width:1080px;margin:auto}h1{font-size:26px;margin:0 0 10px}p{color:#b7c7dc;line-height:1.7}.layout{display:grid;grid-template-columns:420px 1fr;gap:24px}.stage{border:1px solid #394b66;border-radius:24px;background:#08101d}svg{display:block;width:100%;height:440px}.label{padding:0 24px 20px;color:#a9c9ff}.controls{display:flex;gap:8px;flex-wrap:wrap;align-content:start}button{font:inherit;color:inherit;background:#22314b;border:1px solid #3b526e;border-radius:12px;padding:10px 15px;cursor:pointer}button.active{background:#496edb;border-color:#91b0ff}small{display:block;color:#a7bbd3;margin-top:20px;line-height:1.7}@media(max-width:760px){.layout{grid-template-columns:1fr}.stage{max-width:440px}}
+</style><main><h1>DeepSeek 大肥鱼</h1><p>原版动态模型 · 新表情与 Mosaico 姿态。点击切换，每段完整播完后再切换。</p><div class="layout"><div class="stage"><svg viewBox="-32 -48 320 360"><g id="pet"></g></svg><div class="label" id="label">正在加载</div></div><div><div class="controls" id="controls"></div><small>此页是原版分件模型的动作预览。板端的位移、四边重力、光门及字幕由实际 GSP 原生模拟器验证。板端播报保持关闭。</small></div></div></main>
+<script type="module">
+import {createWhaleFigure} from '../../web/whale/figure.js';
+import {WHALE_CLIPS,whaleFrame} from '../../web/whale/mosaico.js';
+import {FACES} from '../../web/pet-core.js';
+const figure=await createWhaleFigure(undefined,{raster:true});
+const names={neutral:'待机',happy:'开心',wink:'眨眼',love:'喜欢',shy:'害羞',surprised:'惊讶',angry:'不满',sad:'难过',sleepy:'犯困',sleep:'睡觉',dizzy:'晕乎',dragged:'被拎起',thinking:'思考',sit:'坐下',walk:'走路',run:'跑步',jump:'跳跃',sway:'摇晃',stumble:'踉跄',fall:'摔倒',getup:'爬起',cry:'哭泣',sulk:'背身生闷气',listening:'倾听',speaking:'口型',depart:'上跳离开',arrive:'下落到达',settle:'调整重心',worried:'委屈',furious:'炸毛',smug:'得意',pleading:'撒娇',curious:'好奇',excited:'雀跃',crying:'流泪',pout:'鼓脸'};
+let current=WHALE_CLIPS[0],pending=null,start=performance.now();
+for(const clip of WHALE_CLIPS){const b=document.createElement('button');b.textContent=names[clip.name];b.dataset.name=clip.name;b.onclick=()=>{pending=clip;};document.querySelector('#controls').append(b);}
+function tick(now){let elapsed=now-start;if(pending&&elapsed>=current.ms){current=pending;pending=null;start=now;elapsed=0;figure.reset();}const phase=current.loop?elapsed%current.ms/current.ms:Math.min(1,elapsed/current.ms),o=whaleFrame(current.name,now/1000,phase);figure.draw(document.querySelector('#pet'),(FACES[o.face]||FACES.neutral).f(now/1000),o);
+ document.querySelector('#label').textContent=names[current.name]+(pending?' · 下一段：'+names[pending.name]:'');for(const b of document.querySelectorAll('button'))b.classList.toggle('active',b.dataset.name===current.name);requestAnimationFrame(tick);}
+requestAnimationFrame(tick);
+</script></html>

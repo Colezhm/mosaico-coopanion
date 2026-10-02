@@ -1,0 +1,262 @@
+{
+  "format": "COO2",
+  "figure": "whale",
+  "scheme": "deepseek",
+  "width": 192,
+  "height": 216,
+  "bytes": 967993,
+  "clips": [
+    {
+      "id": 0,
+      "name": "neutral",
+      "count": 4,
+      "ms": 3200,
+      "loop": true
+    },
+    {
+      "id": 1,
+      "name": "happy",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 2,
+      "name": "wink",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 3,
+      "name": "love",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 4,
+      "name": "shy",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 5,
+      "name": "surprised",
+      "count": 2,
+      "ms": 1200,
+      "loop": true
+    },
+    {
+      "id": 6,
+      "name": "angry",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 7,
+      "name": "sad",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 8,
+      "name": "sleepy",
+      "count": 2,
+      "ms": 2400,
+      "loop": true
+    },
+    {
+      "id": 9,
+      "name": "sleep",
+      "count": 2,
+      "ms": 3600,
+      "loop": true
+    },
+    {
+      "id": 10,
+      "name": "dizzy",
+      "count": 2,
+      "ms": 1800,
+      "loop": true
+    },
+    {
+      "id": 11,
+      "name": "dragged",
+      "count": 2,
+      "ms": 1200,
+      "loop": true
+    },
+    {
+      "id": 12,
+      "name": "thinking",
+      "count": 2,
+      "ms": 2400,
+      "loop": true
+    },
+    {
+      "id": 13,
+      "name": "sit",
+      "count": 2,
+      "ms": 2400,
+      "loop": true
+    },
+    {
+      "id": 14,
+      "name": "walk",
+      "count": 8,
+      "ms": 667,
+      "loop": true
+    },
+    {
+      "id": 15,
+      "name": "run",
+      "count": 8,
+      "ms": 480,
+      "loop": true
+    },
+    {
+      "id": 16,
+      "name": "jump",
+      "count": 6,
+      "ms": 700,
+      "loop": false
+    },
+    {
+      "id": 17,
+      "name": "sway",
+      "count": 6,
+      "ms": 1200,
+      "loop": false
+    },
+    {
+      "id": 18,
+      "name": "stumble",
+      "count": 6,
+      "ms": 1500,
+      "loop": false
+    },
+    {
+      "id": 19,
+      "name": "fall",
+      "count": 6,
+      "ms": 800,
+      "loop": false
+    },
+    {
+      "id": 20,
+      "name": "getup",
+      "count": 6,
+      "ms": 1200,
+      "loop": false
+    },
+    {
+      "id": 21,
+      "name": "cry",
+      "count": 4,
+      "ms": 3000,
+      "loop": false
+    },
+    {
+      "id": 22,
+      "name": "sulk",
+      "count": 3,
+      "ms": 4000,
+      "loop": false
+    },
+    {
+      "id": 23,
+      "name": "listening",
+      "count": 2,
+      "ms": 1800,
+      "loop": true
+    },
+    {
+      "id": 24,
+      "name": "speaking",
+      "count": 4,
+      "ms": 1400,
+      "loop": true
+    },
+    {
+      "id": 25,
+      "name": "depart",
+      "count": 6,
+      "ms": 950,
+      "loop": false
+    },
+    {
+      "id": 26,
+      "name": "arrive",
+      "count": 6,
+      "ms": 1300,
+      "loop": false
+    },
+    {
+      "id": 27,
+      "name": "settle",
+      "count": 4,
+      "ms": 650,
+      "loop": false
+    },
+    {
+      "id": 32,
+      "name": "worried",
+      "count": 2,
+      "ms": 1600,
+      "loop": true
+    },
+    {
+      "id": 33,
+      "name": "furious",
+      "count": 2,
+      "ms": 1200,
+      "loop": true
+    },
+    {
+      "id": 34,
+      "name": "smug",
+      "count": 2,
+      "ms": 2000,
+      "loop": true
+    },
+    {
+      "id": 35,
+      "name": "pleading",
+      "count": 2,
+      "ms": 1800,
+      "loop": true
+    },
+    {
+      "id": 36,
+      "name": "curious",
+      "count": 2,
+      "ms": 2000,
+      "loop": true
+    },
+    {
+      "id": 37,
+      "name": "excited",
+      "count": 2,
+      "ms": 1400,
+      "loop": true
+    },
+    {
+      "id": 38,
+      "name": "crying",
+      "count": 2,
+      "ms": 1800,
+      "loop": true
+    },
+    {
+      "id": 39,
+      "name": "pout",
+      "count": 2,
+      "ms": 2000,
+      "loop": true
+    }
+  ]
+}

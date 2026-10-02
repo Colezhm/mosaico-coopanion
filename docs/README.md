@@ -4,6 +4,7 @@
 
 - [Mosaico × Coopanion 开发与使用](coopanion-implementation.md)
 - [Mosaico × Coopanion 验收记录](coopanion-acceptance.md)
+- [DeepSeek 大肥鱼：动作、表情与资源格式](coopanion-whale.md)
 - [Workspace Vibe Coding workflow (Chinese)](vibe-coding-workflow_CN.md)
 - [Official source audit (Chinese)](official-sources_CN.md)
 - [Local validation baseline (Chinese)](validation-baseline_CN.md)

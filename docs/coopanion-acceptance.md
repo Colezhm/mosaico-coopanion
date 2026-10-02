@@ -4,6 +4,35 @@
 
 2026-10-02，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
 
+## 1.1.0 DeepSeek 大肥鱼迁移
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 原版形象与资源 | 复用原部件骨骼，36 段、121 个采样帧；新增 9 个脚本表情名，含专用背身图；COO2 967,993 字节，保留 1 MiB 缓存分区 | 原版是实时骨骼，没有固定 sprite 帧数；不是在板上运行整个 WebGL 模型 |
+| 桌面回归 | 两个 World 共 105 项通过、1 项跳过；应用 22 项通过；World/Node/网页类型检查通过；console 构建及两个 Cortina `check:extension` 通过 | 没有修改 Core/Persona；本轮未调用模型或实际电脑任务 |
+| 资源安全与状态 | JS 编解码、实际 atlas、错误长度/偏移/索引/基帧测试通过；共享 C ASan/UBSan 通过，包含新 atlas 解码、原 Coo、传送和 IMU 状态回归 | vendored cJSON 仍有 6 条已知 sprintf 弃用警告，无 sanitizer 错误 |
+| 最终原生画面 | 官方 GSP 1.5.1 与共享 C 后端，131.951 秒、1275 张实际采样帧；9 个新表情、走跑跳、摇晃、踉跄、摔倒爬起、四边站立、倾听、分页字幕、门和 Coo↔鲸鱼资源切换 | 截图采样约 9.7 fps，不是设备渲染帧率；物理轴向和手感未测 |
+| 双端与断线 | 实际桌面网页 → WSS → 原生后端完成大肥鱼同步及两个方向；断线后摸头出现开心表情，重连保留 device 归属；返回后 owner=desktop、epoch=2、transfer=null、ready=true | 是共享原生模拟器，非 USB/真机；完整录像中的旧 disconnect 输入无效，离线流程另行复测并记录 |
+| 时序 | 最终连续录像两次顶部光效至身体进入回执为 493 ms、526 ms | 仅本机单调时钟观测；两个跨设备间隔仍需真机验收 |
+| 固件 | 固定 ESP-IDF 构建 `20261002-085855-build-92364` 成功，应用描述符 1.1.0，2,243,184 字节；完整 BIN 与官方 System Update 导出成功 | 一条预期 factory 尺寸警告，正常应用位于 ota_0；没有写入设备 |
+| Mac 构建 | `0.1.0-mosaico.2` Apple Silicon .app / ZIP 构建成功，`codesign --verify --deep --strict` 通过 | ad hoc 签名，无 Apple 公证；本轮运行验收使用隔离网页/WSS 联调，未启动最终 .app |
+| 原有功能边界 | TTS 仍关闭，麦克风路径保留；运动阈值、动画锁、三行分页和四边重力逻辑不变 | 本轮未验证真实录音、扬声器、低电量、30 分钟稳定性或 normal→Vibe→normal |
+
+本机证据目录 `artifacts/mosaico-coopanion/`：`native-whale-final/capture.json`、
+`whale-native-actions.mp4`、`whale-native-report.json`、`whale-preview/events.jsonl`、
+`whale-wss-report.json`、`whale-offline.json` 和 `whale-firmware-hashes.json`。
+原始帧、测试配对密钥与构建产物均被 Git 忽略。
+
+| 文件 | 字节 | SHA-256 |
+|---|---:|---|
+| `mosaico-coopanion-1.1.0-app.bin` | 2,243,184 | `b9b250a19d3d59ce2971549d2c686afae4b85ebe45fcdaeab8e56e832401c7ad` |
+| `mosaico-coopanion-1.1.0-full.bin` | 16,777,216 | `fdea40878870c876800c8f97a5c1f9dbc7d53df2b25ea07e5fc049b1208bc716` |
+| `mosaico-coopanion-1.1.0-system-update.irisfw` | 5,776,648 | `e3aa6a9c30d656d3415529668fa8c99b1ddb58f4d6be356c6804f5603b405d42` |
+| `Mosaico-Coopanion-0.1.0-mosaico.2-mac-arm64.zip` | 167,734,327 | `323c3f5d3924d5d1a2ef4a9e8ebdc9701fffa1214d7dd4bb2653980713556157` |
+
+本轮所有新固件均未安装。此前对其他哈希镜像的烧录确认不沿用到 1.1.0。
+美术出处、导出方式和其他配色限制见[大肥鱼说明](coopanion-whale.md)。
+
 ## 1.0.2 运动、画面和静音修正
 
 | 项目 | 已观察结果 | 边界 |

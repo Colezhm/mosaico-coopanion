@@ -4,7 +4,8 @@
 
 同一个 Coo 在电脑与 Mosaico 之间交接身体，继续使用电脑上的角色身份、会话与记忆。
 板端运行原生 C、GSP Canvas 和传感器；电脑承担 FunASR、模型和电脑任务。
-1.0.2 暂停板端 TTS 输出，保留麦克风输入、文字反馈及 Xiaole 资源分区，待后续专门优化音质。
+1.1.0 新增[DeepSeek 大肥鱼形象、动作和表情](coopanion-whale.md)，继续沿用 1.0.2 的运动交互与动画锁。
+板端 TTS 输出仍暂停，保留麦克风输入、文字反馈及 Xiaole 资源分区，待后续专门优化音质。
 当前为待真机验收的开发候选版。验收进度见 [coopanion-acceptance.md](coopanion-acceptance.md)。
 
 ## 固定来源
@@ -20,7 +21,7 @@
 | ESP-SR / WebSocket client | `2.4.7` / `1.6.1` |
 | Electron / pnpm | `44.4.4` / `11.5.0` |
 | 保留 Vibe Mode | utils 评审包 `0.1.4` |
-| 板端应用描述符版本 | `1.0.2`（开发候选固件，并非硬件验收结论） |
+| 板端应用描述符版本 | `1.1.0`（开发候选固件，并非硬件验收结论） |
 
 桌面扩展遵循 [Cortina](https://github.com/Pal-AI-Lab/Cortina/tree/454895173ebbac408f0840679d79738185a9e202)
 的分层和三级验证流程。开发入口为 `desktop/coopanion/AGENTS.md`，实际接口以固定 Cortico 源码为准。
@@ -84,7 +85,7 @@ python projects/coopanion/tools/export_browser_image.py --output artifacts/mosai
 | `0x200000–0x20FFFF` | 应用 NVS：Wi-Fi、配对、归属、少量情绪 |
 | `0x210000–0x7FFFFF` | 正常应用 ota_0 |
 | `0x800000–0xAFFFFF` | Xiaole 中文语音 |
-| `0xB00000–0xBFFFFF` | Coo 资源缓存 |
+| `0xB00000–0xBFFFFF` | 角色资源缓存（Coo / 大肥鱼，物理分区名仍为 coo_assets） |
 | `0xC00000–0xFFFFFF` | GSP UI 资源 |
 
 **整包初装覆盖整个 16 MiB NOR，间隙写成 `0xFF`，既有设置、配对、系统元数据、缓存及
@@ -176,8 +177,8 @@ pnpm exec tsx scripts/mosaico-preview.ts
 ## 尚需验收
 
 真机帧率、IMU 延迟、两个 500 ms 间隔、自声抑制、中文发音、30 分钟稳定性、
-Vibe Mode 往返及其他桌面平台未由模拟器或编译证明。板端普通动作采用简化姿态，
-资源是从原 SVG 预渲染的 22 姿态 atlas，并非完整矢量骨骼系统。
-字幕为 GB2312、单句缓冲 383 UTF-8 字节、最多三个回答选项；长句应分句。
+Vibe Mode 往返及其他桌面平台未由模拟器或编译证明。板端从资源帧合成角色，
+Coo 保留原 SVG 的 22 姿态，大肥鱼使用原版部件骨骼导出的 36 段、121 帧；板上不运行 WebGL 或 Electron。
+字幕为 GB2312、单句缓冲 2047 UTF-8 字节、三行分页、最多三个回答选项；长句仍建议分句。
 同一时间支持一台板子；离线只保留本地交互和固定台词，没有自由模型对话。
 安装包、模拟器、扩展干装载和真机各自的通过范围见验收记录。

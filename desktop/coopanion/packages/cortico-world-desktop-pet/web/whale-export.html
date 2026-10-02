@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Mosaico whale exporter</title></head><body><script type="module">
+import {createWhaleSampler,exportWhale,WHALE_CLIPS} from './whale/mosaico.js';
+window.exportWhale=exportWhale;window.clips=WHALE_CLIPS;
+window.still=async(name='neutral',width=768,height=864)=>{const s=await createWhaleSampler();for(let i=0;i<60;i++)s.paint(name,i/60,.5);await s.capture(width,height);const png=s.canvas.toDataURL();s.dispose();return png;};
+window.ready=true;
+</script></body></html>

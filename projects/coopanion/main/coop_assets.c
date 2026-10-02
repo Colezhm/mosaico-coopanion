@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "coop_assets.h"
 #include "coop_render.h"
+#include "coop_animation.h"
 #include "esp_partition.h"
 #include "mbedtls/base64.h"
 #include "psa/crypto.h"
@@ -10,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#define ASSET_MAX (900 * 1024)
+#define ASSET_MAX COOP_ASSET_MAX
 typedef struct {
     uint32_t magic, size;
     char hash[65];
