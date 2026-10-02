@@ -108,6 +108,15 @@ int main(int argc, char **argv)
         coop_state_button(s, true, now);
         coop_state_voice_level(s, .55f);
         run(s, &now, now + 300);
+    } else if (!strcmp(scenario, "fall") || !strcmp(scenario, "sulk") || !strcmp(scenario, "sit") ||
+               !strcmp(scenario, "cry")) {
+        coop_state_action(s, scenario, now);
+        run(s, &now, now + 500);
+    } else if (!strcmp(scenario, "arrive")) {
+        coop_state_presence(s, false, 2, false);
+        coop_state_transfer(s, "transfer_prepare", "t2", 3, 0, now);
+        coop_state_transfer(s, "transfer_arrive", "t2", 3, now + 100, now);
+        run(s, &now, now + 100 + 750);
     } else if (!strcmp(scenario, "away") || !strcmp(scenario, "away-offline")) {
         coop_state_presence(s, false, 2, false);
         if (!strcmp(scenario, "away-offline"))

@@ -18,6 +18,10 @@
 #define SHADOW_RY 8.f
 #define SHADOW_LIFT_FADE 140.f
 /* While Coo is on the desktop the arrival portal idles at low intensity. */
+/* Half the figure's width in atlas pixels. Lying on its side the figure pivots
+ * at its feet; lifting by this much keeps the body on the ground, not under it. */
+#define LYING_HALF_WIDTH 50.f
+#define LYING_BODY_MID 70.f
 #define AWAY_PORTAL_MIN .22f
 #define AWAY_PORTAL_SWING .12f
 /* The light map is authored around y=26 (the top-edge arrival portal). While
@@ -245,7 +249,10 @@ void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t
     float lateral = fabsf(os);
     float side_x = (os > 0 ? 240 : 130) + s->x * 110;
     const float cx = (70 + s->x * 340) * (1-lateral) + side_x * lateral;
-    const float cy = GROUND_Y + s->y;
+    float lying = s->motion == COOP_FALL || s->motion == COOP_GETUP ? fabsf(sn) : 0;
+    const float cy = GROUND_Y + s->y - lying * LYING_HALF_WIDTH * scale;
+    /* The shadow follows the body's middle, which moves sideways as it tips over. */
+    const float lying_shift = lying ? sn * LYING_BODY_MID * scale : 0;
     /* Idle portal while away: a slow breath, never a full-intensity arrival. */
     float glow = s->glow;
     if (!s->resident && !s->transferring && !s->visible)
@@ -259,7 +266,7 @@ void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t
         for (int col = 0; col < w; col++) {
             int x = x0 + col;
             float lx=240+(x-240)*oc+(y-240)*os,ly=240-(x-240)*os+(y-240)*oc;
-            uint16_t color = shadow_pixel(s, lx - cx, ly, scale);
+            uint16_t color = shadow_pixel(s, lx - cx - lying_shift, ly, scale);
             int light_x=(int)(lx-portal_cx+240),light_y=(int)ly-portal_dy;
             if (glow > 0 && light_x >= 0 && light_x < 480 && light_y >= 0 && light_y < 480) {
                 unsigned k = (unsigned)(glow * h->light[light_y * 480 + light_x]);

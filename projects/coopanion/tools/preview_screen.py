@@ -14,7 +14,7 @@ import argparse, json, os, shutil, subprocess, sys, tempfile
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = ROOT.parents[1]
 WHALE = WORKSPACE / 'desktop/coopanion/packages/cortico-world-desktop-pet/web/whale/mosaico-deepseek.bin'
-SCENARIOS = ['idle', 'happy', 'subtitle', 'walk', 'jump', 'listen', 'offline', 'reconnected', 'away', 'away-offline', 'edge-left', 'edge-top']
+SCENARIOS = ['idle', 'happy', 'subtitle', 'walk', 'jump', 'listen', 'offline', 'reconnected', 'away', 'away-offline', 'edge-left', 'edge-top', 'sit', 'sulk', 'cry', 'fall', 'arrive']
 SOURCES = ['coop_state.c', 'coop_render.c', 'coop_animation.c', 'coop_subtitle.c', 'coop_hud.c']
 
 

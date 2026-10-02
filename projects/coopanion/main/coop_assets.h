@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "coop_link.h"
+#include <stdbool.h>
 typedef struct coop_assets_t *coop_assets_handle_t;
 typedef struct {
     /* Takes ownership of bytes. Called on the resource worker; UI must apply it
