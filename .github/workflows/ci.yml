@@ -43,8 +43,75 @@ jobs:
       - name: Check repository launcher
         run: python mosaico.py --version
 
-      - name: Check Coopanion USB pairing payload limits
-        run: python -B -m unittest discover -s projects/coopanion/tests -p 'test_pair.py'
+      - name: Check Coopanion pairing limits and firmware version source
+        run: python -B -m unittest discover -s projects/coopanion/tests -p 'test_*.py'
 
       - name: Check workspace configuration, scaffolding and native game behavior
         run: python -m pytest -q tests/mosaico_cli_integration
+
+  coopanion-native:
+    name: Coopanion native state, renderer and preview (ASan/UBSan)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # Same upstream release as the pinned espressif/cjson component (1.7.19).
+      - name: Check out cJSON
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: DaveGamble/cJSON
+          ref: v1.7.19
+          path: .ci/cjson
+          persist-credentials: false
+
+      - name: Run native tests
+        env:
+          CJSON_DIR: ${{ github.workspace }}/.ci/cjson
+        run: python3 projects/coopanion/tools/test_native.py
+
+  coopanion-desktop:
+    name: Coopanion desktop, World tests and extension checks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop/coopanion
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Initialize pinned Cortico
+        working-directory: .
+        run: git submodule update --init desktop/coopanion/vendor/cortico
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      - name: Install locked dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      # Same order as docs/coopanion-implementation.md.
+      - run: pnpm run typecheck
+      - run: pnpm run typecheck:worlds
+      - run: pnpm run build:cortico
+      - run: pnpm run typecheck:web
+      - run: pnpm test
+      - run: pnpm run test:worlds
+      - run: pnpm --dir packages/cortico-world-desktop-pet typecheck
+      - run: pnpm --dir packages/cortico-world-desktop-pet test
+      - run: pnpm --dir packages/cortico-world-cua typecheck
+      - run: pnpm --dir packages/cortico-world-cua test
+      - run: pnpm --dir vendor/cortico check:extension ../../packages/cortico-world-desktop-pet
+      - run: pnpm --dir vendor/cortico check:extension ../../packages/cortico-world-cua

@@ -1,4 +1,4 @@
-name: Hello World integration
+name: Firmware integration
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
 
       - name: Create build log directory
         shell: bash
-        run: mkdir -p "$RUNNER_TEMP/idf-logs/hello-world"
+        run: mkdir -p "$RUNNER_TEMP/idf-logs/hello-world" "$RUNNER_TEMP/idf-logs/coopanion"
 
       - name: Set up ESP-IDF Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -92,6 +92,35 @@ jobs:
           --log-dir "$RUNNER_TEMP/idf-logs/hello-world"
           build
 
+      - name: Build Coopanion firmware
+        shell: bash
+        run: >-
+          python3 submodule/esp-mosaico-utils/mosaico-tools/skills/idf-low-noise-build/scripts/idf_low_noise_build.py
+          --project "projects/coopanion"
+          --log-dir "$RUNNER_TEMP/idf-logs/coopanion"
+          build
+
+      - name: Check Coopanion app descriptor version
+        shell: bash
+        run: |
+          expected="$(sed -n 's/^CONFIG_APP_PROJECT_VER="\(.*\)"$/\1/p' projects/coopanion/sdkconfig.defaults)"
+          grep -q "^CONFIG_APP_PROJECT_VER=\"$expected\"$" projects/coopanion/build/sdkconfig
+
+      - name: Upload Coopanion firmware
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: firmware-coopanion
+          path: |
+            projects/coopanion/build/coopanion.bin
+            projects/coopanion/build/coopanion.elf
+            projects/coopanion/build/ui_apps.bin
+            projects/coopanion/build/*.irisfw
+            projects/coopanion/build/sdkconfig
+            projects/coopanion/build/partition_table/*.bin
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Render GSP scene
         shell: bash
         run: |
@@ -113,7 +142,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: firmware-hello-world-logs
-          path: ${{ runner.temp }}/idf-logs/hello-world/
+          path: ${{ runner.temp }}/idf-logs/
           if-no-files-found: warn
           retention-days: 14
 
