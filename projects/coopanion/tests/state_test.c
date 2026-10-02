@@ -215,6 +215,18 @@ static void subtitle_test(void)
     coop_subtitle_page(samples[2],0,page);
     for(const char *c=page;(c=strchr(c,'\n'));c++)
         assert(c[-1]==' '||(unsigned char)c[-1]>=0x80||c[1]==' ');
+    /* A word adjoining Chinese text also stays whole at the line boundary. */
+    const char *adjoining[]={
+        "字幕分页测试：轻轻摇晃，慢慢倾斜。English words stay together.",
+        "一二三四五六七八九十一二三四五六七English"};
+    for(unsigned i=0;i<sizeof(adjoining)/sizeof(adjoining[0]);i++){
+        bool found=false;
+        for(unsigned p=0;p<coop_subtitle_pages(adjoining[i]);p++){
+            coop_subtitle_page(adjoining[i],p,page);
+            if(strstr(page,"English"))found=true;
+        }
+        assert(found);
+    }
     assert(coop_subtitle_pages("")==1);
 }
 static void caption_test(void)

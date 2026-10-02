@@ -101,7 +101,8 @@ static unsigned layout(const char *text, unsigned wanted, char *out)
     layout_t l = {.wanted = wanted, .out = out};
     if (out)
         out[0] = 0;
-    const unsigned char *p = (const unsigned char *)text;
+    const unsigned char *begin = (const unsigned char *)text;
+    const unsigned char *p = begin;
     while (p && *p) {
         if (*p == '\n') {
             new_line(&l);
@@ -110,7 +111,17 @@ static unsigned layout(const char *text, unsigned wanted, char *out)
         }
         size_t n = glyph_bytes(p);
         unsigned cells = *p < 128 ? 2 : 3;
-        if (l.width + cells > LINE_CELLS) {
+        unsigned fit_cells = cells;
+        bool whole_word = word_glyph(p) && (p == begin || !word_glyph(p - 1));
+        if (whole_word) {
+            unsigned width = 0;
+            for (const unsigned char *q = p; *q && word_glyph(q) && width <= LINE_CELLS; q++)
+                width += 2;
+            whole_word = width <= LINE_CELLS;
+            if (whole_word)
+                fit_cells = width;
+        }
+        if (l.width + fit_cells > LINE_CELLS) {
             bool hang = *p == ' ' || (closing(p, n) && l.width + cells <= LINE_CELLS + HANG_CELLS);
             if (!hang) {
                 if (l.line == PAGE_LINES - 1 && l.sentence) {
@@ -123,7 +134,7 @@ static unsigned layout(const char *text, unsigned wanted, char *out)
                     new_page(&l, l.clause_used);
                     continue;
                 }
-                if (word_glyph(p) && l.space) {
+                if (!whole_word && word_glyph(p) && l.space) {
                     rewind_to(&l, l.space_used);
                     p = l.space;
                     new_line(&l);
