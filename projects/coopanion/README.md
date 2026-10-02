@@ -34,5 +34,7 @@ session without waiting for SNTP and lets Wi-Fi modem-sleep while idle. Captions
 follow connection and residence, a dormant portal shows while Coo is on the
 desktop, and figures are bilinear-filtered with a contact shadow. The menu and
 status charset changed, so install it with `iris system-update`.
+The capability version buffer fits the full ESP app descriptor. Caption wrapping
+keeps fitting English words intact even when they immediately follow Chinese text.
 `tools/preview_screen.py` renders host previews; `tools/test_native.py` runs the
 sanitizer suite including every preview scenario.

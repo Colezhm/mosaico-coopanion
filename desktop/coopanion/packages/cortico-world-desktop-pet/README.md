@@ -154,3 +154,4 @@ npx tsx scripts/check-voice.ts <模型根> <语音.wav>   # 连真 FunASR 手动
 `tsconfig.json` 与 `vitest.config.ts` 把 `cortico/*` 指到主仓库的 `vendor/cortico/src/`;
 装进 Cortico 运行时由框架的模块钩子解析。`web/pet-core.js` 是身体本身(造型、表情、配件、合成音效、
 动作模拟),桌宠页、装扮页都从它构建,不依赖 World。
+运动时钟忽略零、负值和非有限步长；暂停或重复帧不会改变姿态，恢复后继续运动。
