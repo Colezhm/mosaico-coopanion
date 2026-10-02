@@ -60,8 +60,7 @@ void coop_script_poll(coop_script_handle_t h, coop_state_handle_t s, uint64_t no
             pop(h);
         return;
     }
-    if (!h->count || now < h->next || v->listening || v->motion == COOP_FALL ||
-        v->motion == COOP_GETUP)
+    if (!h->count || now < h->next || v->listening || coop_state_animation_busy(s))
         return;
     cJSON *m = h->queue[h->head], *kind = cJSON_GetObjectItem(m, "t");
     bool say = !strcmp(kind->valuestring, "say");

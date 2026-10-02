@@ -34,6 +34,7 @@ typedef enum {
     COOP_LISTEN,
     COOP_THINK,
     COOP_SPEAK,
+    COOP_SETTLE,
     COOP_DEPART,
     COOP_ARRIVE
 } coop_motion_t;
@@ -41,10 +42,12 @@ typedef struct {
     bool resident, visible, connected, muted, menu, listening, transferring;
     coop_motion_t motion;
     float x, y, angle, scale_x, scale_y, gaze, glow, phase, gravity_x, gravity_y, voice_level;
+    float orientation;
+    uint8_t edge; /* 0 bottom, 1 left, 2 top, 3 right; screen gravity = (-ax, ay). */
     uint8_t battery;
     uint32_t epoch, utterance;
     uint32_t body_color, eye_color;
-    char expression[24], subtitle[384], transfer_id[64];
+    char expression[24], subtitle[2048], transfer_id[64];
 } coop_snapshot_t;
 typedef struct {
     const char *type;
@@ -62,6 +65,7 @@ typedef struct {
 esp_err_t coop_state_create(const coop_state_config_t *config, coop_state_handle_t *out);
 void coop_state_delete(coop_state_handle_t handle);
 const coop_snapshot_t *coop_state_get(coop_state_handle_t handle);
+bool coop_state_animation_busy(coop_state_handle_t handle);
 void coop_state_tick(coop_state_handle_t handle, uint64_t now);
 void coop_state_connection(coop_state_handle_t handle, bool connected);
 void coop_state_presence(coop_state_handle_t handle, bool resident, uint32_t epoch,

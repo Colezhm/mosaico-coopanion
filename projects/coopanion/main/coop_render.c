@@ -41,13 +41,15 @@ esp_err_t coop_render_create(coop_render_handle_t *out)
         *out = NULL;
         return ESP_ERR_NO_MEM;
     }
-    /* Expensive ray geometry is precomputed once, never per animated pixel. */
+    /* A narrow, feathered oval near the edge, with a restrained downward halo.
+     * Expensive geometry is precomputed once, never per animated pixel. */
     for (int y = 0; y < 480; y++)
         for (int x = 0; x < 480; x++) {
-            float dx = (x - 240) / 200.f, dy = (y - 22) / 340.f,
-                  q = fmaxf(0, 1 - dx * dx - dy * dy);
-            float ray = .65f + .35f * cosf(atan2f(y - 12, x - 240) * 18);
-            (*out)->light[y * 480 + x] = (uint8_t)(90 * q * q * ray);
+            float dx=(x-240)/88.f,dy=(y-26)/14.f;
+            float r=sqrtf(dx*dx+dy*dy),ring=expf(-18*(r-1)*(r-1));
+            float halo=expf(-3*dx*dx-(y-26)*(y-26)/1500.f);
+            float core=expf(-4*r*r);
+            (*out)->light[y * 480 + x] = (uint8_t)fminf(255,155*ring+45*halo+16*core);
         }
     return ESP_OK;
 }
@@ -144,19 +146,27 @@ void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t
         return;
     decode(h, pose_for(s));
     const float angle = s->angle * .017453293f, c = cosf(angle), sn = sinf(angle), scale = 1.18f;
-    const float cx = 70 + s->x * 340, cy = 430 + s->y;
+    float orientation=s->orientation*.017453293f,oc=cosf(orientation),os=sinf(orientation);
+    /* On side edges, roam below the horizontal caption area. Blend the
+     * supporting point during rotation so changing edges never teleports it. */
+    float lateral = fabsf(os);
+    float side_x = (os > 0 ? 240 : 130) + s->x * 110;
+    const float cx = (70 + s->x * 340) * (1-lateral) + side_x * lateral;
+    const float cy = 430 + s->y;
     for (int row = 0; row < height; row++) {
         uint16_t *line = (uint16_t *)((uint8_t *)dst + row * stride);
         int y = y0 + row;
         for (int col = 0; col < w; col++) {
             int x = x0 + col;
+            float lx=240+(x-240)*oc+(y-240)*os,ly=240-(x-240)*os+(y-240)*oc;
             uint16_t color = 0;
-            if (s->glow > 0 && x >= 0 && x < 480 && y >= 0 && y < 480) {
-                unsigned k = (unsigned)(s->glow * h->light[y * 480 + x]);
-                color = rgb565(k / 2, k, k * 9 / 10);
+            int light_x=(int)(lx-cx+240),light_y=(int)ly;
+            if (s->glow > 0 && light_x >= 0 && light_x < 480 && light_y >= 0 && light_y < 480) {
+                unsigned k = (unsigned)(s->glow * h->light[light_y * 480 + light_x]);
+                color = rgb565(k * 3 / 5, k, k * 9 / 10);
             }
-            if (s->visible && h->atlas) {
-                float dx = x - cx, dy = y - cy;
+            if (s->visible && h->atlas && (!s->transferring || ly>=26)) {
+                float dx = lx - cx, dy = ly - cy;
                 float px = (dx * c + dy * sn) / (scale * s->scale_x) + 96,
                       py = (-dx * sn + dy * c) / (scale * s->scale_y) + 182;
                 int ix = (int)floorf(px), iy = (int)floorf(py);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "coop_ui.h"
 #include "coop_render.h"
+#include "coop_subtitle.h"
 #define GSP_BUNDLE_ENABLE_RAW_IDS
 #include "bundle_gsp.h"
 #include <stdlib.h>
@@ -12,7 +13,11 @@ struct coop_ui_t {
     coop_state_handle_t state;
     coop_render_handle_t render;
     void *timer;
-    char text[384], status[96], previous_status[96], question_id[64];
+    char text[2048], page_text[COOP_SUBTITLE_PAGE_BYTES], displayed[COOP_SUBTITLE_PAGE_BYTES];
+    char status[96], previous_status[96], question_id[64];
+    uint64_t subtitle_at;
+    unsigned pages;
+    int layout_edge;
     bool menu, confirmation;
     int answers;
     const char *receipt_type;
@@ -47,16 +52,43 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
     const coop_snapshot_t *s = coop_state_get(h->state);
     if (strcmp(h->text, s->subtitle)) {
         snprintf(h->text, sizeof(h->text), "%s", s->subtitle);
-        gsp_coop_subtitle_set_text(gsp, h->text);
+        h->subtitle_at=h->cfg.now(h->cfg.ctx);
+        h->pages=coop_subtitle_pages(h->text);
     }
-    snprintf(h->status, sizeof(h->status), "%s  ·  %u%%  %s",
+    unsigned page=(unsigned)((h->cfg.now(h->cfg.ctx)-h->subtitle_at)/5000);
+    if(page>=h->pages)page=h->pages?h->pages-1:0;
+    coop_subtitle_page(h->text,page,h->page_text);
+    if(s->transferring)h->page_text[0]=0;
+    if(strcmp(h->displayed,h->page_text)){
+        strcpy(h->displayed,h->page_text);
+        /* GSP 1.5.1 bound labels clip long multiline text. Give each line an
+         * explicit label and preserve the full page separately for comparison. */
+        char *first = h->page_text;
+        char *second = strchr(first, '\n');
+        if (second) *second++ = 0;
+        char *third = second ? strchr(second, '\n') : NULL;
+        if (third) *third++ = 0;
+        gsp_coop_subtitle_set_text(gsp, first);
+        gsp_coop_subtitle_1_set_text(gsp, second ? second : "");
+        gsp_coop_subtitle_2_set_text(gsp, third ? third : "");
+    }
+    if(h->layout_edge!=s->edge){
+        h->layout_edge=s->edge;
+        int top = s->edge == 2 ? 342 : 32;
+        gsp_coop_subtitle_set_position(gsp,24,top);
+        gsp_coop_subtitle_1_set_position(gsp,24,top+32);
+        gsp_coop_subtitle_2_set_position(gsp,24,top+64);
+        gsp_coop_status_set_position(gsp,24,s->edge==2?444:4);
+    }
+    snprintf(h->status, sizeof(h->status), "%s  ·  %u%%  %s  %u/%u",
              s->transferring           ? "传送中"
              : s->listening            ? "倾听"
              : s->motion == COOP_THINK ? "思考"
-             : s->motion == COOP_SPEAK ? "播报"
+             : s->motion == COOP_SPEAK ? "回复"
              : s->connected            ? "已连接"
                                        : "离线",
-             s->battery, s->muted ? "静音" : "");
+             s->battery, s->muted ? "静音" : "",page+1,h->pages?h->pages:1);
+    if(s->transferring)h->status[0]=0;
     if (strcmp(h->status, h->previous_status)) {
         gsp_coop_status_set_text(gsp, h->status);
         strcpy(h->previous_status, h->status);
@@ -118,6 +150,7 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
     coop_ui_handle_t h = *out;
     h->gsp = gsp;
     h->cfg = *cfg;
+    h->layout_edge=-1;
     coop_state_config_t state_cfg = {.event = state_event, .ctx = h, .seed = 1};
     if (coop_state_create(&state_cfg, &h->state) != ESP_OK ||
         coop_render_create(&h->render) != ESP_OK ||

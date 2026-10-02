@@ -30,7 +30,6 @@ static void poll(void *ctx, coop_state_handle_t state)
 {
     (void)ctx;
     uint64_t time = now(NULL), t = time - started;
-    coop_state_imu(state, 0, 0, 1, 0, 0, 0, time);
     coop_pc_link_poll(app, time);
     if (!getenv("COOP_SIM_DEMO"))
         return;
@@ -49,7 +48,7 @@ static void poll(void *ctx, coop_state_handle_t state)
         coop_state_action(state, "stumble", time);
         break;
     case 3:
-        coop_state_imu(state, 2.8f, 0, 1, 400, 0, 0, time);
+        coop_state_action(state, "fall", time);
         break;
     case 4:
         coop_state_touch(state, true, time);

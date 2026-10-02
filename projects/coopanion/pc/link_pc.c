@@ -16,6 +16,9 @@ static int listener = -1, peer = -1;
 static char *buffer;
 static size_t used;
 static uint8_t *cached;
+/* The PC backend is single-instance and UI-thread owned. Hold injected sensors
+ * between frames, exactly like the board's latest physical samples. */
+static float imu[6]={0,0,1,0,0,0};
 static const char *str(cJSON *j, const char *k)
 {
     cJSON *v = cJSON_GetObjectItem(j, k);
@@ -117,9 +120,20 @@ static void command(coop_ui_handle_t ui, cJSON *m, uint64_t now)
         coop_state_transfer(s, t, str(tr, "id"), num(tr, "epoch", 0), num(m, "glowAt", now), now);
     } else if (!strcmp(t, "sim_button"))
         coop_state_button(s, cJSON_IsTrue(cJSON_GetObjectItem(m, "down")), now);
-    else if (!strcmp(t, "sim_imu"))
-        coop_state_imu(s, num(m, "ax", 0), num(m, "ay", 0), num(m, "az", 1), num(m, "gx", 0),
-                       num(m, "gy", 0), num(m, "gz", 0), now);
+    else if (!strcmp(t, "sim_imu")) {
+        imu[0]=num(m,"ax",0);imu[1]=num(m,"ay",0);imu[2]=num(m,"az",1);
+        imu[3]=num(m,"gx",0);imu[4]=num(m,"gy",0);imu[5]=num(m,"gz",0);
+    } else if (!strcmp(t,"sim_state")) {
+        const coop_snapshot_t *v=coop_state_get(s);cJSON *r=cJSON_CreateObject();
+        cJSON_AddStringToObject(r,"t","sim_state");cJSON_AddStringToObject(r,"subtitle",v->subtitle);
+        cJSON_AddNumberToObject(r,"motion",v->motion);cJSON_AddNumberToObject(r,"edge",v->edge);
+        cJSON_AddNumberToObject(r,"orientation",v->orientation);cJSON_AddNumberToObject(r,"at",now);
+        cJSON_AddBoolToObject(r,"muted",v->muted);cJSON_AddBoolToObject(r,"visible",v->visible);
+        cJSON_AddNumberToObject(r,"x",v->x);cJSON_AddNumberToObject(r,"y",v->y);
+        cJSON_AddNumberToObject(r,"scale_x",v->scale_x);cJSON_AddNumberToObject(r,"scale_y",v->scale_y);
+        cJSON_AddBoolToObject(r,"busy",coop_state_animation_busy(s));send_json(r);
+    } else if (!strcmp(t,"sim_battery"))
+        coop_state_battery(s,num(m,"percent",100),false);
     else if (!strcmp(t, "sim_action"))
         coop_state_action(s, str(m, "action"), now);
     else if (!strcmp(t, "sim_touch"))
@@ -161,6 +175,7 @@ static void command(coop_ui_handle_t ui, cJSON *m, uint64_t now)
 }
 void coop_pc_link_poll(coop_ui_handle_t ui, uint64_t now)
 {
+    coop_state_imu(coop_ui_state(ui),imu[0],imu[1],imu[2],imu[3],imu[4],imu[5],now);
     coop_script_poll(script, coop_ui_state(ui), now, false);
     if (listener < 0)
         return;

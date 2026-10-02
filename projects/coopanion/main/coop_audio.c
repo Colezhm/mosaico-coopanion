@@ -144,7 +144,11 @@ esp_err_t coop_audio_create(coop_link_handle_t link, coop_audio_handle_t *out)
     h->mic = bsp_audio_codec_microphone_init();
     if (!h->mutex || !h->speaker || !h->mic)
         goto fail;
-    const esp_partition_t *part =
+    /* TTS intentionally suspended in 1.0.2. Retain its resource partition and
+     * codec ownership contract; microphone capture remains enabled. */
+    const esp_partition_t *part = NULL;
+#if 0 /* Re-enable only after the dedicated TTS quality pass. */
+    part =
         esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "voice_data");
     const void *data = NULL;
     if (part && esp_partition_mmap(part, 0, part->size, ESP_PARTITION_MMAP_DATA, &data,
@@ -155,6 +159,8 @@ esp_err_t coop_audio_create(coop_link_handle_t link, coop_audio_handle_t *out)
             h->tts = esp_tts_create(h->voice);
     }
     esp_codec_dev_set_out_vol(h->speaker, 55);
+#endif
+    (void)part;
     if (xTaskCreate(worker, "coo_audio", 8192, h, 5, NULL) == pdPASS)
         return ESP_OK;
 fail:
@@ -187,13 +193,8 @@ void coop_audio_stop(coop_audio_handle_t h)
 }
 void coop_audio_say(coop_audio_handle_t h, const char *text)
 {
-    if (!h || !text)
-        return;
+    (void)text;
     coop_audio_stop(h);
-    xSemaphoreTake(h->mutex, portMAX_DELAY);
-    snprintf(h->pending, sizeof(h->pending), "%s", text);
-    atomic_store(&h->busy, true);
-    xSemaphoreGive(h->mutex);
 }
 void coop_audio_record(coop_audio_handle_t h, uint32_t id)
 {
