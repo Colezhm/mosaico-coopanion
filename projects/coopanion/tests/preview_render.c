@@ -112,6 +112,10 @@ int main(int argc, char **argv)
                !strcmp(scenario, "cry")) {
         coop_state_action(s, scenario, now);
         run(s, &now, now + 500);
+    } else if (!strcmp(scenario, "flustered") || !strcmp(scenario, "delighted") ||
+               !strcmp(scenario, "cheeky")) {
+        coop_state_emotion(s, scenario);
+        run(s, &now, now + 400);
     } else if (!strcmp(scenario, "arrive")) {
         coop_state_presence(s, false, 2, false);
         coop_state_transfer(s, "transfer_prepare", "t2", 3, 0, now);

@@ -139,6 +139,16 @@ static int pose_for(const coop_snapshot_t *s)
     for (int i = 0; i < 14; i++)
         if (!strcmp(s->expression, names[i]))
             return i;
+    /* COO1 has 14 faces; richer expressions fall back to the closest one. */
+    static const char *const alias[][2] = {
+        {"worried", "sad"},     {"furious", "angry"},   {"smug", "happy"},   {"pleading", "love"},
+        {"curious", "surprised"}, {"excited", "happy"}, {"crying", "sad"},   {"pout", "angry"},
+        {"sulking", "angry"},   {"flustered", "dragged"}, {"delighted", "happy"}, {"cheeky", "wink"}};
+    for (unsigned a = 0; a < sizeof(alias) / sizeof(alias[0]); a++)
+        if (!strcmp(s->expression, alias[a][0]))
+            for (int i = 0; i < 14; i++)
+                if (!strcmp(alias[a][1], names[i]))
+                    return i;
     return 0;
 }
 static unsigned clip_for(const coop_snapshot_t *s)
@@ -152,10 +162,10 @@ static unsigned clip_for(const coop_snapshot_t *s)
     case COOP_SETTLE:return 27;default:break;
     }
     static const char *const faces[]={"neutral","happy","wink","love","shy","surprised","angry","sad","sleepy","sleep","dizzy","dragged","thinking","sit"};
-    static const char *const extra[]={"worried","furious","smug","pleading","curious","excited","crying","pout"};
+    static const char *const extra[]={"worried","furious","smug","pleading","curious","excited","crying","pout","flustered","delighted","cheeky"};
     if(!strcmp(s->expression,"sulking"))return 22;
     if(s->motion==COOP_SPEAK&&!strcmp(s->expression,"neutral"))return 24;
-    for(unsigned i=0;i<8;i++)if(!strcmp(s->expression,extra[i]))return 32+i;
+    for(unsigned i=0;i<sizeof(extra)/sizeof(extra[0]);i++)if(!strcmp(s->expression,extra[i]))return 32+i;
     for(unsigned i=0;i<14;i++)if(!strcmp(s->expression,faces[i]))return i;
     return 0;
 }

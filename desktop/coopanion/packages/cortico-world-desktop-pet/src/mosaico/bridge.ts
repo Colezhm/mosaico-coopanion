@@ -4,6 +4,10 @@ import { performance } from 'node:perf_hooks';
 import { PresenceCoordinator, type Body, type CoordinatorOptions, type Message, type Presence } from './coordinator.ts';
 import { MosaicoTransport, type Pairing } from './transport.ts';
 import { AssetSync } from './assets.ts';
+import { VOCAB } from '../script.ts';
+
+/** Faces the board can show and carry across a transfer: every scripted expression plus the rig's own states. */
+const BOARD_FACES = new Set([...VOCAB.filter(v => v.kind === 'expression').map(v => v.id), 'sleep', 'dizzy', 'dragged']);
 
 /** Seconds since 1970: above any transfer count, inside the board's uint32 epoch until 2106. */
 export const recoveryEpoch = (): number => Math.floor(Date.now() / 1000);
@@ -186,7 +190,7 @@ export class MosaicoBridge {
   }
   private report(e: unknown): void { this.error = e instanceof Error ? e.message : String(e); this.transport?.send({ t: 'voice_error', text: this.error }); }
   private rememberEmotion(face:unknown):void {
-    if(typeof face!=='string'||!['neutral','happy','wink','love','shy','surprised','angry','sad','sleepy','sleep','dizzy','dragged','thinking'].includes(face)||face===this.emotion)return;
+    if(typeof face!=='string'||!BOARD_FACES.has(face)||face===this.emotion)return;
     this.emotion=face;
     try{const file=join(this.directory,'emotion.json');writeFileSync(file+'.tmp',JSON.stringify({face}),{mode:0o600});renameSync(file+'.tmp',file);}catch(e){this.report(e);}
   }

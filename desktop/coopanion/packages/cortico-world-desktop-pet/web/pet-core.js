@@ -228,10 +228,13 @@ export const FACES = {
   excited:   { label: '雀跃', f: () => ({ gap:[62,62], eyes:[ring({rx:19,ry:21}),{shape:'up'}], blush:.65, sparkle:true }) },
   crying:    { label: '哭泣', f: () => ({ gap:[46,46], eyes:[{shape:'down'},{shape:'down'}], brows:'sad', blush:.55, emit:'tear', tears:true }) },
   pout:      { label: '鼓脸', f: () => ({ gap:[38,38], eyes:[{shape:'lid',ry:7},{shape:'lid',ry:7}], brows:'angry', blush:.7 }) },
+  flustered: { label: '慌张', f: () => ({ gap:[48,52], eyes:[ring({ry:14,dy:3}),{shape:'lt'}], brows:'sad', blush:.5, sweat:true, teary:true, fluster:true }) },
+  delighted: { label: '眉开眼笑', f: () => ({ gap:[62,62], eyes:[{shape:'up'},{shape:'up'}], blush:.7, sparkle:true }) },
+  cheeky:    { label: '比耶', f: () => ({ gap:[60,56], eyes:[ring({rx:19,ry:21}),{shape:'up'}], blush:.55, stars:true }) },
   sulking:   { label: '生闷气', f: () => ({ gap:[38,38], eyes:[{shape:'lid',ry:5},{shape:'lid',ry:5}], brows:'angry' }) },
   run:       { label: '冲刺', f: t => { const g = 55 + 4 * Math.sin(t * 16); return { gap: [g, g], eyes: [ring(), ring()], sweat: true }; } },
 };
-export const GALLERY = ['neutral', 'happy', 'wink', 'love', 'shy', 'surprised', 'angry', 'sad', 'sleepy', 'sleep', 'dizzy', 'dragged', 'worried', 'furious', 'smug', 'pleading', 'curious', 'excited', 'crying', 'pout'];
+export const GALLERY = ['neutral', 'happy', 'wink', 'love', 'shy', 'surprised', 'angry', 'sad', 'sleepy', 'sleep', 'dizzy', 'dragged', 'worried', 'furious', 'smug', 'pleading', 'curious', 'excited', 'crying', 'pout', 'flustered', 'delighted', 'cheeky'];
 
 /** One frame of the figure as SVG markup, in logo units. */
 export function figure(fc, o) {

@@ -17,7 +17,7 @@ flags = ['-std=c11', '-g', '-O1', '-fsanitize=address,undefined', '-fno-sanitize
 main = lambda *names: [str(root / 'main' / n) for n in names]
 SHARED = ('coop_state.c', 'coop_render.c', 'coop_animation.c', 'coop_subtitle.c', 'coop_hud.c')
 SCENARIOS = ['idle', 'happy', 'subtitle', 'walk', 'jump', 'listen', 'offline', 'reconnected', 'away',
-             'away-offline', 'edge-left', 'edge-top', 'sit', 'sulk', 'cry', 'fall', 'arrive']
+             'away-offline', 'edge-left', 'edge-top', 'sit', 'sulk', 'cry', 'fall', 'arrive', 'flustered', 'delighted', 'cheeky']
 atlases = [root / 'main/coo-atlas.bin', *(Path(a) for a in (sys.argv[1:] or [str(whale)]))]
 
 with tempfile.TemporaryDirectory(prefix='coopanion-test-') as tmp:

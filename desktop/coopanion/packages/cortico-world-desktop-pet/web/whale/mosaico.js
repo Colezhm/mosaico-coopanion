@@ -15,6 +15,7 @@ export const WHALE_CLIPS=[
   [24,'speaking',4,1400,1],[25,'depart',6,950,0],[26,'arrive',6,1300,0],[27,'settle',4,650,0],
   [32,'worried',2,1600,1],[33,'furious',2,1200,1],[34,'smug',2,2000,1],[35,'pleading',2,1800,1],
   [36,'curious',2,2000,1],[37,'excited',2,1400,1],[38,'crying',2,1800,1],[39,'pout',2,2000,1],
+  [40,'flustered',2,1400,1],[41,'delighted',2,1600,1],[42,'cheeky',2,1600,1],
 ].map(([id,name,count,ms,loop])=>({id,name,count,ms,loop:!!loop}));
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export function whaleFrame(name,time,progress=0) {

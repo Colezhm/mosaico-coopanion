@@ -34,6 +34,6 @@ describe('whale animation resource contract',()=>{
     const sync=new AssetSync(m=>{sent.push(m);return true;},m=>{exported=m;return true;},v=>{ready=v;},e=>errors.push(e));
     sync.start({figure:'whale',scheme:'deepseek'});expect(exported.t).toBe('asset_export');expect(errors).toEqual([]);expect(ready).toBe(false);
     const id=exported.id;sync.start({figure:'coo'});sync.exported({t:'asset_exported',id,data:'ignored'});expect(sent).toEqual([]);
-    expect(parseActions(['委屈','炸毛','得意','撒娇','好奇','雀跃','哭泣','鼓脸','生闷气']).dropped).toEqual([]);
+    expect(parseActions(['委屈','炸毛','得意','撒娇','好奇','雀跃','哭泣','鼓脸','生闷气','慌张','眉开眼笑','比耶']).dropped).toEqual([]);
   });
 });
