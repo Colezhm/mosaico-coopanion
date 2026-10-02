@@ -14,11 +14,13 @@
 | 暂停 TTS | 状态层不发 say，音频入口不排入文本，TTS 引擎不初始化；记录中无语音/对话事件，按键录音代码保留 | 物理扬声器静音与真实语音输入尚未复测 |
 | 固件构建 | `20261002-061713-build-68000` 成功，31.5 秒，应用 2,239,888 字节 | 一条预期 factory 尺寸警告；正常应用仍位于 ota_0 |
 | 资源更新包 | 官方 CMake `system-update-bundle` 成功，5,773,979 字节；相同分区表、应用、UI 与 Xiaole 资源 | 尚未安装；不能用应用 BIN 代替包含 UI 的更新 |
-| USB 与真机 | 官方 doctor 当前报告未发现兼容 USB 设备；Iris 的 1.0.1 身份仅为离线缓存 | 1.0.2 未写入，不把缓存身份当作实时握手，也不作真机验收通过结论 |
+| USB 与真机 | 初次检查未发现 USB，随后恢复识别；实时 Iris 握手确认同一块板子处于 normal 1.0.1、stale=false、crash_count=0，新 Boot ID | 1.0.2 未写入，正在等待具体更新包的当次安装确认；四边轴向和真实手感尚未校准 |
+| 公开源码 CI | `297d4302a7ff97ec3faefb50186047e6e274d41b` 的 CI `36995190298` 通过；源码树与本地构建提交一致 | 远端 CI 覆盖工作区和 USB 配对测试；共享 C/固件/视觉结果来自本机独立验收 |
 
 本机证据：`artifacts/mosaico-coopanion/native-102-actions.mp4`、
 `native-102/capture.json`、`102-native-report.json`、`102-menu-state.jsonl`、
-`102-host-doctor.json`。模拟器顶部柔光到身体入场回执间隔为 519 ms；
+`102-host-doctor.json`、`102-host-doctor-final.json`、`102-before-status.json` 和
+`102-before-logs.jsonl`。模拟器顶部柔光到身体入场回执间隔为 519 ms；
 两个跨设备 500 ms 间隔仍须真机测量。
 
 1.0.2 System Update SHA-256：
