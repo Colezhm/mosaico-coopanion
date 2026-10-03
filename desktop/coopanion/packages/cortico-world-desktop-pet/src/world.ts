@@ -37,6 +37,7 @@ import { toSimplified } from './asr/simplify.ts';
 import { estimateSeconds, parseActions, parseScript, vocabTable } from './script.ts';
 import { DESKTOP_PET_TOOL_DECLS } from './tools.ts';
 import { MosaicoBridge } from './mosaico/bridge.ts';
+import { MOSAICO_PROMPT, invokeMosaicoPanel, mosaicoTools } from './mosaico/world-tools.ts';
 
 export const DESKTOP_PET_PANEL_DECLS: readonly WorldPanelDecl[] = [
   { id: 'mosaico', title: 'Mosaico', description: '连接状态与跨屏传送。', getMethods: ['state'] },
@@ -254,7 +255,7 @@ export class DesktopPetWorld implements World {
       webDir: WEB_DIR,
       snapshot: () => this.snapshot(),
       onPetMessage: (msg) => this.onPage(msg),
-      onAudio: (frame) => { if (!this.mosaico || (this.mosaico.presence.owner === 'desktop' && !this.mosaico.presence.transferring)) this.onAudio(frame); },
+      onAudio: (frame) => { if (!this.mosaico || this.mosaico.settledOn('desktop')) this.onAudio(frame); },
       onPetConnect: () => { this.log?.info('桌宠页面已连接'); this.mosaico?.desktopConnected(); },
       onPetDisconnect: () => { this.mosaico?.desktopDisconnected(); this.onPageGone(); },
       onSkin: (skin) => this.saveSkin(skin),
@@ -429,7 +430,7 @@ export class DesktopPetWorld implements World {
   }
 
   private micWanted(): boolean {
-    if(this.mosaico&&(this.mosaico.presence.owner!=='desktop'||this.mosaico.presence.transferring))return false;
+    if (this.mosaico && !this.mosaico.settledOn('desktop')) return false;
     const phase = this.backendState()?.phase;
     return this.cfg.asr.enabled && (phase === 'running');
   }
@@ -767,7 +768,7 @@ export class DesktopPetWorld implements World {
   }
 
   private onTalkKey(down: boolean): void {
-    if (this.mosaico && (this.mosaico.presence.owner !== 'desktop' || this.mosaico.presence.transferring)) return;
+    if (this.mosaico && !this.mosaico.settledOn('desktop')) return;
     if (this.micMode() === 'hold') this.setTalking(down);
     else if (down) this.setTalking(!this.talking);
   }
@@ -967,20 +968,7 @@ export class DesktopPetWorld implements World {
     };
     const basic = DESKTOP_PET_TOOL_DECLS.map((decl) => ({ ...decl, handler: handlers[decl.name] }));
     if (!this.cfg.mosaico?.enabled) return basic;
-    return [...basic, {
-      name: 'pet_location', tags: ['read'], description: '读取 Coo 当前身体位置、设备连接与传送状态。',
-      parameters: { type: 'object', properties: {} },
-      handler: async () => this.mosaico ? { text: JSON.stringify(this.mosaico.state()) } : { text: 'Mosaico 尚未启动', failed: true },
-    }, {
-      name: 'pet_transfer', tags: ['act'], description: '让同一个 Coo 通过传送动画前往 Mosaico 或返回电脑；等待落地后返回。电脑操作会自动先返回桌面。',
-      parameters: { type: 'object', properties: { destination: { type: 'string', enum: ['desktop', 'device'] } }, required: ['destination'] },
-      handler: async (args: Record<string, unknown>) => {
-        if (args.destination !== 'desktop' && args.destination !== 'device') return { text: '无效目的地', failed: true };
-        if (!this.mosaico) return { text: 'Mosaico 尚未启动', failed: true };
-        try { await this.mosaico.transfer(args.destination); return { text: `已抵达 ${args.destination}` }; }
-        catch (e) { return { text: (e as Error).message, failed: true }; }
-      },
-    }];
+    return [...basic, ...mosaicoTools(() => this.mosaico)];
   }
 
   private notConnected(tool: string): ToolOutcome {
@@ -1066,7 +1054,7 @@ export class DesktopPetWorld implements World {
       'pet.user': this.cfg.user,
       'pet.vocab': vocabTable(),
       'pet.voice': this.cfg.asr.enabled ? '开着' : '关着',
-      'pet.mosaico': this.cfg.mosaico?.enabled ? '同一个身体可以前往 Mosaico 屏幕。身体归属和连接变化由 [身体状态] 事件报告；需要最新状态时使用 pet_location。传送中暂不能说话或做普通动作，等待落地。板端语音使用按住 AI 键倾听、松开发送；离线只有本地互动和固定台词。电脑工具会先等待身体返回电脑并落地，再按原有授权规则执行。空闲迁移由已启用的设置控制；它是设备行为，不能据此推断自己的意愿。板端表情是外观状态，长期情绪和对话记忆仍由你管理。' : '',
+      'pet.mosaico': this.cfg.mosaico?.enabled ? MOSAICO_PROMPT : '',
     };
   }
 
@@ -1117,11 +1105,8 @@ export class DesktopPetWorld implements World {
 
   private async invoke(panel: string, method: string, args: unknown[]): Promise<unknown> {
     if (panel === 'mosaico') {
-      if (method === 'state') return this.mosaico?.state() ?? { enabled: false };
-      if (method === 'transfer' && (args[0] === 'desktop' || args[0] === 'device')) {
-        if (!this.mosaico) throw new Error('请先启用 Mosaico 扩展');
-        await this.mosaico.transfer(args[0]); return this.mosaico.state();
-      }
+      const result = await invokeMosaicoPanel(this.mosaico, method, args);
+      if (result !== undefined) return result;
     }
     if (panel === 'pet') {
       switch (method) {
