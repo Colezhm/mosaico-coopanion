@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { decodeFileUrls } from '../../scripts/vitest-decode-file-urls.ts';
 
 /**
  * 开发期 `cortico/*` 指向主仓库锁定的框架源码。生产里这层由框架的
@@ -8,6 +9,8 @@ import { defineConfig } from 'vitest/config';
 const FRAMEWORK_SRC = fileURLToPath(new URL('../../vendor/cortico/src/', import.meta.url));
 
 export default defineConfig({
+  // 工作区路径含空格时,框架按 file:// URL 动态加载的 provider 需解码后才能找到。
+  plugins: [decodeFileUrls],
   resolve: {
     alias: [{ find: /^cortico\//, replacement: FRAMEWORK_SRC }],
   },

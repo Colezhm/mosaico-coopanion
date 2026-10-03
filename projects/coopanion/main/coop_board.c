@@ -6,6 +6,7 @@
 #include "coop_script.h"
 #include "coop_receipt.h"
 #include "bsp/esp_mosaico.h"
+#include "esp_gsp_esp_lcd.h"
 #include "esp_iris.h"
 #include "esp_timer.h"
 #include "esp_system.h"
@@ -66,6 +67,9 @@ struct coop_board_t {
     button_handle_t button;
     atomic_bool active, connected;
     atomic_uint motor_until;
+    /* Haptic rhythm playing: index into HAPTICS plus one (0 none) and its start. */
+    atomic_uint haptic, haptic_start;
+    uint64_t tremor_logged_at;
     atomic_bool journal_ok;
     bool motor, led, imu_ok, battery_ok, magnet_ok, nand_ok, capabilities_sent;
     char walk_id[64], last_emotion[24];
@@ -82,7 +86,29 @@ struct coop_board_t {
     uint32_t pairing_session;
     uint64_t pairing_deadline;
     bool pairing_restarting;
+    /* Standing edge the UI wants (written by the render task) and the one the
+     * panel shows (owned by the sensors task, which rotates it). */
+    atomic_int desired_edge;
+    int applied_edge;
+    uint64_t rotate_retry_at;
 };
+/* Haptic rhythms for the board's motor: alternating on/off durations in ms,
+ * starting and ending with on. The motor is on/off only; short pulses read as
+ * softer. */
+typedef struct {
+    const char *name;
+    uint8_t steps;
+    uint16_t ms[11];
+} haptic_t;
+static const haptic_t HAPTICS[] = {
+    {"tick", 1, {25}},
+    {"bump", 1, {70}},
+    {"double", 3, {30, 70, 30}},
+    {"giggle", 5, {20, 60, 20, 60, 20}},
+    {"purr", 11, {12, 28, 12, 28, 12, 28, 12, 28, 12, 28, 12}},
+    {"heartbeat", 3, {55, 130, 40}},
+};
+#define TREMOR_LOG_MS 30000
 static uint64_t now(void *ctx)
 {
     (void)ctx;
@@ -171,6 +197,14 @@ static void output(void *ctx, const coop_event_t *e)
     }
     if (!strcmp(e->type, "vibrate")) {
         atomic_store(&h->motor_until, (unsigned)now(NULL) + 70);
+        return;
+    }
+    if (!strcmp(e->type, "haptic")) {
+        for (unsigned i = 0; i < sizeof(HAPTICS) / sizeof(HAPTICS[0]); i++)
+            if (e->text && !strcmp(e->text, HAPTICS[i].name)) {
+                atomic_store(&h->haptic_start, (unsigned)now(NULL));
+                atomic_store(&h->haptic, i + 1);
+            }
         return;
     }
     output_t *item = calloc(1, sizeof(*item));
@@ -331,6 +365,56 @@ static void release(void *button, void *ctx)
     bool down = false;
     xQueueSend(h->buttons, &down, 0);
 }
+/* Edge -> panel rotation. The renderer's edge 1 maps a logical point to
+ * (W-1-y, x), which is BSP_DISPLAY_ROTATE_90 (swap XY + mirror X); if a board
+ * shows sideways edges mirrored, swap the 90 and 270 entries. */
+static const bsp_display_rotation_t EDGE_ROTATION[4] = {
+    BSP_DISPLAY_ROTATE_0, BSP_DISPLAY_ROTATE_90, BSP_DISPLAY_ROTATE_180, BSP_DISPLAY_ROTATE_270};
+#define ROTATE_PAUSE_MS 300
+#define ROTATE_RETRY_MS 1000
+/* Turns the whole UI (captions, status, menu, touch) to the standing edge.
+ * The panel scan (MADCTL) and touch transform change while GSP is paused;
+ * GSP redraws the full frame on resume. Never called from the render task. */
+static void rotate_screen(coop_board_handle_t h)
+{
+    int edge = atomic_load(&h->desired_edge);
+    if (!h->gsp || edge == h->applied_edge || edge < 0 || edge > 3 || now(NULL) < h->rotate_retry_at)
+        return;
+    esp_gsp_esp_lcd_pause_t *pause = NULL;
+    if (esp_gsp_esp_lcd_pause(h->gsp, ROTATE_PAUSE_MS, &pause) != ESP_OK) {
+        h->rotate_retry_at = now(NULL) + ROTATE_RETRY_MS;
+        return;
+    }
+    esp_err_t err = bsp_display_set_rotation(EDGE_ROTATION[edge]);
+    if (err == ESP_OK) {
+        coop_ui_set_screen_rotation(h->ui, edge * 90);
+        h->applied_edge = edge;
+    } else {
+        ESP_LOGW("coopanion", "screen rotation to edge %d failed (%s)", edge, esp_err_to_name(err));
+        h->rotate_retry_at = now(NULL) + ROTATE_RETRY_MS;
+    }
+    esp_gsp_handle_t resumed = NULL;
+    if (esp_gsp_esp_lcd_resume_paused(pause, &resumed) != ESP_OK)
+        ESP_LOGE("coopanion", "GSP did not resume after rotating the screen");
+    else if (resumed != h->gsp)
+        ESP_LOGW("coopanion", "GSP resumed a different UI handle after rotation");
+}
+/* Whether the playing haptic rhythm wants the motor on now; ends it when done. */
+static bool haptic_on(coop_board_handle_t h)
+{
+    unsigned index = atomic_load(&h->haptic);
+    if (!index)
+        return false;
+    const haptic_t *pattern = &HAPTICS[index - 1];
+    unsigned elapsed = (unsigned)now(NULL) - atomic_load(&h->haptic_start), at = 0;
+    for (unsigned i = 0; i < pattern->steps; i++) {
+        at += pattern->ms[i];
+        if (elapsed < at)
+            return (i & 1) == 0;
+    }
+    atomic_compare_exchange_strong(&h->haptic, &index, 0u);
+    return false;
+}
 static void sensors(void *ctx)
 {
     coop_board_handle_t h = ctx;
@@ -347,13 +431,14 @@ static void sensors(void *ctx)
                 imu_running = false;
             }
         }
+        rotate_screen(h);
         if (imu_running) {
             imu_sample_t s = {.at = now(NULL)};
             if (bsp_imu_get_accel(&s.a[0], &s.a[1], &s.a[2]) == ESP_OK &&
                 bsp_imu_get_gyro(&s.g[0], &s.g[1], &s.g[2]) == ESP_OK)
                 xQueueSend(h->imu, &s, 0);
         }
-        bool want = (int32_t)(atomic_load(&h->motor_until) - (unsigned)now(NULL)) > 0;
+        bool want = (int32_t)(atomic_load(&h->motor_until) - (unsigned)now(NULL)) > 0 || haptic_on(h);
         if (h->motor && want != motor_on) {
             bsp_motor_set(want);
             motor_on = want;
@@ -421,6 +506,15 @@ static void poll(void *ctx, coop_state_handle_t s)
 {
     coop_board_handle_t h = ctx;
     uint64_t time = now(NULL);
+    atomic_store(&h->desired_edge, coop_state_get(s)->edge);
+    if (time - h->tremor_logged_at >= TREMOR_LOG_MS) {
+        /* Hand-tremor readings, to calibrate the hug detector on this board. */
+        h->tremor_logged_at = time;
+        float dps = 0, g = 0;
+        bool held = false;
+        coop_state_tremor(s, &dps, &g, &held);
+        ESP_LOGI("coopanion", "tremor %.2f deg/s %.4f g held=%d", dps, g, held);
+    }
     coop_state_voice_level(s, coop_audio_level(h->audio));
     asset_notice_t *asset;
     if (xQueueReceive(h->asset_notices, &asset, 0) == pdTRUE) {

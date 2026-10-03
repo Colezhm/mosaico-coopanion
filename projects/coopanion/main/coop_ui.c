@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 struct coop_ui_t {
     esp_gsp_handle_t gsp;
     coop_ui_config_t cfg;
@@ -25,6 +26,16 @@ struct coop_ui_t {
     char receipt_id[64];
     uint32_t receipt_epoch;
     uint64_t receipt_at;
+    /* Canvas area that may hold non-black pixels from earlier draws. Touched
+     * only from the render task (timer tick and Canvas draw callback). */
+    coop_render_rect_t painted;
+    /* Panel rotation in degrees, set by the board's rotation task; the render
+     * task notices a change and relays out and repaints everything. */
+    atomic_int screen_rotation;
+    int seen_rotation;
+    /* Touch samples reach the figure directly (pointer observer); the scene's
+     * own canvas tap is then redundant. */
+    bool pointer_ok;
 };
 static void state_event(void *ctx, const coop_event_t *e)
 {
@@ -41,8 +52,30 @@ static void state_event(void *ctx, const coop_event_t *e)
 static void draw(const esp_gsp_canvas_surface_t *s, void *ctx)
 {
     coop_ui_handle_t h = ctx;
-    coop_render_draw(h->render, coop_state_get(h->state), s->pixels, s->stride_bytes, s->x, s->y,
-                     s->width, s->height);
+    const coop_snapshot_t *v = coop_state_get(h->state);
+    coop_render_draw(h->render, v, s->pixels, s->stride_bytes, s->x, s->y, s->width, s->height);
+    /* An input event may change the state between a tick and this draw; record
+     * what was actually drawn so the next tick also clears it. */
+    coop_render_rect_t drawn;
+    coop_render_bounds(h->render, v, &drawn);
+    h->painted = coop_render_rect_union(h->painted, drawn);
+}
+/* Every touch sample, before GSP routes gestures: the figure's own gestures
+ * (pokes by body part, strokes, tickles, carrying, bubbles). */
+static void pointer(esp_gsp_handle_t gsp, int32_t x, int32_t y, bool pressed, void *ctx)
+{
+    (void)gsp;
+    coop_ui_handle_t h = ctx;
+    const coop_snapshot_t *s = coop_state_get(h->state);
+    uint64_t now = h->cfg.now(h->cfg.ctx);
+    float lx = 0, ly = 0;
+    /* Buttons drawn over the canvas (menu, answers) own their touches. */
+    if (s->menu || h->answers > 0) {
+        coop_state_pointer(h->state, lx, ly, false, COOP_PART_NONE, now);
+        return;
+    }
+    coop_part_t part = coop_render_locate(h->render, s, x, y, &lx, &ly);
+    coop_state_pointer(h->state, lx, ly, pressed, part, now);
 }
 static void tick(esp_gsp_handle_t gsp, void *ctx)
 {
@@ -73,13 +106,22 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
         gsp_coop_subtitle_1_set_text(gsp, second ? second : "");
         gsp_coop_subtitle_2_set_text(gsp, third ? third : "");
     }
-    if(h->layout_edge!=s->edge){
-        h->layout_edge=s->edge;
-        int top = s->edge == 2 ? 342 : 32;
+    int rotation = atomic_load(&h->screen_rotation);
+    if (rotation != h->seen_rotation) {
+        h->seen_rotation = rotation;
+        h->layout_edge = -1;
+        h->painted = (coop_render_rect_t){0, 0, 480, 480};
+    }
+    /* Captions sit opposite the ground as the screen shows it: with the panel
+     * rotated to the standing edge, that is always the top. */
+    int edge = (s->edge + 4 - rotation / 90) & 3;
+    if(h->layout_edge!=edge){
+        h->layout_edge=edge;
+        int top = edge == 2 ? 342 : 32;
         gsp_coop_subtitle_set_position(gsp,24,top);
         gsp_coop_subtitle_1_set_position(gsp,24,top+32);
         gsp_coop_subtitle_2_set_position(gsp,24,top+64);
-        gsp_coop_status_set_position(gsp,24,s->edge==2?444:4);
+        gsp_coop_status_set_position(gsp,24,edge==2?444:4);
     }
     coop_hud_status(s, page, h->pages, h->status);
     if (strcmp(h->status, h->previous_status)) {
@@ -94,7 +136,15 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
         h->sitting = s->motion == COOP_SIT;
         gsp_coop_rest_set_text(gsp, h->sitting ? "站起来" : "坐下歇会");
     }
-    esp_gsp_canvas_invalidate(gsp, GSP_COOP_BIND_CANVAS);
+    /* Repaint only what changed: the area the previous frame covered plus the
+     * new frame's. The canvas outside both is already black. */
+    coop_render_rect_t now;
+    coop_render_bounds(h->render, s, &now);
+    coop_render_rect_t dirty = coop_render_rect_union(h->painted, now);
+    h->painted = now;
+    if (dirty.x2 > dirty.x1 && dirty.y2 > dirty.y1)
+        esp_gsp_canvas_invalidate_dirty(gsp, GSP_COOP_BIND_CANVAS,
+                                        (gsp_rect_t){dirty.x1, dirty.y1, dirty.x2, dirty.y2});
     /* Submit the changed frame before asking the board's I/O worker to fence
      * rendering and acknowledge it. Never block the render task itself. */
     if (h->receipt_type && h->cfg.event) {
@@ -112,10 +162,14 @@ static void event(esp_gsp_handle_t gsp, const esp_gsp_event_t *e, void *ctx)
     coop_ui_handle_t h = ctx;
     uint64_t now = h->cfg.now(h->cfg.ctx);
     const coop_snapshot_t *s = coop_state_get(h->state);
-    if (gsp_coop_event_is_poke(e))
-        coop_state_touch(h->state, false, now);
-    else if (gsp_coop_event_is_menu_open(e))
-        coop_state_menu(h->state, true);
+    if (gsp_coop_event_is_poke(e)) {
+        if (!h->pointer_ok)
+            coop_state_touch(h->state, false, now);
+    } else if (gsp_coop_event_is_menu_open(e)) {
+        /* A long press on the figure picks it up instead. */
+        if (!coop_state_pointer_claimed(h->state))
+            coop_state_menu(h->state, true);
+    }
     else if (gsp_coop_event_is_menu_close(e))
         coop_state_menu(h->state, false);
     else if (gsp_coop_event_is_petting(e))
@@ -150,6 +204,8 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
     h->gsp = gsp;
     h->cfg = *cfg;
     h->layout_edge=-1;
+    /* The first draw is a full repaint; assume the whole canvas until then. */
+    h->painted = (coop_render_rect_t){0, 0, 480, 480};
     coop_state_config_t state_cfg = {.event = state_event, .ctx = h, .seed = 1};
     if (coop_state_create(&state_cfg, &h->state) != ESP_OK ||
         coop_render_create(&h->render) != ESP_OK ||
@@ -158,9 +214,12 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
         *out = NULL;
         return ESP_ERR_INVALID_ARG;
     }
+    coop_state_figure(h->state, cfg->atlas_size >= 4 && cfg->atlas[3] == '2');
     esp_gsp_err_t err = esp_gsp_canvas_set_draw_cb(gsp, GSP_COOP_BIND_CANVAS, draw, h);
     if (err == ESP_GSP_OK)
         err = esp_gsp_on_event(gsp, event, h);
+    if (err == ESP_GSP_OK)
+        h->pointer_ok = esp_gsp_set_pointer_observer(gsp, pointer, h) == ESP_GSP_OK;
     if (err == ESP_GSP_OK)
         h->timer = esp_gsp_timer_create(gsp, 33, tick, h);
     if (err != ESP_GSP_OK || !h->timer) {
@@ -178,6 +237,7 @@ void coop_ui_delete(coop_ui_handle_t h)
         esp_gsp_timer_delete(h->gsp, h->timer);
     if (h->gsp) {
         esp_gsp_on_event(h->gsp, NULL, NULL);
+        esp_gsp_set_pointer_observer(h->gsp, NULL, NULL);
         esp_gsp_canvas_stop(h->gsp, GSP_COOP_BIND_CANVAS);
         esp_gsp_flush(h->gsp, 1000);
     }
@@ -189,9 +249,20 @@ coop_state_handle_t coop_ui_state(coop_ui_handle_t h)
 {
     return h ? h->state : NULL;
 }
+void coop_ui_set_screen_rotation(coop_ui_handle_t h, int degrees)
+{
+    if (!h)
+        return;
+    coop_render_set_screen_rotation(h->render, degrees);
+    atomic_store(&h->screen_rotation, degrees);
+}
 bool coop_ui_atlas(coop_ui_handle_t h, const uint8_t *bytes, size_t size)
 {
-    return h && coop_render_atlas(h->render, bytes, size);
+    if (!h || !coop_render_atlas(h->render, bytes, size))
+        return false;
+    /* COO2 atlases carry the DeepSeek whale; COO1 is Coo. */
+    coop_state_figure(h->state, bytes[3] == '2');
+    return true;
 }
 void coop_ui_question(coop_ui_handle_t h, const char *id, const char *question,
                       const char *const options[], int count, bool confirmation)

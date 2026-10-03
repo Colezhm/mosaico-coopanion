@@ -10,6 +10,10 @@ directories:
 # the Core child runs TypeScript sources through tsx and spawns esbuild, koffi, sherpa-onnx and pnpm: keep files unpacked
 asar: false
 npmRebuild: false
+# Chromium's own UI strings (context menus, form validation) only in the app's languages: about
+# 47 MB less installed on macOS. Names match files exactly: underscores for macOS .lproj, hyphens for
+# Windows/Linux .pak; en-US.pak is Chromium's required fallback there.
+electronLanguages: [en, en-US, zh_CN, zh-CN, zh_TW, zh-TW]
 nodeGypRebuild: false
 files:
   - "**/*"

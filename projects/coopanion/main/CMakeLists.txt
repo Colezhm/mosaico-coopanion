@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "main.c" "board_display.c" "coop_state.c" "coop_hud.c" "coop_render.c" "coop_animation.c" "coop_ui.c" "coop_subtitle.c"
+    SRCS "main.c" "board_display.c" "coop_state.c" "coop_body.c" "coop_fx.c" "coop_touch.c" "coop_carry.c" "coop_bubbles.c" "coop_hud.c" "coop_render.c" "coop_animation.c" "coop_ui.c" "coop_subtitle.c"
         "coop_board.c" "coop_link.c" "coop_audio.c" "coop_assets.c" "coop_script.c" "coop_receipt.c"
     INCLUDE_DIRS "."
     EMBED_FILES "coo-atlas.bin"
