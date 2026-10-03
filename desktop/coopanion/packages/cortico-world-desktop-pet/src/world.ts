@@ -659,6 +659,11 @@ export class DesktopPetWorld implements World {
       case 'throw': text = `${u}把你拎起来甩了出去${t.crashed ? ',你重重落地,摔晕了一会儿' : ''}`; break;
       case 'drop': text = `${u}把你拎起来,放到了屏幕横向 ${t.x !== null && this.screen ? pct(t.x / this.screen.w) : '某'} 处${t.crashed ? ',你摔晕了一会儿' : ''}`; break;
       case 'crash': text = '你重重落地,摔晕了一会儿'; break;
+      // Mosaico board only: its touch screen, IMU and motor allow these.
+      case 'tickle': text = t.count > 1 ? `${u}在板子上挠了你好几下痒痒` : `${u}在板子上挠你痒痒`; break;
+      case 'hug': text = `${u}把板子捧在手里,安安静静地抱着你`; break;
+      case 'putdown': text = `${u}把你放回了桌上`; break;
+      case 'bubble': text = t.count > 1 ? `${u}戳破了你吐的 ${t.count} 个泡泡` : `${u}戳破了你吐的泡泡`; break;
       default: return;
     }
     void this.push('desktop-pet.touch', 'desktop-pet.touch', `[互动] ${text}`, this.cfg.touch.trigger);

@@ -197,6 +197,27 @@ int main(int argc, char **argv)
     imu(&b, &now, 0, 0, 1, 0, 0, 0, 1500);
     coop_state_touch(b.state, true, now);
     run(&b, &now, 1800);
+    /* Board-only: bubbles, then a carry and a fling into the wall. */
+    coop_state_action(b.state, "bubbles", now);
+    run(&b, &now, 1500);
+    coop_state_pointer(b.state, 240, 330, true, COOP_PART_BODY, now);
+    for (int i = 0; i < 20; i++) {
+        now += 20;
+        coop_state_pointer(b.state, 240, 330, true, COOP_PART_BODY, now);
+        if (i % 2)
+            frame(&b, now);
+    }
+    for (int i = 1; i <= 12; i++) {
+        now += 20;
+        coop_state_pointer(b.state, 240 - 6 * i, 330 - 16 * i, true, COOP_PART_NONE, now);
+        frame(&b, now);
+    }
+    for (int i = 1; i <= 4; i++) {
+        now += 16;
+        coop_state_pointer(b.state, 168 + 50 * i, 140, true, COOP_PART_NONE, now);
+    }
+    coop_state_pointer(b.state, 368, 140, false, COOP_PART_NONE, now + 8);
+    run(&b, &now, 4000);
     coop_state_menu(b.state, true);
     run(&b, &now, 300);
     coop_state_presence(b.state, false, 2, false);

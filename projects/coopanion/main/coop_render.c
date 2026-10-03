@@ -46,7 +46,7 @@ struct coop_render_t {
     bool eyes;
     float eye_y, eye_wide;
     /* Emote effect of the current frame; render-task only, rebuilt by plan(). */
-    coop_fx_frame_t fx;
+    coop_fx_frame_t fx, bubble_fx;
     /* Written by the task that rotates the panel while rendering is paused. */
     atomic_int screen_rotation;
 };
@@ -151,6 +151,8 @@ bool coop_render_atlas(coop_render_handle_t h, const uint8_t *p, size_t n)
 }
 static int pose_for(const coop_snapshot_t *s)
 {
+    if (s->motion == COOP_CARRY || s->motion == COOP_THROWN)
+        return 11; /* dangling: the dragged face */
     /* Spiral eyes are drawn on the plain ring-eye face. */
     if (s->eye_mode == 1 && s->motion != COOP_WALK && s->motion != COOP_RUN && s->motion != COOP_SIT)
         return 0;
@@ -196,7 +198,7 @@ static unsigned clip_for(const coop_snapshot_t *s)
     case COOP_STUMBLE:return 18;case COOP_FALL:return 19;case COOP_GETUP:return 20;
     case COOP_CRY:return 21;case COOP_SULK:return 22;case COOP_LISTEN:return 23;
     case COOP_THINK:return 12;case COOP_DEPART:return 25;case COOP_ARRIVE:return 26;
-    case COOP_SETTLE:return 27;default:break;
+    case COOP_SETTLE:return 27;case COOP_CARRY:case COOP_THROWN:return 11;default:break;
     }
     static const char *const faces[]={"neutral","happy","wink","love","shy","surprised","angry","sad","sleepy","sleep","dizzy","dragged","thinking","sit"};
     static const char *const extra[]={"worried","furious","smug","pleading","curious","excited","crying","pout","flustered","delighted","cheeky"};
@@ -350,7 +352,7 @@ typedef struct {
     float c, sn, scale, sx, sy, oc, os, cx, cy, lying_shift, glow, portal_cx;
     float lift, shadow_rx;
     int portal_dy;
-    box_t shadow_box, light_box, figure_box, fx_box;
+    box_t shadow_box, light_box, figure_box, fx_box, bubble_box;
     /* Procedural eyes, atlas coordinates. */
     bool eyes;
     uint8_t eye_mode;
@@ -528,6 +530,13 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
         }
     }
 
+    f->bubble_box = EMPTY_BOX;
+    h->bubble_fx.count = 0;
+    if (coop_bubbles_active(&s->bubbles)) {
+        coop_fx_bubbles(&h->bubble_fx, &s->bubbles, f->whale);
+        if (h->bubble_fx.count)
+            f->bubble_box = (box_t){h->bubble_fx.x0, h->bubble_fx.y0, h->bubble_fx.x1, h->bubble_fx.y1};
+    }
     /* Emote effects float around the top of the head, upright in the
      * character frame whatever the body's lean. */
     f->fx_box = EMPTY_BOX;
@@ -572,7 +581,7 @@ void coop_render_bounds(coop_render_handle_t h, const coop_snapshot_t *s, coop_r
         return;
     frame_t f;
     plan(h, s, &f);
-    const box_t *boxes[] = {&f.shadow_box, &f.light_box, &f.figure_box, &f.fx_box};
+    const box_t *boxes[] = {&f.shadow_box, &f.light_box, &f.figure_box, &f.fx_box, &f.bubble_box};
     box_t screen = EMPTY_BOX;
     for (unsigned i = 0; i < sizeof(boxes) / sizeof(boxes[0]); i++) {
         const box_t *b = boxes[i];
@@ -596,6 +605,43 @@ void coop_render_bounds(coop_render_handle_t h, const coop_snapshot_t *s, coop_r
                                 y2 > 480 ? 480 : y2};
     if (out->x2 <= out->x1 || out->y2 <= out->y1)
         *out = (coop_render_rect_t){0};
+}
+
+/* Head, body and feet as fractions of the pose's opaque height. */
+#define HEAD_SHARE .45f
+#define BODY_SHARE .8f
+#define TOUCH_SLACK_ATLAS 6
+coop_part_t coop_render_locate(coop_render_handle_t h, const coop_snapshot_t *s, int x, int y, float *lx,
+                               float *ly)
+{
+    if (!h || !s)
+        return COOP_PART_NONE;
+    frame_t f;
+    plan(h, s, &f);
+    float px_l = 240 + (x - 240) * f.oc + (y - 240) * f.os, py_l = 240 - (x - 240) * f.os + (y - 240) * f.oc;
+    if (lx)
+        *lx = px_l;
+    if (ly)
+        *ly = py_l;
+    if (!f.figure || h->opaque_y1 < h->opaque_y0)
+        return COOP_PART_NONE;
+    float dx = px_l - f.cx, dy = py_l - f.cy;
+    int ax = (int)floorf((dx * f.c + dy * f.sn) / (f.scale * f.sx) + 96);
+    int ay = (int)floorf((-dx * f.sn + dy * f.c) / (f.scale * f.sy) + 182);
+    /* Any opaque texel within the slack counts: fingertips are coarse. */
+    bool hit = false;
+    for (int oy = -TOUCH_SLACK_ATLAS; oy <= TOUCH_SLACK_ATLAS && !hit; oy += 3)
+        for (int ox = -TOUCH_SLACK_ATLAS; ox <= TOUCH_SLACK_ATLAS && !hit; ox += 3)
+            hit = alpha_at(h, ax + ox, ay + oy) > 0;
+    /* Coo's ring has a hollow middle; inside it still counts as his face. */
+    if (!hit && !f.whale) {
+        float fx = ax - COO_RING_X, fy = ay - COO_RING_Y;
+        hit = fx * fx + fy * fy < COO_FACE_R * COO_FACE_R;
+    }
+    if (!hit)
+        return COOP_PART_NONE;
+    float share = (float)(ay - h->opaque_y0) / (float)(h->opaque_y1 - h->opaque_y0 + 1);
+    return share < HEAD_SHARE ? COOP_PART_HEAD : share < BODY_SHARE ? COOP_PART_BODY : COOP_PART_FEET;
 }
 
 void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t *dst,
@@ -629,6 +675,8 @@ void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t
                       py = (-dx * f.sn + dy * f.c) / (f.scale * f.sy) + 182;
                 color = figure_pixel(h, s, &f, color, px, py, f.whale);
             }
+            if (inside(&f.bubble_box, lx, ly))
+                color = coop_fx_pixel(&h->bubble_fx, lx, ly, color);
             if (inside(&f.fx_box, lx, ly))
                 color = coop_fx_pixel(&h->fx, lx, ly, color);
             if (s->listening && y >= METER_Y0 && y < METER_Y1 && x >= METER_X0 && x < METER_X1) {

@@ -33,6 +33,9 @@ struct coop_ui_t {
      * task notices a change and relays out and repaints everything. */
     atomic_int screen_rotation;
     int seen_rotation;
+    /* Touch samples reach the figure directly (pointer observer); the scene's
+     * own canvas tap is then redundant. */
+    bool pointer_ok;
 };
 static void state_event(void *ctx, const coop_event_t *e)
 {
@@ -56,6 +59,23 @@ static void draw(const esp_gsp_canvas_surface_t *s, void *ctx)
     coop_render_rect_t drawn;
     coop_render_bounds(h->render, v, &drawn);
     h->painted = coop_render_rect_union(h->painted, drawn);
+}
+/* Every touch sample, before GSP routes gestures: the figure's own gestures
+ * (pokes by body part, strokes, tickles, carrying, bubbles). */
+static void pointer(esp_gsp_handle_t gsp, int32_t x, int32_t y, bool pressed, void *ctx)
+{
+    (void)gsp;
+    coop_ui_handle_t h = ctx;
+    const coop_snapshot_t *s = coop_state_get(h->state);
+    uint64_t now = h->cfg.now(h->cfg.ctx);
+    float lx = 0, ly = 0;
+    /* Buttons drawn over the canvas (menu, answers) own their touches. */
+    if (s->menu || h->answers > 0) {
+        coop_state_pointer(h->state, lx, ly, false, COOP_PART_NONE, now);
+        return;
+    }
+    coop_part_t part = coop_render_locate(h->render, s, x, y, &lx, &ly);
+    coop_state_pointer(h->state, lx, ly, pressed, part, now);
 }
 static void tick(esp_gsp_handle_t gsp, void *ctx)
 {
@@ -142,10 +162,14 @@ static void event(esp_gsp_handle_t gsp, const esp_gsp_event_t *e, void *ctx)
     coop_ui_handle_t h = ctx;
     uint64_t now = h->cfg.now(h->cfg.ctx);
     const coop_snapshot_t *s = coop_state_get(h->state);
-    if (gsp_coop_event_is_poke(e))
-        coop_state_touch(h->state, false, now);
-    else if (gsp_coop_event_is_menu_open(e))
-        coop_state_menu(h->state, true);
+    if (gsp_coop_event_is_poke(e)) {
+        if (!h->pointer_ok)
+            coop_state_touch(h->state, false, now);
+    } else if (gsp_coop_event_is_menu_open(e)) {
+        /* A long press on the figure picks it up instead. */
+        if (!coop_state_pointer_claimed(h->state))
+            coop_state_menu(h->state, true);
+    }
     else if (gsp_coop_event_is_menu_close(e))
         coop_state_menu(h->state, false);
     else if (gsp_coop_event_is_petting(e))
@@ -195,6 +219,8 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
     if (err == ESP_GSP_OK)
         err = esp_gsp_on_event(gsp, event, h);
     if (err == ESP_GSP_OK)
+        h->pointer_ok = esp_gsp_set_pointer_observer(gsp, pointer, h) == ESP_GSP_OK;
+    if (err == ESP_GSP_OK)
         h->timer = esp_gsp_timer_create(gsp, 33, tick, h);
     if (err != ESP_GSP_OK || !h->timer) {
         coop_ui_delete(h);
@@ -211,6 +237,7 @@ void coop_ui_delete(coop_ui_handle_t h)
         esp_gsp_timer_delete(h->gsp, h->timer);
     if (h->gsp) {
         esp_gsp_on_event(h->gsp, NULL, NULL);
+        esp_gsp_set_pointer_observer(h->gsp, NULL, NULL);
         esp_gsp_canvas_stop(h->gsp, GSP_COOP_BIND_CANVAS);
         esp_gsp_flush(h->gsp, 1000);
     }

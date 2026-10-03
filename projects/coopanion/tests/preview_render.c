@@ -10,6 +10,7 @@
 #include "coop_render.h"
 #include "coop_state.h"
 #include "coop_subtitle.h"
+#include "coop_touch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -178,6 +179,33 @@ int main(int argc, char **argv)
     } else if (!strcmp(scenario, "petting")) {
         coop_state_touch(s, true, now);
         run(s, &now, now + 500);
+    } else if (!strcmp(scenario, "walk-left")) {
+        coop_state_walk(s, .1f, false, now);
+        run(s, &now, now + 700);
+    } else if (!strcmp(scenario, "bubbles")) {
+        coop_state_action(s, "bubbles", now);
+        run(s, &now, now + 1200);
+    } else if (!strcmp(scenario, "carry")) {
+        coop_state_pointer(s, 240, 330, true, COOP_PART_BODY, now);
+        for (int i = 0; i < 20; i++) {
+            now += 20;
+            coop_state_pointer(s, 240, 330, true, COOP_PART_BODY, now);
+        }
+        for (int i = 1; i <= 10; i++) {
+            now += 20;
+            coop_state_pointer(s, 240 + 8 * i, 330 - 16 * i, true, COOP_PART_NONE, now);
+            coop_state_tick(s, now);
+        }
+    } else if (!strcmp(scenario, "petted")) {
+        for (int i = 0; i < 3; i++) {
+            coop_state_pointer(s, 200, 260, true, COOP_PART_HEAD, now);
+            for (float x = 200; x <= 270; x += 5) {
+                now += 16;
+                coop_state_pointer(s, x, 260, true, COOP_PART_HEAD, now);
+            }
+            coop_state_pointer(s, 270, 260, false, COOP_PART_HEAD, now);
+            run(s, &now, now + 120);
+        }
     } else if (!strcmp(scenario, "look")) {
         hold(s, &now, .25f, 0, .97f, 0, 400);
     } else if (!strcmp(scenario, "away") || !strcmp(scenario, "away-offline")) {

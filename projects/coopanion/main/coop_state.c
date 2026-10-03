@@ -7,6 +7,8 @@
 #include "coop_subtitle.h"
 #include "coop_body.h"
 #include "coop_fx.h"
+#include "coop_touch.h"
+#include "coop_carry.h"
 
 /* A handheld board jitters around 0.1 g; below this the spring layer is enough. */
 #define SWAY_G .2f
@@ -49,8 +51,16 @@
 static const float WALK_PX_S[2] = {108, 125}, RUN_PX_S[2] = {247, 265};
 #define GROUND_SPAN_PX 340.f /* normalized x 0..1 across the ground */
 /* Idle choices, as on the desktop: weights for walk, run, look, jump, sit, face, wait. */
-enum { IDLE_WALK, IDLE_RUN, IDLE_LOOK, IDLE_JUMP, IDLE_SIT, IDLE_FACE, IDLE_WAIT, IDLE_CHOICES };
-static const uint8_t IDLE_WEIGHT[IDLE_CHOICES] = {28, 12, 14, 8, 16, 12, 10};
+enum { IDLE_WALK, IDLE_RUN, IDLE_LOOK, IDLE_JUMP, IDLE_SIT, IDLE_FACE, IDLE_BUBBLES, IDLE_WAIT, IDLE_CHOICES };
+static const uint8_t IDLE_WEIGHT[IDLE_CHOICES] = {28, 12, 14, 8, 16, 12, 12, 10};
+/* Figure heights on the board, px: Coo, whale. */
+static const float BODY_PX[2] = {207, 240};
+#define GROUND_PX 430.f
+#define GROUND_LEFT_PX 70.f
+/* Flinging: a landing harder than this is rough handling. */
+#define ROUGH_LANDING_PX_S 900.f
+#define HUG_HEARTBEAT_MS 1600
+#define STROKE_WINDOW_MS 4000
 /* System captions: owned by connection/presence state, replaced as soon as that
  * state changes so the caption never contradicts the status line. */
 #define TEXT_OFFLINE_HERE "电脑未连接，先陪你玩一会儿"
@@ -86,6 +96,12 @@ struct coop_state_t {
     float walk_speed; /* px/s */
     uint64_t idle_since, sit_until, look_flip_at;
     uint8_t last_idle;
+    /* Board-only interactions: touch gestures, carrying, hugs and bubbles. */
+    coop_touch_t touch;
+    coop_carry_t carry;
+    bool swallow_press, hugging, hug_spent;
+    unsigned strokes, popped, tickles;
+    uint64_t stroke_at, popped_at, heartbeat_at, petting_sent_at;
 };
 bool coop_state_animation_busy(coop_state_handle_t h)
 {
@@ -94,7 +110,7 @@ bool coop_state_animation_busy(coop_state_handle_t h)
     case COOP_WALK: case COOP_RUN: case COOP_JUMP: case COOP_SWAY:
     case COOP_STUMBLE: case COOP_FALL: case COOP_GETUP: case COOP_CRY:
     case COOP_SULK: case COOP_SPEAK: case COOP_SETTLE:
-    case COOP_ARRIVE: case COOP_DEPART: return true;
+    case COOP_ARRIVE: case COOP_DEPART: case COOP_CARRY: case COOP_THROWN: return true;
     default: return false;
     }
 }
@@ -350,6 +366,7 @@ static void fall(coop_state_handle_t h)
 static void react(coop_state_handle_t h, const char *face, uint32_t ms);
 static void show_fx(coop_state_handle_t h, coop_fx_kind_t fx, uint32_t ms);
 static void add_stress(coop_state_handle_t h, float amount);
+static void end_hug(coop_state_handle_t h);
 static void settle_edge(coop_state_handle_t h)
 {
     cancel_voice(h);
@@ -462,6 +479,17 @@ static void body_events(coop_state_handle_t h, unsigned events)
     coop_body_t *b = &h->body;
     if (events & (COOP_BODY_TOSS | COOP_BODY_SHAKE | COOP_BODY_TAP | COOP_BODY_SPUN | COOP_BODY_FACE_UP))
         wake(h);
+    if (events & COOP_BODY_PUT_DOWN && h->hugging) {
+        end_hug(h);
+        react(h, "surprised", 800);
+        show_fx(h, COOP_FX_QUESTION, 900);
+        phys_caption(h, "放下我啦？");
+        emit(h, "touch", "putdown");
+    }
+    if (events & (COOP_BODY_TOSS | COOP_BODY_SHAKE | COOP_BODY_SPUN | COOP_BODY_FACE_DOWN) && h->hugging) {
+        end_hug(h);
+        h->hug_spent = true; /* no new hug until he is put down or picked up afresh */
+    }
     if (events & COOP_BODY_FACE_DOWN) {
         h->face_sleep = true;
         cancel_voice(h);
@@ -635,6 +663,215 @@ void coop_state_imu(coop_state_handle_t h, float ax, float ay, float az, float g
                (h->view.motion == COOP_IDLE || h->view.motion == COOP_SIT || h->view.motion == COOP_SLEEP))
         motion(h, COOP_SWAY);
 }
+/* ---------- board-only interactions ---------- */
+
+static void haptic(coop_state_handle_t h, const char *pattern)
+{
+    emit(h, "haptic", pattern);
+}
+static float feet_x(coop_state_handle_t h)
+{
+    return GROUND_LEFT_PX + h->view.x * GROUND_SPAN_PX;
+}
+/* Unit gravity in the character frame: mostly down, sideways on a slope. */
+static void gravity_dir(coop_state_handle_t h, float *gx, float *gy)
+{
+    float s = clampf(h->body.slope, -1, 1);
+    *gx = s;
+    *gy = sqrtf(fmaxf(0, 1 - s * s));
+}
+static void blow_bubbles(coop_state_handle_t h)
+{
+    float height = BODY_PX[h->whale];
+    float x = feet_x(h) + h->view.facing * height * .22f;
+    float y = GROUND_PX + h->view.y - h->view.air - height * .55f;
+    coop_bubbles_blow(&h->view.bubbles, x, y, h->view.facing, 3 + random_next(h) % 3, &h->seed);
+    react(h, h->whale ? "happy" : "wink", 1400);
+}
+static void apply_carry(coop_state_handle_t h)
+{
+    h->view.x = (h->carry.feet_x - GROUND_LEFT_PX) / GROUND_SPAN_PX;
+    h->view.y = h->carry.feet_y - GROUND_PX;
+    h->view.angle = h->carry.angle;
+}
+static void end_hug(coop_state_handle_t h)
+{
+    h->hugging = false;
+    if (h->reacting)
+        h->react_until = h->now;
+}
+static void landed(coop_state_handle_t h)
+{
+    float peak = h->carry.peak;
+    motion(h, COOP_IDLE);
+    h->last_motion = h->now;
+    haptic(h, "bump");
+    coop_body_kick(&h->body, 0, fminf(peak * .25f, 320));
+    if (peak < ROUGH_LANDING_PX_S) {
+        react(h, "happy", 1200);
+        emit(h, "touch", "drop");
+        return;
+    }
+    add_stress(h, .05f + .1f * clampf((peak - ROUGH_LANDING_PX_S) / 1500, 0, 1));
+    aftermath(h, "飞~好好玩！", COOP_FX_SPARKLE, "转、转晕了……", "别再甩我啦……");
+    emit(h, "touch", "thrown");
+}
+static void poke(coop_state_handle_t h, coop_part_t part)
+{
+    add_stress(h, .01f);
+    emit(h, "touch", "poke");
+    switch (part) {
+    case COOP_PART_HEAD:
+        coop_body_look(&h->body, 0, -1, 900, h->now);
+        react(h, "surprised", 600);
+        show_fx(h, COOP_FX_QUESTION, 900);
+        haptic(h, "tick");
+        break;
+    case COOP_PART_FEET:
+        if (!coop_state_animation_busy(h))
+            motion(h, COOP_JUMP);
+        react(h, "surprised", 500);
+        haptic(h, "double");
+        break;
+    default:
+        react(h, "happy", 1000);
+        show_fx(h, COOP_FX_NOTES, 900);
+        haptic(h, "giggle");
+        if (!coop_state_animation_busy(h))
+            motion(h, COOP_SWAY);
+        break;
+    }
+}
+static void stroke(coop_state_handle_t h)
+{
+    h->strokes = h->now - h->stroke_at < STROKE_WINDOW_MS ? h->strokes + 1 : 1;
+    h->stroke_at = h->now;
+    h->stress = fmaxf(0, h->stress - .06f);
+    haptic(h, "purr");
+    if (h->strokes >= 3) {
+        react(h, "love", 2500);
+        show_fx(h, COOP_FX_HEARTS, 1600);
+        phys_caption(h, "好舒服……再摸摸");
+    } else
+        react(h, "happy", 1600);
+    if (h->now - h->petting_sent_at > 3000) {
+        h->petting_sent_at = h->now;
+        emit(h, "touch", "petting");
+    }
+}
+static void tickle(coop_state_handle_t h)
+{
+    add_stress(h, .04f);
+    emit(h, "touch", "tickle");
+    if (tier(h) < TIER_AGGRIEVED_) {
+        react(h, "delighted", 1400);
+        show_fx(h, COOP_FX_NOTES, 1200);
+        haptic(h, "giggle");
+        if (!coop_state_animation_busy(h))
+            motion(h, COOP_SWAY);
+        phys_caption(h, "哈哈哈，好痒！");
+    } else {
+        react(h, "flustered", 1500);
+        show_fx(h, COOP_FX_SWEAT, 1200);
+        phys_caption(h, "别、别挠啦哈哈……");
+    }
+}
+static void popped(coop_state_handle_t h)
+{
+    h->popped = h->now - h->popped_at < 3000 ? h->popped + 1 : 1;
+    h->popped_at = h->now;
+    haptic(h, "tick");
+    emit(h, "touch", "bubble");
+    if (h->popped == 3) {
+        react(h, "delighted", 1200);
+        show_fx(h, COOP_FX_SPARKLE, 1000);
+    }
+}
+
+void coop_state_pointer(coop_state_handle_t h, float x, float y, bool pressed, int part, uint64_t now)
+{
+    if (!h)
+        return;
+    h->now = now;
+    if (!h->view.resident || h->view.transferring || !h->view.visible) {
+        coop_touch_reset(&h->touch);
+        h->swallow_press = false;
+        return;
+    }
+    /* A press on a bubble pops it and is not a gesture on the figure. */
+    if (pressed && !h->touch.down && !h->swallow_press && coop_bubbles_pop_at(&h->view.bubbles, x, y) >= 0) {
+        h->swallow_press = true;
+        popped(h);
+        return;
+    }
+    if (h->swallow_press) {
+        if (!pressed)
+            h->swallow_press = false;
+        return;
+    }
+    coop_touch_event_t e = coop_touch_sample(&h->touch, x, y, pressed, (coop_part_t)part, now);
+    if (e.kind == COOP_TOUCH_NONE)
+        return;
+    h->view.interacted_at = now;
+    wake(h);
+    bool carried = h->view.motion == COOP_CARRY || h->view.motion == COOP_THROWN;
+    switch (e.kind) {
+    case COOP_TOUCH_POKE:
+        if (!carried)
+            poke(h, e.part);
+        break;
+    case COOP_TOUCH_STROKE:
+        if (!carried)
+            stroke(h);
+        break;
+    case COOP_TOUCH_TICKLE:
+        if (!carried)
+            tickle(h);
+        break;
+    case COOP_TOUCH_GRAB:
+        if (h->view.motion == COOP_DEPART || h->view.motion == COOP_ARRIVE || h->view.motion == COOP_SETTLE ||
+            h->view.motion == COOP_THROWN)
+            break;
+        cancel_voice(h);
+        end_hug(h);
+        coop_carry_grab(&h->carry, feet_x(h), GROUND_PX + h->view.y - h->view.air, e.x, e.y, BODY_PX[h->whale]);
+        motion(h, COOP_CARRY);
+        apply_carry(h);
+        haptic(h, "tick");
+        break;
+    case COOP_TOUCH_DRAG:
+        if (h->view.motion == COOP_CARRY) {
+            coop_carry_drag(&h->carry, e.x, e.y, e.vx);
+            apply_carry(h);
+        }
+        break;
+    case COOP_TOUCH_RELEASE:
+        if (h->view.motion == COOP_CARRY) {
+            coop_carry_release(&h->carry, e.vx, e.vy);
+            motion(h, COOP_THROWN);
+            apply_carry(h);
+        }
+        break;
+    default:
+        break;
+    }
+}
+bool coop_state_pointer_claimed(coop_state_handle_t h)
+{
+    return h && (coop_touch_claimed(&h->touch) || h->swallow_press);
+}
+void coop_state_tremor(coop_state_handle_t h, float *dps, float *g, bool *held)
+{
+    if (!h)
+        return;
+    if (dps)
+        *dps = h->body.tremor_dps;
+    if (g)
+        *g = h->body.tremor_g;
+    if (held)
+        *held = h->body.held;
+}
+
 /* Per-frame physical layer: mood recovery, transient faces and effects,
  * blinking, drowsiness, sliding downhill and the body's secondary motion. */
 static void physical_tick(coop_state_handle_t h, float dt, uint64_t now)
@@ -679,6 +916,42 @@ static void physical_tick(coop_state_handle_t h, float dt, uint64_t now)
              : since < BLINK_MS ? 1 - (since - BLINK_MS / 2) / (BLINK_MS / 2.f) : 0;
     v->eye_wide = h->body.airborne ? 1.25f : 1;
 
+    if (!h->body.held)
+        h->hug_spent = false;
+    if (h->body.held && !h->hugging && !h->hug_spent && v->resident && !v->transferring &&
+        !coop_state_animation_busy(h)) {
+        /* Held quietly in someone's hands: snuggle in, heart beating. */
+        h->hugging = true;
+        react(h, "love", 600000);
+        show_fx(h, COOP_FX_HEARTS, 2000);
+        phys_caption(h, "抱着好暖和……");
+        haptic(h, "heartbeat");
+        h->heartbeat_at = now;
+        emit(h, "touch", "hug");
+    }
+    if (h->hugging) {
+        if (!h->body.held)
+            end_hug(h); /* rough handling ended it; that has its own reaction */
+        else if (now - h->heartbeat_at >= HUG_HEARTBEAT_MS) {
+            h->heartbeat_at = now;
+            haptic(h, "heartbeat");
+            if (v->fx != COOP_FX_HEARTS)
+                show_fx(h, COOP_FX_HEARTS, 2000);
+        }
+    }
+    if (coop_bubbles_active(&v->bubbles)) {
+        float gx, gy;
+        gravity_dir(h, &gx, &gy);
+        coop_bubbles_step(&v->bubbles, dt, gx, gy);
+        /* Watch the nearest bubble. */
+        float eye_y = GROUND_PX + v->y - BODY_PX[h->whale] * .6f;
+        int near = coop_bubbles_nearest(&v->bubbles, feet_x(h), eye_y);
+        if (near >= 0 && v->motion != COOP_SLEEP && v->motion != COOP_CARRY && v->motion != COOP_THROWN) {
+            float dx = v->bubbles.b[near].x - feet_x(h), dy = v->bubbles.b[near].y - eye_y, d = hypotf(dx, dy);
+            if (d > 1)
+                coop_body_look(&h->body, dx / d, dy / d, 200, now);
+        }
+    }
     if (h->look_flip_at && now >= h->look_flip_at) {
         h->look_flip_at = 0;
         h->view.facing = -h->view.facing;
@@ -690,7 +963,8 @@ static void physical_tick(coop_state_handle_t h, float dt, uint64_t now)
     /* Drowsy, then dozing, when nothing has happened for a while. */
     if (!h->still_since)
         h->still_since = now;
-    uint64_t quiet = now - (h->still_since > v->interacted_at ? h->still_since : v->interacted_at);
+    uint64_t latest = h->still_since > v->interacted_at ? h->still_since : v->interacted_at;
+    uint64_t quiet = now > latest ? now - latest : 0; /* input stamped after this tick is "just now" */
     if (v->resident && !v->transferring && !h->face_sleep && !v->listening && v->motion == COOP_IDLE) {
         if (quiet > DOZE_MS && !h->dozing) {
             h->dozing = true;
@@ -757,6 +1031,9 @@ static void idle_choice(coop_state_handle_t h, uint64_t now)
         break;
     case IDLE_JUMP:
         motion(h, COOP_JUMP);
+        break;
+    case IDLE_BUBBLES:
+        blow_bubbles(h);
         break;
     case IDLE_SIT:
         motion(h, COOP_SIT);
@@ -920,7 +1197,7 @@ void coop_state_tick(coop_state_handle_t h, uint64_t now)
             h->next_idle = now + 2500 + random_next(h) % 3500;
         }
         if (h->view.resident && !h->view.transferring && !h->pending_fall && !h->pending_depart &&
-            !h->view.listening && !h->reacting && now > h->next_idle) {
+            !h->view.listening && !h->reacting && !h->hugging && now > h->next_idle) {
             h->next_idle = now + 2500 + random_next(h) % 3500;
             if (h->view.battery < 15)
                 motion(h, COOP_SLEEP);
@@ -928,6 +1205,20 @@ void coop_state_tick(coop_state_handle_t h, uint64_t now)
                 idle_choice(h, now);
         }
         break;
+    case COOP_CARRY:
+    case COOP_THROWN: {
+        float gx, gy;
+        gravity_dir(h, &gx, &gy);
+        unsigned hits = coop_carry_step(&h->carry, dt, gx, gy);
+        apply_carry(h);
+        if (hits & (COOP_CARRY_WALL | COOP_CARRY_BOUNCE)) {
+            haptic(h, h->carry.impact > ROUGH_LANDING_PX_S ? "bump" : "tick");
+            coop_body_kick(&h->body, 0, fminf(h->carry.impact * .15f, 240));
+        }
+        if (hits & COOP_CARRY_LANDED)
+            landed(h);
+        break;
+    }
     case COOP_SIT:
         /* A sit he chose himself ends on its own; one asked for lasts. */
         if (h->sit_until && now >= h->sit_until)
@@ -1050,6 +1341,8 @@ void coop_state_action(coop_state_handle_t h, const char *a, uint64_t now)
         motion(h, COOP_SLEEP);
     else if (!strcmp(a, "stand"))
         motion(h, COOP_IDLE);
+    else if (!strcmp(a, "bubbles"))
+        blow_bubbles(h);
     else if (!strcmp(a, "sulk") || !strcmp(a, "turn"))
         motion(h, COOP_SULK);
     else if (!strcmp(a, "cry"))

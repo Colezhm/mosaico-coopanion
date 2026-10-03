@@ -7,7 +7,9 @@
  *
  * Shapes are signed-distance primitives with one-pixel antialiasing, built once
  * per frame in the character-local frame (screen pixels, +y down). */
+#include <stdbool.h>
 #include <stdint.h>
+#include "coop_bubbles.h"
 
 typedef enum {
     COOP_FX_NONE,
@@ -23,7 +25,7 @@ typedef enum {
     COOP_FX_COUNT
 } coop_fx_kind_t;
 
-#define COOP_FX_MAX_SHAPES 12
+#define COOP_FX_MAX_SHAPES 28
 
 typedef struct {
     uint8_t type;
@@ -43,5 +45,7 @@ typedef struct {
  *  head (@p head_x, @p head_y) and sized by @p size (the character's display scale). */
 void coop_fx_build(coop_fx_frame_t *frame, unsigned kind, float t, float head_x, float head_y,
                    float size);
+/** Builds the bubbles' shapes: soap-film mint for Coo, sea blue for the whale. */
+void coop_fx_bubbles(coop_fx_frame_t *frame, const coop_bubbles_t *bubbles, bool whale);
 /** Composites the effect over @p background at local point (@p x, @p y). */
 uint16_t coop_fx_pixel(const coop_fx_frame_t *frame, float x, float y, uint16_t background);

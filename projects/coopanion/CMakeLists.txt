@@ -13,5 +13,5 @@ list(APPEND EXTRA_COMPONENT_DIRS
     "${MOSAICO_UTILS_ROOT}/mosaico-tools/components/esp_mosaico_gsp_bundle"
     "${MOSAICO_UTILS_ROOT}/mosaico-tools/components/esp_mosaico_gsp_iris")
 include("${MOSAICO_UTILS_ROOT}/esp-mosaico-recovery/cmake/mosaico_idf_project.cmake")
-project(coopanion VERSION 1.3.1)
+project(coopanion VERSION 1.4.0)
 include("${MOSAICO_UTILS_ROOT}/mosaico-tools/cmake/system_update.cmake")

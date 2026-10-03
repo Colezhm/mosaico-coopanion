@@ -56,6 +56,12 @@ static void circle(coop_fx_frame_t *f, uint16_t color, float alpha, float x, flo
     if (s)
         s->p[0] = r;
 }
+static void ring(coop_fx_frame_t *f, uint16_t color, float alpha, float x, float y, float r, float th)
+{
+    coop_fx_shape_t *s = add(f, RING, color, alpha, x, y, r + th);
+    if (s)
+        s->p[0] = r, s->p[1] = th;
+}
 static void capsule(coop_fx_frame_t *f, uint16_t color, float alpha, float x0, float y0, float x1,
                     float y1, float r)
 {
@@ -195,6 +201,31 @@ static float appear(float t)
 static float pop(float t)
 {
     return 1 + .35f * expf(-t * 9) * sinf(t * 26);
+}
+
+void coop_fx_bubbles(coop_fx_frame_t *f, const coop_bubbles_t *bubbles, bool whale)
+{
+    memset(f, 0, sizeof(*f));
+    f->x0 = 1;
+    f->x1 = 0;
+    const uint16_t film = whale ? 0xaf3f /* #a8e4ff */ : 0x8f3a /* #8ee6d0 */;
+    for (unsigned i = 0; i < COOP_BUBBLES; i++) {
+        const coop_bubble_t *b = &bubbles->b[i];
+        if (b->state == COOP_BUBBLE_FLOAT) {
+            float a = clampf(b->age / .2f, 0, 1) * clampf((b->life - b->age) / .4f, 0, 1);
+            circle(f, film, .12f * a, b->x, b->y, b->r);
+            ring(f, film, .85f * a, b->x, b->y, b->r, 1.1f);
+            /* A glint toward the light. */
+            arc(f, WHITE, .9f * a, b->x, b->y, b->r * .62f, 1.1f, -PI * .85f, -PI * .55f);
+        } else if (b->state == COOP_BUBBLE_POP) {
+            float u = clampf(b->pop_t / .25f, 0, 1);
+            ring(f, film, .9f * (1 - u), b->x, b->y, b->r * (1 + .9f * u), 1.2f * (1 - u) + .4f);
+            for (int k = 0; k < 2; k++) {
+                float angle = b->seed + k * PI, d = b->r * (1 + 1.6f * u);
+                circle(f, WHITE, .8f * (1 - u), b->x + cosf(angle) * d, b->y + sinf(angle) * d, 1.6f);
+            }
+        }
+    }
 }
 
 void coop_fx_build(coop_fx_frame_t *f, unsigned kind, float t, float hx, float hy, float size)

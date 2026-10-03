@@ -50,6 +50,17 @@
 #define FACE_UP_Z -.3f
 #define FACE_DOWN_MS 700
 
+/* Held versus resting, from the tremor left after removing the gyro bias. */
+#define BIAS_TAU_S 2.f
+#define TREMOR_TAU_S .3f
+#define TABLE_DPS .35f
+#define TABLE_G .006f
+#define HAND_MAX_DPS 15.f
+#define HAND_MAX_G .08f
+#define HELD_MS 8000
+#define PUT_DOWN_MS 1000
+#define HAND_GAP_MS 500
+
 static float clampf(float x, float a, float b)
 {
     return fminf(b, fmaxf(a, x));
@@ -282,6 +293,48 @@ unsigned coop_body_sample(coop_body_t *b, const float a[3], const float g[3], co
         b->face_down = false;
         events |= COOP_BODY_FACE_UP;
     }
+
+    /* Tremor: deviation of the angular rate from its slow mean, and the
+     * linear acceleration's level, both smoothed over about half a second. */
+    float kb = 1 - expf(-dt / BIAS_TAU_S), kt = 1 - expf(-dt / TREMOR_TAU_S), dev = 0;
+    for (int i = 0; i < 3; i++) {
+        b->gyro_bias[i] += (g[i] - b->gyro_bias[i]) * kb;
+        dev += (g[i] - b->gyro_bias[i]) * (g[i] - b->gyro_bias[i]);
+    }
+    b->gyro_var += (dev - b->gyro_var) * kt;
+    b->accel_var += (linear * linear - b->accel_var) * kt;
+    b->tremor_dps = sqrtf(b->gyro_var);
+    b->tremor_g = sqrtf(b->accel_var);
+    bool table = b->tremor_dps < TABLE_DPS && b->tremor_g < TABLE_G;
+    bool hand = !table && b->tremor_dps < HAND_MAX_DPS && b->tremor_g < HAND_MAX_G && !b->shaking &&
+                !b->airborne && !b->face_down;
+    if (hand) {
+        b->unsteady_since = 0;
+        if (!b->hand_since)
+            b->hand_since = now;
+        if (!b->held && now - b->hand_since >= HELD_MS) {
+            b->held = true;
+            events |= COOP_BODY_HELD;
+        }
+    } else if (!table) {
+        /* Rough handling ends a hug without a "put down". */
+        if (!b->unsteady_since)
+            b->unsteady_since = now;
+        if (now - b->unsteady_since > HAND_GAP_MS) {
+            b->hand_since = 0;
+            b->held = false;
+        }
+    }
+    if (table) {
+        if (!b->table_since)
+            b->table_since = now;
+        b->hand_since = 0;
+        if (b->held && now - b->table_since >= PUT_DOWN_MS) {
+            b->held = false;
+            events |= COOP_BODY_PUT_DOWN;
+        }
+    } else
+        b->table_since = 0;
 
     float_air(b, dt);
     gaze(b, dt, now);

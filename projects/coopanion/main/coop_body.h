@@ -20,6 +20,8 @@ typedef enum {
     COOP_BODY_SPUN = 1 << 6,       /* turned around the screen normal far enough to get dizzy */
     COOP_BODY_FACE_DOWN = 1 << 7,  /* screen turned toward the table */
     COOP_BODY_FACE_UP = 1 << 8,    /* screen visible again */
+    COOP_BODY_HELD = 1 << 9,       /* held quietly in someone's hands for a while */
+    COOP_BODY_PUT_DOWN = 1 << 10,  /* set down on something still after being held */
 } coop_body_event_t;
 
 typedef struct {
@@ -39,6 +41,11 @@ typedef struct {
         face_since, look_until;
     float tap_peak, tap_peak_x;
     float reversals; /* decaying count of direction reversals: shaking oscillates, turning does not */
+    /* Hand tremor: a board in the hands trembles slightly (around 0.5-10 deg/s
+     * once the gyro's own bias is removed), one on a table shows only sensor noise. */
+    float gyro_bias[3], gyro_var, accel_var, tremor_dps, tremor_g;
+    uint64_t hand_since, table_since, unsteady_since;
+    bool held;
     int8_t last_sign;
     bool airborne, shaking, face_down, in_tap;
 } coop_body_t;

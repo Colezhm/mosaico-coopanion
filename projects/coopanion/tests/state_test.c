@@ -4,6 +4,7 @@
 #include "coop_script.h"
 #include "coop_subtitle.h"
 #include "coop_fx.h"
+#include "coop_touch.h"
 #include <math.h>
 #include <assert.h>
 #include <stdio.h>
@@ -11,7 +12,8 @@
 #include <string.h>
 
 typedef struct {
-    unsigned hidden, arrived, voice_start, voice_end, voice_cancel, summon, say, touch, vibrate;
+    unsigned hidden, arrived, voice_start, voice_end, voice_cancel, summon, say, touch, vibrate, haptic;
+    char last_haptic[16], last_touch[16];
     uint64_t hidden_at, arrived_at, glow_at;
 } events_t;
 static void event(void *ctx, const coop_event_t *e)
@@ -37,7 +39,14 @@ static void event(void *ctx, const coop_event_t *e)
         events->summon++;
     if (!strcmp(e->type, "say"))
         events->say++;
-    if (!strcmp(e->type, "touch")) events->touch++;
+    if (!strcmp(e->type, "touch")) {
+        events->touch++;
+        snprintf(events->last_touch, sizeof(events->last_touch), "%s", e->text ? e->text : "");
+    }
+    if (!strcmp(e->type, "haptic")) {
+        events->haptic++;
+        snprintf(events->last_haptic, sizeof(events->last_haptic), "%s", e->text ? e->text : "");
+    }
     if (!strcmp(e->type, "vibrate")) events->vibrate++;
 }
 static coop_state_handle_t create(events_t *e)
@@ -275,6 +284,166 @@ static void walk_test(void)
         now += 30;
     }
     assert(coop_state_get(h)->motion == COOP_SIT);
+    coop_state_delete(h);
+}
+/* ---------- board-only interactions ---------- */
+
+static coop_touch_kind_t swipe(coop_touch_t *t, float x0, float y, float x1, coop_part_t part, uint64_t *now, unsigned *count,
+                               coop_touch_kind_t want)
+{
+    coop_touch_kind_t last = COOP_TOUCH_NONE;
+    float step = x1 > x0 ? 5 : -5;
+    for (float x = x0; (step > 0 ? x <= x1 : x >= x1); x += step) {
+        coop_touch_event_t e = coop_touch_sample(t, x, y, true, part, *now);
+        *now += 16;
+        if (e.kind != COOP_TOUCH_NONE)
+            last = e.kind;
+        if (e.kind == want)
+            ++*count;
+    }
+    return last;
+}
+static void touch_test(void)
+{
+    coop_touch_t t;
+    coop_touch_reset(&t);
+    uint64_t now = 0;
+    unsigned n = 0;
+    /* A quick tap on the head is a poke there. */
+    coop_touch_sample(&t, 100, 100, true, COOP_PART_HEAD, now);
+    coop_touch_event_t e = coop_touch_sample(&t, 101, 100, false, COOP_PART_HEAD, now + 120);
+    assert(e.kind == COOP_TOUCH_POKE && e.part == COOP_PART_HEAD && !coop_touch_claimed(&t));
+    /* A sweep across the head is one stroke. */
+    now = 1000;
+    coop_touch_sample(&t, 200, 150, true, COOP_PART_HEAD, now);
+    swipe(&t, 200, 150, 270, COOP_PART_HEAD, &now, &n, COOP_TOUCH_STROKE);
+    coop_touch_sample(&t, 270, 150, false, COOP_PART_HEAD, now);
+    assert(n == 1);
+    /* Fast back-and-forth is tickling. */
+    now = 3000;
+    n = 0;
+    coop_touch_sample(&t, 200, 200, true, COOP_PART_BODY, now);
+    for (int i = 0; i < 8; i++)
+        swipe(&t, i & 1 ? 230 : 200, 200, i & 1 ? 200 : 230, COOP_PART_BODY, &now, &n, COOP_TOUCH_TICKLE);
+    coop_touch_sample(&t, 200, 200, false, COOP_PART_BODY, now);
+    assert(n >= 1);
+    /* Holding still picks up; moving carries; letting go flings with the finger's speed. */
+    now = 6000;
+    coop_touch_sample(&t, 240, 330, true, COOP_PART_BODY, now);
+    assert(coop_touch_claimed(&t));
+    coop_touch_kind_t k = COOP_TOUCH_NONE;
+    for (int i = 0; i < 25 && k != COOP_TOUCH_GRAB; i++) {
+        now += 20;
+        k = coop_touch_sample(&t, 240, 330, true, COOP_PART_BODY, now).kind;
+    }
+    assert(k == COOP_TOUCH_GRAB && now - 6000 >= 350);
+    for (int i = 1; i <= 5; i++) {
+        now += 16;
+        e = coop_touch_sample(&t, 240 + 20 * i, 330 - 4 * i, true, COOP_PART_NONE, now);
+        assert(e.kind == COOP_TOUCH_DRAG);
+    }
+    e = coop_touch_sample(&t, 340, 310, false, COOP_PART_NONE, now + 10);
+    assert(e.kind == COOP_TOUCH_RELEASE && e.vx > 600);
+    /* A tap beside the figure is not a poke. */
+    coop_touch_sample(&t, 30, 30, true, COOP_PART_NONE, now + 100);
+    assert(coop_touch_sample(&t, 30, 30, false, COOP_PART_NONE, now + 180).kind == COOP_TOUCH_TAP_EMPTY);
+}
+/* Feeds a still board while touching; returns once motion leaves @p from or time runs out. */
+static void settle_motion(coop_state_handle_t h, uint64_t *now, coop_motion_t from, uint64_t limit)
+{
+    for (uint64_t end = *now + limit; coop_state_get(h)->motion == from && *now < end;)
+        feed(h, now, 0, 0, 1, 0, 30);
+}
+static void interaction_test(void)
+{
+    events_t e = {0};
+    uint64_t now = 1000;
+    coop_state_handle_t h = resident(&e, &now);
+    /* Poking the head: a curious look and a tick. */
+    coop_state_pointer(h, 240, 260, true, COOP_PART_HEAD, now);
+    coop_state_pointer(h, 240, 260, false, COOP_PART_HEAD, now + 80);
+    feed(h, &now, 0, 0, 1, 0, 60);
+    assert(coop_state_get(h)->fx == COOP_FX_QUESTION && !strcmp(e.last_haptic, "tick") && !strcmp(e.last_touch, "poke"));
+    feed(h, &now, 0, 0, 1, 0, 1500);
+    /* Three strokes across the head: content, hearts, a purr. */
+    for (int i = 0; i < 3; i++) {
+        coop_state_pointer(h, 200, 260, true, COOP_PART_HEAD, now);
+        for (float x = 200; x <= 270; x += 5) {
+            now += 16;
+            coop_state_pointer(h, x, 260, true, COOP_PART_HEAD, now);
+        }
+        coop_state_pointer(h, 270, 260, false, COOP_PART_HEAD, now);
+        feed(h, &now, 0, 0, 1, 0, 120);
+    }
+    assert(!strcmp(coop_state_get(h)->expression, "love") && coop_state_get(h)->fx == COOP_FX_HEARTS);
+    assert(strstr(coop_state_get(h)->subtitle, "好舒服") && !strcmp(e.last_haptic, "purr"));
+    feed(h, &now, 0, 0, 1, 0, 3000);
+    /* Picked up, carried high, flung sideways: flies, bounces, lands. */
+    coop_state_pointer(h, 240, 330, true, COOP_PART_BODY, now);
+    for (int i = 0; i < 25 && coop_state_get(h)->motion != COOP_CARRY; i++) {
+        now += 20;
+        coop_state_pointer(h, 240, 330, true, COOP_PART_BODY, now);
+    }
+    assert(coop_state_get(h)->motion == COOP_CARRY && coop_state_pointer_claimed(h));
+    for (int i = 1; i <= 10; i++) {
+        now += 20;
+        coop_state_pointer(h, 240, 330 - 18 * i, true, COOP_PART_NONE, now);
+    }
+    assert(coop_state_get(h)->y < -150);
+    unsigned buzz = e.haptic;
+    for (int i = 1; i <= 4; i++) {
+        now += 16;
+        coop_state_pointer(h, 240 + 40 * i, 150, true, COOP_PART_NONE, now);
+    }
+    coop_state_pointer(h, 400, 150, false, COOP_PART_NONE, now + 8);
+    assert(coop_state_get(h)->motion == COOP_THROWN);
+    settle_motion(h, &now, COOP_THROWN, 6000);
+    assert(coop_state_get(h)->motion != COOP_THROWN && fabsf(coop_state_get(h)->y) < .5f);
+    assert(e.haptic > buzz && (!strcmp(e.last_touch, "thrown") || !strcmp(e.last_touch, "drop")));
+    feed(h, &now, 0, 0, 1, 0, 3000);
+    /* Bubbles: blown on request, popped by a tap with a tick. */
+    coop_state_action(h, "bubbles", now);
+    feed(h, &now, 0, 0, 1, 0, 300);
+    const coop_bubbles_t *b = &coop_state_get(h)->bubbles;
+    int target = -1;
+    for (int i = 0; i < COOP_BUBBLES; i++)
+        if (b->b[i].state == COOP_BUBBLE_FLOAT)
+            target = i;
+    assert(target >= 0);
+    float bx = b->b[target].x, by = b->b[target].y;
+    coop_state_pointer(h, bx, by, true, COOP_PART_NONE, now);
+    assert(coop_state_get(h)->bubbles.b[target].state == COOP_BUBBLE_POP && !strcmp(e.last_touch, "bubble"));
+    coop_state_pointer(h, bx, by, false, COOP_PART_NONE, now + 60);
+    assert(!coop_state_pointer_claimed(h));
+    feed(h, &now, 0, 0, 1, 0, 12000);
+    assert(!coop_bubbles_active(&coop_state_get(h)->bubbles)); /* the rest float off and pop */
+    coop_state_delete(h);
+
+    /* Held quietly in the hands: snuggles with a heartbeat; put down: notices. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    feed(h, &now, 0, 0, 1, 0, 20000); /* on the table: never a hug */
+    assert(strcmp(e.last_touch, "hug"));
+    unsigned beats = 0;
+    for (uint64_t end = now + 16000; now < end && strcmp(e.last_touch, "hug"); now += 10) {
+        float jitter = (now / 10) % 2 ? 2.f : -2.f;
+        coop_state_imu(h, 0, 0, 1, jitter, -jitter, jitter, now);
+        if (now % 30 == 0)
+            coop_state_tick(h, now);
+    }
+    assert(!strcmp(e.last_touch, "hug") && strstr(coop_state_get(h)->subtitle, "暖和"));
+    for (uint64_t end = now + 4000; now < end; now += 10) {
+        float jitter = (now / 10) % 2 ? 2.f : -2.f;
+        coop_state_imu(h, 0, 0, 1, jitter, -jitter, jitter, now);
+        if (now % 30 == 0) {
+            coop_state_tick(h, now);
+            beats += !strcmp(e.last_haptic, "heartbeat");
+        }
+    }
+    assert(beats > 0 && !strcmp(coop_state_get(h)->expression, "love"));
+    feed(h, &now, 0, 0, 1, 0, 3000);
+    assert(!strcmp(e.last_touch, "putdown") && strstr(coop_state_get(h)->subtitle, "放下我啦"));
     coop_state_delete(h);
 }
 static void transfer_test(void)
@@ -595,6 +764,8 @@ int main(int argc, char **argv)
     stumble_and_edges_test();
     physical_test();
     walk_test();
+    touch_test();
+    interaction_test();
     subtitle_test();
     caption_test();
     atlas_test(argv[1]);
