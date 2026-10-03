@@ -25,6 +25,9 @@ struct coop_ui_t {
     char receipt_id[64];
     uint32_t receipt_epoch;
     uint64_t receipt_at;
+    /* Canvas area that may hold non-black pixels from earlier draws. Touched
+     * only from the render task (timer tick and Canvas draw callback). */
+    coop_render_rect_t painted;
 };
 static void state_event(void *ctx, const coop_event_t *e)
 {
@@ -41,8 +44,13 @@ static void state_event(void *ctx, const coop_event_t *e)
 static void draw(const esp_gsp_canvas_surface_t *s, void *ctx)
 {
     coop_ui_handle_t h = ctx;
-    coop_render_draw(h->render, coop_state_get(h->state), s->pixels, s->stride_bytes, s->x, s->y,
-                     s->width, s->height);
+    const coop_snapshot_t *v = coop_state_get(h->state);
+    coop_render_draw(h->render, v, s->pixels, s->stride_bytes, s->x, s->y, s->width, s->height);
+    /* An input event may change the state between a tick and this draw; record
+     * what was actually drawn so the next tick also clears it. */
+    coop_render_rect_t drawn;
+    coop_render_bounds(h->render, v, &drawn);
+    h->painted = coop_render_rect_union(h->painted, drawn);
 }
 static void tick(esp_gsp_handle_t gsp, void *ctx)
 {
@@ -94,7 +102,15 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
         h->sitting = s->motion == COOP_SIT;
         gsp_coop_rest_set_text(gsp, h->sitting ? "站起来" : "坐下歇会");
     }
-    esp_gsp_canvas_invalidate(gsp, GSP_COOP_BIND_CANVAS);
+    /* Repaint only what changed: the area the previous frame covered plus the
+     * new frame's. The canvas outside both is already black. */
+    coop_render_rect_t now;
+    coop_render_bounds(h->render, s, &now);
+    coop_render_rect_t dirty = coop_render_rect_union(h->painted, now);
+    h->painted = now;
+    if (dirty.x2 > dirty.x1 && dirty.y2 > dirty.y1)
+        esp_gsp_canvas_invalidate_dirty(gsp, GSP_COOP_BIND_CANVAS,
+                                        (gsp_rect_t){dirty.x1, dirty.y1, dirty.x2, dirty.y2});
     /* Submit the changed frame before asking the board's I/O worker to fence
      * rendering and acknowledge it. Never block the render task itself. */
     if (h->receipt_type && h->cfg.event) {
@@ -150,6 +166,8 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
     h->gsp = gsp;
     h->cfg = *cfg;
     h->layout_edge=-1;
+    /* The first draw is a full repaint; assume the whole canvas until then. */
+    h->painted = (coop_render_rect_t){0, 0, 480, 480};
     coop_state_config_t state_cfg = {.event = state_event, .ctx = h, .seed = 1};
     if (coop_state_create(&state_cfg, &h->state) != ESP_OK ||
         coop_render_create(&h->render) != ESP_OK ||

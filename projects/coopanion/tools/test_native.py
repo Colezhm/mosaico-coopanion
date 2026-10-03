@@ -40,3 +40,12 @@ with tempfile.TemporaryDirectory(prefix='coopanion-test-') as tmp:
         for scenario in SCENARIOS:
             subprocess.run([str(preview), str(atlas), scenario, str(tmp / 'frame'), str(tmp / 'hud')], check=True)
     print(f'PASS: preview {len(SCENARIOS)} scenarios x {len(atlases)} atlases')
+
+    # A full animated timeline per atlas: every frame stays inside the reported
+    # bounds, and dirty-rectangle repaints reproduce the full redraw exactly.
+    bench = tmp / 'render-bench'
+    subprocess.run([cc, *flags, '-Wall', '-Wextra', '-Werror', '-I', str(root / 'main'),
+                    str(root / 'tests/render_bench.c'), *main(*SHARED), '-lm', '-o', str(bench)], check=True)
+    for atlas in atlases:
+        subprocess.run([str(bench), str(atlas)], check=True)
+    print(f'PASS: dirty-rectangle timeline x {len(atlases)} atlases')
