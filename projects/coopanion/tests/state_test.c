@@ -230,6 +230,53 @@ static void physical_test(void)
     coop_state_delete(h);
 }
 
+static void walk_test(void)
+{
+    events_t e = {0};
+    uint64_t now = 1000;
+    coop_state_handle_t h = resident(&e, &now);
+    /* Walking left turns him to face left; the stride sets the pace. */
+    coop_state_walk(h, .15f, false, now);
+    uint64_t start = now;
+    float gait0 = coop_state_get(h)->gait;
+    while (coop_state_get(h)->motion == COOP_WALK && now - start < 6000) {
+        feed(h, &now, 0, 0, 1, 0, 30);
+        if (coop_state_get(h)->x < .45f)
+            assert(coop_state_get(h)->facing < 0);
+    }
+    /* 0.35 of the ground is 119 px: about 1.1 s at Coo's 108 px/s plus easing. */
+    assert(coop_state_get(h)->motion != COOP_WALK && now - start >= 1000 && now - start <= 2600);
+    assert(fabsf(coop_state_get(h)->x - .15f) < .01f && coop_state_get(h)->facing < 0);
+    assert(coop_state_get(h)->gait - gait0 > .8f);
+    coop_state_walk(h, .85f, true, now);
+    feed(h, &now, 0, 0, 1, 0, 300);
+    assert(coop_state_get(h)->facing > 0);
+    coop_state_delete(h);
+
+    /* Left to himself he sits down sometimes, and gets up again on his own. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    uint64_t sat = 0, stood = 0;
+    for (int i = 0; i < 4000 && !stood; i++) {
+        coop_state_imu(h, 0, 0, 1, 0, 0, 0, now);
+        coop_state_tick(h, now);
+        now += 30;
+        if (!sat && coop_state_get(h)->motion == COOP_SIT)
+            sat = now;
+        if (sat && coop_state_get(h)->motion != COOP_SIT)
+            stood = now;
+    }
+    assert(sat && stood && stood - sat >= 5900 && stood - sat <= 9100);
+    /* A sit that was asked for lasts. */
+    coop_state_action(h, "sit", now);
+    for (int i = 0; i < 400; i++) {
+        coop_state_tick(h, now);
+        now += 30;
+    }
+    assert(coop_state_get(h)->motion == COOP_SIT);
+    coop_state_delete(h);
+}
 static void transfer_test(void)
 {
     events_t e = {0};
@@ -547,6 +594,7 @@ int main(int argc, char **argv)
     motion_test();
     stumble_and_edges_test();
     physical_test();
+    walk_test();
     subtitle_test();
     caption_test();
     atlas_test(argv[1]);

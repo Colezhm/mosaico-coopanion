@@ -43,6 +43,14 @@
 #define SLIDE_SLOPE .32f
 #define SLIDE_HOLD_MS 600
 #define BLINK_MS 150
+/* Walking matches the desktop pet's stride per step relative to body height
+ * (walk 0.347, run 0.531 heights per gait cycle) at the board's clip rates:
+ * Coo 207 px tall, 1.5 / 2.25 Hz; whale 240 px, 1.5 / 2.08 Hz. */
+static const float WALK_PX_S[2] = {108, 125}, RUN_PX_S[2] = {247, 265};
+#define GROUND_SPAN_PX 340.f /* normalized x 0..1 across the ground */
+/* Idle choices, as on the desktop: weights for walk, run, look, jump, sit, face, wait. */
+enum { IDLE_WALK, IDLE_RUN, IDLE_LOOK, IDLE_JUMP, IDLE_SIT, IDLE_FACE, IDLE_WAIT, IDLE_CHOICES };
+static const uint8_t IDLE_WEIGHT[IDLE_CHOICES] = {28, 12, 14, 8, 16, 12, 10};
 /* System captions: owned by connection/presence state, replaced as soon as that
  * state changes so the caption never contradicts the status line. */
 #define TEXT_OFFLINE_HERE "电脑未连接，先陪你玩一会儿"
@@ -75,6 +83,9 @@ struct coop_state_t {
     char base_face[24], react_face[24], last_face[24], phys_caption[96];
     bool reacting, face_sleep, dozing;
     uint8_t whale; /* figure for named captions: 0 Coo, 1 whale */
+    float walk_speed; /* px/s */
+    uint64_t idle_since, sit_until, look_flip_at;
+    uint8_t last_idle;
 };
 bool coop_state_animation_busy(coop_state_handle_t h)
 {
@@ -109,6 +120,10 @@ static void emit(coop_state_handle_t h, const char *type, const char *text)
 }
 static void motion(coop_state_handle_t h, coop_motion_t m)
 {
+    h->walk_speed = 0;
+    h->idle_since = 0;
+    if (m != COOP_SIT)
+        h->sit_until = 0;
     h->view.motion = m;
     h->entered = h->now;
     h->view.phase = 0;
@@ -174,6 +189,7 @@ esp_err_t coop_state_create(const coop_state_config_t *config, coop_state_handle
     h->seed = config->seed ? config->seed : 1;
     h->view.x = .5f;
     h->view.scale_x = h->view.scale_y = 1;
+    h->view.facing = 1;
     h->view.battery = 100;
     h->view.muted = true; /* TTS suspended for this release; microphone stays available. */
     h->view.body_color = 0xffffff;
@@ -663,6 +679,11 @@ static void physical_tick(coop_state_handle_t h, float dt, uint64_t now)
              : since < BLINK_MS ? 1 - (since - BLINK_MS / 2) / (BLINK_MS / 2.f) : 0;
     v->eye_wide = h->body.airborne ? 1.25f : 1;
 
+    if (h->look_flip_at && now >= h->look_flip_at) {
+        h->look_flip_at = 0;
+        h->view.facing = -h->view.facing;
+        coop_body_look(&h->body, h->view.facing * .9f, -.2f, 1000, now);
+    }
     /* Turned face down mid-animation: lie down once it finishes. */
     if (h->face_sleep && v->motion == COOP_IDLE)
         motion(h, COOP_SLEEP);
@@ -703,6 +724,52 @@ static void physical_tick(coop_state_handle_t h, float dt, uint64_t now)
     v->air = h->body.air;
     v->look_x = h->body.look_x;
     v->look_y = h->body.look_y;
+}
+/* One idle action, weighted like the desktop pet and never the same twice in a row. */
+static void idle_choice(coop_state_handle_t h, uint64_t now)
+{
+    unsigned total = 0;
+    for (unsigned i = 0; i < IDLE_CHOICES; i++)
+        if (i != h->last_idle || i == IDLE_WAIT)
+            total += IDLE_WEIGHT[i];
+    unsigned r = random_next(h) % total, pick = IDLE_WAIT;
+    for (unsigned i = 0; i < IDLE_CHOICES; i++) {
+        if (i == h->last_idle && i != IDLE_WAIT)
+            continue;
+        if (r < IDLE_WEIGHT[i]) {
+            pick = i;
+            break;
+        }
+        r -= IDLE_WEIGHT[i];
+    }
+    h->last_idle = (uint8_t)pick;
+    switch (pick) {
+    case IDLE_WALK:
+    case IDLE_RUN:
+        h->target = .12f + (random_next(h) % 760) / 1000.f;
+        if (fabsf(h->target - h->view.x) > .08f)
+            motion(h, pick == IDLE_RUN ? COOP_RUN : COOP_WALK);
+        break;
+    case IDLE_LOOK:
+        /* Look up ahead, then turn round and look the other way. */
+        coop_body_look(&h->body, h->view.facing * .9f, -.6f, 900, now);
+        h->look_flip_at = now + 900;
+        break;
+    case IDLE_JUMP:
+        motion(h, COOP_JUMP);
+        break;
+    case IDLE_SIT:
+        motion(h, COOP_SIT);
+        h->sit_until = now + 6000 + random_next(h) % 3000;
+        break;
+    case IDLE_FACE: {
+        static const char *const faces[] = {"happy", "wink", "love", "sleepy", "surprised", "shy"};
+        react(h, faces[random_next(h) % 6], 2500);
+        break;
+    }
+    default:
+        break;
+    }
 }
 void coop_state_tick(coop_state_handle_t h, uint64_t now)
 {
@@ -771,10 +838,22 @@ void coop_state_tick(coop_state_handle_t h, uint64_t now)
     }
     case COOP_WALK:
     case COOP_RUN: {
-        float d = h->target - h->view.x, step = (h->view.motion == COOP_RUN ? .35f : .13f) * dt;
-        h->view.x += clampf(d, -step, step);
-        h->view.y = -fabsf(sinf(t * 12)) * 6;
-        if (fabsf(d) < .01f) {
+        /* Ease in and out like the desktop pet, and step only as fast as the
+         * body actually moves so the feet never slide. */
+        bool run = h->view.motion == COOP_RUN;
+        float d = h->target - h->view.x, dist = fabsf(d) * GROUND_SPAN_PX;
+        if (fabsf(d) > .002f)
+            h->view.facing = d > 0 ? 1.f : -1.f;
+        float vmax = (run ? RUN_PX_S : WALK_PX_S)[h->whale];
+        float wanted = fminf(vmax, run ? dist * 4 + 20 : dist * 3 + 14);
+        float ramp = smooth(t / (run ? .35f : .25f));
+        h->walk_speed += (wanted * ramp - h->walk_speed) * (1 - expf(-(run ? 6.f : 9.f) * dt));
+        float step = fminf(dist, h->walk_speed * dt);
+        h->view.x += (d > 0 ? step : -step) / GROUND_SPAN_PX;
+        float k = clampf(h->walk_speed / vmax, 0, 1);
+        h->view.gait += dt * fmaxf(.35f, k);
+        h->view.y = -fabsf(sinf(h->view.gait * 3.14159f * (run ? 2.2f : 1.5f))) * (run ? 6.f : 3.f) * k;
+        if (dist < 1.5f) {
             motion(h, COOP_IDLE);
             emit(h, "arrived", "");
         }
@@ -836,15 +915,23 @@ void coop_state_tick(coop_state_handle_t h, uint64_t now)
         break;
     case COOP_IDLE:
         h->view.angle = clampf(h->body.slope * 12, -15, 15);
-        if (h->view.resident && !h->view.transferring && !h->pending_fall && !h->pending_depart && now > h->next_idle) {
-            h->next_idle = now + 5000 + random_next(h) % 10000;
+        if (!h->idle_since) {
+            h->idle_since = now;
+            h->next_idle = now + 2500 + random_next(h) % 3500;
+        }
+        if (h->view.resident && !h->view.transferring && !h->pending_fall && !h->pending_depart &&
+            !h->view.listening && !h->reacting && now > h->next_idle) {
+            h->next_idle = now + 2500 + random_next(h) % 3500;
             if (h->view.battery < 15)
                 motion(h, COOP_SLEEP);
-            else if (random_next(h) % 3 == 0) {
-                h->target = .15f + (random_next(h) % 700) / 1000.f;
-                motion(h, COOP_WALK);
-            }
+            else
+                idle_choice(h, now);
         }
+        break;
+    case COOP_SIT:
+        /* A sit he chose himself ends on its own; one asked for lasts. */
+        if (h->sit_until && now >= h->sit_until)
+            motion(h, COOP_IDLE);
         break;
     case COOP_SPEAK:
         if (now >= h->reading_until)

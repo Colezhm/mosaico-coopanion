@@ -49,6 +49,9 @@ typedef struct {
     /* Procedural eyes: blink 0 open .. 1 shut, eye_wide 1 normal; eye_mode 0
      * rings, 1 dizzy spirals. fx is a coop_fx_kind_t started fx_t seconds ago. */
     float blink, eye_wide, fx_t;
+    /* +1 faces right (the art's own direction), -1 left. gait is seconds of
+     * full-speed stepping, so walk frames follow the distance covered. */
+    float facing, gait;
     uint8_t eye_mode, fx;
     uint8_t edge; /* 0 bottom, 1 left, 2 top, 3 right; screen gravity = (-ax, ay). */
     uint8_t battery;

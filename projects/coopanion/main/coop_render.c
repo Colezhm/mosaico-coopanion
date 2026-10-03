@@ -154,8 +154,9 @@ static int pose_for(const coop_snapshot_t *s)
     /* Spiral eyes are drawn on the plain ring-eye face. */
     if (s->eye_mode == 1 && s->motion != COOP_WALK && s->motion != COOP_RUN && s->motion != COOP_SIT)
         return 0;
+    /* Steps follow the distance covered: 1.5 cycles/s walking, 2.25 running. */
     if (s->motion == COOP_WALK || s->motion == COOP_RUN)
-        return 14 + ((int)(s->phase * 12) % 8);
+        return 14 + ((int)(s->gait * (s->motion == COOP_RUN ? 18 : 12)) % 8);
     if (s->motion == COOP_SLEEP)
         return 9;
     if (s->motion == COOP_SIT)
@@ -430,14 +431,16 @@ static uint16_t figure_pixel(coop_render_handle_t h, const coop_snapshot_t *s, c
 static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
 {
     f->whale = h->atlas && h->atlas[3] == '2';
-    decode(h, f->whale ? coop_animation_frame(h->atlas, clip_for(s), s->phase) : pose_for(s));
+    float clock = s->motion == COOP_WALK || s->motion == COOP_RUN ? s->gait : s->phase;
+    decode(h, f->whale ? coop_animation_frame(h->atlas, clip_for(s), clock) : pose_for(s));
     /* The spring sway leans the body a little, as if it pivots on its feet. */
     const float angle = (s->angle + s->body_dx * .45f) * .017453293f;
     f->c = cosf(angle);
     f->sn = sinf(angle);
     f->scale = f->whale ? WHALE_SCALE : COO_SCALE;
     /* Squash keeps the volume roughly constant. */
-    f->sx = s->scale_x * (1 + .5f * s->squash);
+    /* The art faces right; facing -1 mirrors it. */
+    f->sx = s->scale_x * (s->facing < 0 ? -1.f : 1.f) * (1 + .5f * s->squash);
     f->sy = s->scale_y * (1 - s->squash);
     /* The panel may already be rotated to the standing edge; draw the rest. */
     float orientation=(s->orientation-(float)atomic_load(&h->screen_rotation))*.017453293f;
@@ -488,9 +491,11 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
             f->eye_mode = s->eye_mode;
             f->eye_outer = COO_EYE_OUTER * wide;
             f->eye_inner = COO_EYE_INNER * (wide > 1 ? 1.05f : 1);
-            f->eye_shift_x = s->look_x * 2.5f;
+            /* Gaze is in screen space; mirrored art needs it mirrored back. */
+            float mirror = f->sx < 0 ? -1.f : 1.f;
+            f->eye_shift_x = s->look_x * 2.5f * mirror;
             f->eye_y = h->eye_y + s->look_y * 2.2f;
-            f->pupil_x = s->look_x * 3.4f;
+            f->pupil_x = s->look_x * 3.4f * mirror;
             f->pupil_y = s->look_y * 2.6f;
             f->eye_open = fmaxf(.05f, 1 - s->blink);
             f->eye_spin = s->phase * 6;
