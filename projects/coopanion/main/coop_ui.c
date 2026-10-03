@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdatomic.h>
 struct coop_ui_t {
     esp_gsp_handle_t gsp;
     coop_ui_config_t cfg;
@@ -28,6 +29,10 @@ struct coop_ui_t {
     /* Canvas area that may hold non-black pixels from earlier draws. Touched
      * only from the render task (timer tick and Canvas draw callback). */
     coop_render_rect_t painted;
+    /* Panel rotation in degrees, set by the board's rotation task; the render
+     * task notices a change and relays out and repaints everything. */
+    atomic_int screen_rotation;
+    int seen_rotation;
 };
 static void state_event(void *ctx, const coop_event_t *e)
 {
@@ -81,13 +86,22 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
         gsp_coop_subtitle_1_set_text(gsp, second ? second : "");
         gsp_coop_subtitle_2_set_text(gsp, third ? third : "");
     }
-    if(h->layout_edge!=s->edge){
-        h->layout_edge=s->edge;
-        int top = s->edge == 2 ? 342 : 32;
+    int rotation = atomic_load(&h->screen_rotation);
+    if (rotation != h->seen_rotation) {
+        h->seen_rotation = rotation;
+        h->layout_edge = -1;
+        h->painted = (coop_render_rect_t){0, 0, 480, 480};
+    }
+    /* Captions sit opposite the ground as the screen shows it: with the panel
+     * rotated to the standing edge, that is always the top. */
+    int edge = (s->edge + 4 - rotation / 90) & 3;
+    if(h->layout_edge!=edge){
+        h->layout_edge=edge;
+        int top = edge == 2 ? 342 : 32;
         gsp_coop_subtitle_set_position(gsp,24,top);
         gsp_coop_subtitle_1_set_position(gsp,24,top+32);
         gsp_coop_subtitle_2_set_position(gsp,24,top+64);
-        gsp_coop_status_set_position(gsp,24,s->edge==2?444:4);
+        gsp_coop_status_set_position(gsp,24,edge==2?444:4);
     }
     coop_hud_status(s, page, h->pages, h->status);
     if (strcmp(h->status, h->previous_status)) {
@@ -176,6 +190,7 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
         *out = NULL;
         return ESP_ERR_INVALID_ARG;
     }
+    coop_state_figure(h->state, cfg->atlas_size >= 4 && cfg->atlas[3] == '2');
     esp_gsp_err_t err = esp_gsp_canvas_set_draw_cb(gsp, GSP_COOP_BIND_CANVAS, draw, h);
     if (err == ESP_GSP_OK)
         err = esp_gsp_on_event(gsp, event, h);
@@ -207,9 +222,20 @@ coop_state_handle_t coop_ui_state(coop_ui_handle_t h)
 {
     return h ? h->state : NULL;
 }
+void coop_ui_set_screen_rotation(coop_ui_handle_t h, int degrees)
+{
+    if (!h)
+        return;
+    coop_render_set_screen_rotation(h->render, degrees);
+    atomic_store(&h->screen_rotation, degrees);
+}
 bool coop_ui_atlas(coop_ui_handle_t h, const uint8_t *bytes, size_t size)
 {
-    return h && coop_render_atlas(h->render, bytes, size);
+    if (!h || !coop_render_atlas(h->render, bytes, size))
+        return false;
+    /* COO2 atlases carry the DeepSeek whale; COO1 is Coo. */
+    coop_state_figure(h->state, bytes[3] == '2');
+    return true;
 }
 void coop_ui_question(coop_ui_handle_t h, const char *id, const char *question,
                       const char *const options[], int count, bool confirmation)

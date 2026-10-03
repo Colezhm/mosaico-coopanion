@@ -8,13 +8,21 @@
 #include "coop_body.h"
 #include "coop_fx.h"
 
-#define SWAY_G .12f
+/* A handheld board jitters around 0.1 g; below this the spring layer is enough. */
+#define SWAY_G .2f
 #define STUMBLE_G .60f
 #define STUMBLE_DPS 200.f
 #define STUMBLE_HOLD_MS 140
-#define FALL_COS .573576f /* 55 degrees from the last settled gravity vector. */
-#define FALL_HOLD_MS 180
-#define EDGE_HOLD_MS 450
+/* Losing balance on a steep slope that is not yet another edge: 42 degrees
+ * from the current down, held; recovered below 32 degrees. */
+#define SLOPE_FALL_COS .7431f
+#define SLOPE_SAFE_COS .848f
+#define FALL_HOLD_MS 350
+/* Turning to stand on another edge: gravity must point there this long. It
+ * interrupts whatever is playing, so the figure never falls the old way first. */
+#define EDGE_HOLD_MS 200
+#define FAST_GRAVITY_TAU_S .06f
+#define SETTLE_S .45f
 #define REACTION_COOLDOWN_MS 15000
 /* Tolerance for rough handling. Each toss, landing, shake or spin uses some up;
  * it recovers after a short calm, faster when petted. The level picks the
@@ -39,16 +47,21 @@
  * state changes so the caption never contradicts the status line. */
 #define TEXT_OFFLINE_HERE "电脑未连接，先陪你玩一会儿"
 #define TEXT_BACK_ONLINE "电脑连上啦！按住 AI 键和我说话"
-#define TEXT_AWAY "Coo 在电脑上，按一下 AI 键请它过来"
-#define TEXT_AWAY_OFFLINE "电脑未连接，Coo 暂时过不来"
-#define TEXT_WAITING "等待 Coo 来访"
+/* Captions that name the figure: [0] Coo, [1] the DeepSeek whale. */
+static const char *const TEXT_AWAY_BY[2] = {"Coo 在电脑上，按一下 AI 键请它过来",
+                                            "大肥鱼在电脑上，按一下 AI 键请她过来"};
+static const char *const TEXT_AWAY_OFFLINE_BY[2] = {"电脑未连接，Coo 暂时过不来", "电脑未连接，大肥鱼暂时过不来"};
+static const char *const TEXT_WAITING_BY[2] = {"等待 Coo 来访", "等待大肥鱼来访"};
+#define TEXT_AWAY TEXT_AWAY_BY[h->whale]
+#define TEXT_AWAY_OFFLINE TEXT_AWAY_OFFLINE_BY[h->whale]
+#define TEXT_WAITING TEXT_WAITING_BY[h->whale]
 
 struct coop_state_t {
     coop_snapshot_t view;
     coop_state_config_t config;
     uint64_t entered, now, previous, stable_since, last_motion, last_speech, next_idle;
     uint64_t voice_start, glow_at, disturbance_at, tilt_since;
-    float grav[3], anchor[3], target, turn_from, turn_to;
+    float grav[3], fast[3], anchor[3], target, turn_from, turn_to;
     uint64_t imu_at, moderate_since, edge_since, reading_until;
     unsigned candidate_edge;
     bool pending_fall, pending_depart, soothing;
@@ -61,6 +74,7 @@ struct coop_state_t {
         said_at, slope_since;
     char base_face[24], react_face[24], last_face[24], phys_caption[96];
     bool reacting, face_sleep, dozing;
+    uint8_t whale; /* figure for named captions: 0 Coo, 1 whale */
 };
 bool coop_state_animation_busy(coop_state_handle_t h)
 {
@@ -116,9 +130,12 @@ static void cancel_voice(coop_state_handle_t h)
 }
 static bool system_caption(const char *text)
 {
+    for (unsigned i = 0; i < 2; i++)
+        if (!strcmp(text, TEXT_AWAY_BY[i]) || !strcmp(text, TEXT_AWAY_OFFLINE_BY[i]) ||
+            !strcmp(text, TEXT_WAITING_BY[i]))
+            return true;
     return !strcmp(text, TEXT_OFFLINE_HERE) || !strcmp(text, TEXT_BACK_ONLINE) ||
-           !strcmp(text, TEXT_AWAY) || !strcmp(text, TEXT_AWAY_OFFLINE) ||
-           !strcmp(text, TEXT_WAITING) || !strcmp(text, "电脑未连接");
+           !strcmp(text, "电脑未连接");
 }
 /* Re-derive the caption from connection and residence. Content captions
  * (replies, questions, feedback) are kept unless leaving makes them stale. */
@@ -133,6 +150,17 @@ static void refresh_caption(coop_state_handle_t h, bool force)
     if (!h->view.resident && !strcmp(h->view.subtitle, TEXT_WAITING) && !h->view.epoch && !force)
         return;
     strcpy(h->view.subtitle, text);
+}
+void coop_state_figure(coop_state_handle_t h, bool whale)
+{
+    if (!h || h->whale == whale)
+        return;
+    bool waiting = !strcmp(h->view.subtitle, TEXT_WAITING);
+    h->whale = whale;
+    if (waiting)
+        strcpy(h->view.subtitle, TEXT_WAITING);
+    else
+        refresh_caption(h, false);
 }
 esp_err_t coop_state_create(const coop_state_config_t *config, coop_state_handle_t *out)
 {
@@ -303,8 +331,12 @@ static void fall(coop_state_handle_t h)
     emit(h, "vibrate", "");
     /* A physical fall is local feedback; never misreport a small tilt as a user throw. */
 }
+static void react(coop_state_handle_t h, const char *face, uint32_t ms);
+static void show_fx(coop_state_handle_t h, coop_fx_kind_t fx, uint32_t ms);
+static void add_stress(coop_state_handle_t h, float amount);
 static void settle_edge(coop_state_handle_t h)
 {
+    cancel_voice(h);
     h->turn_from=h->view.orientation;
     float delta=(float)h->candidate_edge*90-h->turn_from;
     while(delta>180)delta-=360;
@@ -312,6 +344,10 @@ static void settle_edge(coop_state_handle_t h)
     h->turn_to=h->turn_from+delta;
     h->view.edge=(uint8_t)h->candidate_edge;
     motion(h,COOP_SETTLE);
+    h->last_motion = h->now;
+    add_stress(h, .06f);
+    react(h, "flustered", 900);
+    show_fx(h, COOP_FX_SWEAT, 900);
 }
 /* ---------- physical reactions ---------- */
 
@@ -492,6 +528,7 @@ void coop_state_imu(coop_state_handle_t h, float ax, float ay, float az, float g
         h->grav[0] = ax;
         h->grav[1] = ay;
         h->grav[2] = az;
+        memcpy(h->fast, h->grav, sizeof(h->fast));
         h->imu_started = true;
         anchor_gravity(h);
     }
@@ -501,6 +538,12 @@ void coop_state_imu(coop_state_handle_t h, float ax, float ay, float az, float g
     h->grav[0] += alpha * (ax - h->grav[0]);
     h->grav[1] += alpha * (ay - h->grav[1]);
     h->grav[2] += alpha * (az - h->grav[2]);
+    /* A faster estimate decides the standing edge; the slow one stays the
+     * reference for linear acceleration. */
+    float quick = 1 - expf(-dt / FAST_GRAVITY_TAU_S);
+    h->fast[0] += quick * (ax - h->fast[0]);
+    h->fast[1] += quick * (ay - h->fast[1]);
+    h->fast[2] += quick * (az - h->fast[2]);
     float dx = ax - h->grav[0], dy = ay - h->grav[1], dz = az - h->grav[2];
     float force = sqrtf(dx * dx + dy * dy + dz * dz), spin = sqrtf(gx * gx + gy * gy + gz * gz);
     /* Tumbling (rotation in the screen plane's axes) trips Coo; spinning flat
@@ -520,23 +563,25 @@ void coop_state_imu(coop_state_handle_t h, float ax, float ay, float az, float g
         h->stable_since = 0;
     /* Sensor coordinates to display: +ax points left, +ay points down.
      * When lying nearly flat the projected gravity is ambiguous: retain the edge. */
-    float sx=-h->grav[0], sy=h->grav[1], projection=sqrtf(sx*sx+sy*sy);
+    float sx=-h->fast[0], sy=h->fast[1], projection=sqrtf(sx*sx+sy*sy);
     unsigned edge=h->view.edge;
+    float current = edge==0?sy:edge==1?-sx:edge==2?-sy:sx;
     if (projection>.45f) {
-        float current = edge==0?sy:edge==1?-sx:edge==2?-sy:sx;
         unsigned next=fabsf(sx)>fabsf(sy)?(sx<0?1:3):(sy<0?2:0);
         float best=fmaxf(fabsf(sx),fabsf(sy));
         if(best>current+.18f)edge=next;
     }
     if(edge!=h->candidate_edge){h->candidate_edge=edge;h->edge_since=now;}
-    float norm=sqrtf(h->grav[0]*h->grav[0]+h->grav[1]*h->grav[1]+h->grav[2]*h->grav[2]);
-    float dot=norm>.5f?(h->grav[0]*h->anchor[0]+h->grav[1]*h->anchor[1]+h->grav[2]*h->anchor[2])/norm:1;
     /* Face down nobody sees a fall; free fall has no gravity to tilt against. */
     bool facing_away = h->grav[2] < -.5f, weightless = h->body.airborne || h->body.low_g_since;
-    if(dot<FALL_COS && force<.5f && !facing_away && !weightless) {
+    /* Only an in-plane slope on an upright board trips him: laying the board
+     * flat or tipping it toward you is not a slope he stands on. */
+    float slope_cos = projection > .6f ? current / projection : 1;
+    if (slope_cos < SLOPE_FALL_COS && h->candidate_edge == h->view.edge && force < .5f && !facing_away &&
+        !weightless) {
         if (!h->tilt_since)
             h->tilt_since = now;
-    } else if(dot>.72f) {
+    } else if (slope_cos > SLOPE_SAFE_COS || h->candidate_edge != h->view.edge) {
         h->tilt_since = 0;
         h->inverted_latched = false;
     }
@@ -546,14 +591,20 @@ void coop_state_imu(coop_state_handle_t h, float ax, float ay, float az, float g
     if (events)
         body_events(h, events);
     if (weightless || h->face_sleep) return;
+    /* Gravity now points at another edge: turn to it at once, interrupting any
+     * animation except a transfer or a turn already under way. */
+    if (h->candidate_edge != h->view.edge && now - h->edge_since >= EDGE_HOLD_MS && !h->body.shaking &&
+        h->view.motion != COOP_DEPART && h->view.motion != COOP_ARRIVE && h->view.motion != COOP_SETTLE) {
+        h->pending_fall = false;
+        h->tilt_since = 0;
+        settle_edge(h);
+        return;
+    }
     if (!h->inverted_latched && h->tilt_since && now-h->tilt_since>=FALL_HOLD_MS)
         h->pending_fall=true;
     /* Coalesce one pending fall; no sensor, touch, script or reply replaces an animation. */
     if (coop_state_animation_busy(h)) return;
     if(h->pending_fall){fall(h);return;}
-    if(h->candidate_edge!=h->view.edge && h->stable_since && now-h->edge_since>=EDGE_HOLD_MS){
-        settle_edge(h);return;
-    }
     if (now - h->last_motion < 2000) return;
     if (h->moderate_since && now-h->moderate_since>=STUMBLE_HOLD_MS) {
         if (h->view.listening) {
@@ -800,8 +851,17 @@ void coop_state_tick(coop_state_handle_t h, uint64_t now)
             motion(h, COOP_IDLE);
         break;
     case COOP_SETTLE:
-        h->view.orientation=h->turn_from+(h->turn_to-h->turn_from)*smooth(t/.65f);
-        if(t>=.65f){h->view.orientation=h->view.edge*90.f;anchor_gravity(h);motion(h,COOP_IDLE);}
+        /* Tumble onto the new ground: turn while hopping off the old one, then
+         * land with a squash and a buzz. */
+        h->view.orientation = h->turn_from + (h->turn_to - h->turn_from) * smooth(t / SETTLE_S);
+        h->view.y = -36 * sinf(clampf(t / SETTLE_S, 0, 1) * 3.14159f);
+        if (t >= SETTLE_S) {
+            h->view.orientation = h->view.edge * 90.f;
+            anchor_gravity(h);
+            motion(h, COOP_IDLE);
+            coop_body_kick(&h->body, 0, 260);
+            emit(h, "vibrate", "");
+        }
         break;
     default:
         break;
@@ -839,8 +899,11 @@ void coop_state_button(coop_state_handle_t h, bool down, uint64_t now)
             feedback(h, TEXT_OFFLINE_HERE);
             return;
         }
-        if (coop_state_animation_busy(h) && h->view.motion != COOP_SPEAK)
+        /* Talking matters more than any animation: only a transfer or a turn
+         * to another edge holds the key back. */
+        if (h->view.motion == COOP_DEPART || h->view.motion == COOP_ARRIVE || h->view.motion == COOP_SETTLE)
             return;
+        h->pending_fall = false;
         emit(h, "audio_stop", "");
         h->view.utterance++;
         h->view.listening = true;

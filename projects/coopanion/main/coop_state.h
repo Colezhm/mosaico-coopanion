@@ -93,6 +93,8 @@ void coop_state_battery(coop_state_handle_t handle, uint8_t percent, bool chargi
 void coop_state_menu(coop_state_handle_t handle, bool open);
 void coop_state_mute(coop_state_handle_t handle, bool mute);
 void coop_state_colors(coop_state_handle_t handle, uint32_t body, uint32_t eyes);
+/** Names the figure in system captions: Coo, or the DeepSeek whale. */
+void coop_state_figure(coop_state_handle_t handle, bool whale);
 void coop_state_voice_level(coop_state_handle_t handle, float level);
 void coop_state_emotion(coop_state_handle_t handle, const char *face);
 void coop_state_voice_result(coop_state_handle_t handle, const char *text, bool thinking,

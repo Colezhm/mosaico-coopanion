@@ -38,6 +38,7 @@ import { estimateSeconds, parseActions, parseScript, vocabTable } from './script
 import { DESKTOP_PET_TOOL_DECLS } from './tools.ts';
 import { MosaicoBridge } from './mosaico/bridge.ts';
 import { MOSAICO_PROMPT, invokeMosaicoPanel, mosaicoTools } from './mosaico/world-tools.ts';
+import { FIGURE_BODIES, FIGURE_NAMES, activatePersona, figureOf } from './persona.ts';
 
 export const DESKTOP_PET_PANEL_DECLS: readonly WorldPanelDecl[] = [
   { id: 'mosaico', title: 'Mosaico', description: '连接状态与跨屏传送。', getMethods: ['state'] },
@@ -141,6 +142,8 @@ export interface DesktopPetWorldOptions {
   modelsDir: () => string;
   /** Deployment-owned mechanical state, separate from shared runtimes and Memory. */
   dataDir?: string;
+  /** The bot's workspace, whose CONSTITUTION.md is swapped per figure; omitted in tests. */
+  workspaceDir?: string;
   secret?: (name: string) => string;
   /** Downloads; tests pass a local stand-in. */
   fetchImpl?: typeof fetch;
@@ -284,6 +287,7 @@ export class DesktopPetWorld implements World {
     });
     if (this.cfg.asr.enabled) void this.startVoiceBackend();
     await this.syncHotkey();
+    this.syncPersona(true);
     this.prefsKey = this.prefsSignature();
     this.prefsTimer = setInterval(() => this.syncPrefs(), PREFS_SYNC_MS);
     if (this.cfg.mosaico?.enabled) {
@@ -452,6 +456,7 @@ export class DesktopPetWorld implements World {
     if (!raw || typeof raw !== 'object') return;
     const skin = raw as PetSkin;
     this.opts.persist({ skin });
+    this.syncPersona(true);
     this.mosaico?.syncSkin();
     this.syncPrefs();
   }
@@ -706,11 +711,34 @@ export class DesktopPetWorld implements World {
     this.syncPrefs();
   }
 
+  /* ---------- persona ---------- */
+
+  /** Gives the current figure its own self-description; tells the running session when it changed. */
+  private syncPersona(announce: boolean): void {
+    if (!this.opts.workspaceDir) return;
+    const figure = figureOf(this.cfg.skin);
+    try {
+      const from = activatePersona(this.opts.workspaceDir, figure);
+      if (!from) return;
+      const name = FIGURE_NAMES[figure];
+      this.log?.info(`形象换成${name},自述已切换(${FIGURE_NAMES[from]}的自述存在 personas/${from}.md)`);
+      if (announce) void this.push('desktop-pet.figure', 'desktop-pet.figure',
+        `[形象] 身体从${FIGURE_NAMES[from]}换成了${name}。你的自述 CONSTITUTION.md 已换成${name}的版本,下一个 session 起完整生效;在那之前就以${name}的名字、性子和口癖说话。${FIGURE_NAMES[from]}的自述原样存在 personas/${from}.md,换回来时会恢复。`,
+        'flush');
+    } catch (e) {
+      this.log?.warn(`切换${FIGURE_NAMES[figure]}的自述失败:${(e as Error).message}`);
+    }
+  }
+
   /* ---------- talk key ---------- */
 
-  /** The mode in force: hold and toggle fall back to always while the talk key cannot be read. */
+  /**
+   * The mode in force. A talk key that cannot be read leaves the microphone closed
+   * rather than open all the time: an always-open microphone turns room noise and
+   * other voices into messages the person never meant to send.
+   */
   private micMode(): MicMode {
-    return this.hotkeyProblem ? 'always' : this.cfg.asr.mic.mode;
+    return this.cfg.asr.mic.mode;
   }
 
   /** Audio reaches the segmenter only while this is true. */
@@ -744,7 +772,7 @@ export class DesktopPetWorld implements World {
     if (key !== this.hotkeyKey) { if (typeof watcher !== 'string') watcher.stop(); return; }
     if (typeof watcher === 'string') {
       this.hotkeyProblem = watcher;
-      this.log?.warn(`按键收音不可用,改为一直收音:${watcher}`);
+      this.log?.warn(`说话键不可用,麦克风保持关闭:${watcher}`);
     } else this.keyWatcher = watcher;
     this.segmenter.configure(this.segmentConfig());
   }
@@ -754,9 +782,8 @@ export class DesktopPetWorld implements World {
     const { hotkey } = this.cfg.asr.mic;
     const key = comboLabel(hotkey), { taps } = splitTaps(hotkey);
     const mode = this.micMode();
-    if (mode === 'always') return this.hotkeyProblem
-      ? `说话键不可用，暂时自动收音：${this.hotkeyProblem}`
-      : '一直在听,直接说话';
+    if (mode === 'always') return '一直在听,直接说话';
+    if (this.hotkeyProblem) return `说话键不可用,麦克风先关着:${this.hotkeyProblem}`;
     if (mode === 'toggle') return taps > 1 ? `${hotkeyLabel(hotkey)} 开始听,再${taps === 2 ? '双击' : '三击'}停` : `按一下 ${key} 开始听,再按一下停`;
     return taps > 1 ? `快速按${taps === 2 ? '一' : '两'}下 ${key},紧接着按住说话,松开就发出去` : `按住 ${key} 说话,松开就发出去`;
   }
@@ -1052,6 +1079,7 @@ export class DesktopPetWorld implements World {
   envPromptVars(): Record<string, string> {
     return {
       'pet.user': this.cfg.user,
+      'pet.body': FIGURE_BODIES[figureOf(this.cfg.skin)],
       'pet.vocab': vocabTable(),
       'pet.voice': this.cfg.asr.enabled ? '开着' : '关着',
       'pet.mosaico': this.cfg.mosaico?.enabled ? MOSAICO_PROMPT : '',
@@ -1095,6 +1123,7 @@ export class DesktopPetWorld implements World {
         role: 'envPrompt',
         vars: [
           { name: 'pet.user', description: '对使用者的称呼' },
+          { name: 'pet.body', description: '当前形象的外观(Coo 或大肥鱼)' },
           { name: 'pet.vocab', description: '表情与动作词表', multiline: true },
           { name: 'pet.voice', description: '语音输入开着还是关着' },
           { name: 'pet.mosaico', description: '启用跨屏身体时的交互约束', multiline: true },

@@ -32,6 +32,7 @@ export function desktopPetDefinition(assembly: DesktopPetAssembly = {}): WorldDe
         avatarFile: join(ctx.botDir, AVATAR_FILE),
         controls: assembly.controls,
         dataDir: join(ctx.dataDir, 'desktop-pet'),
+        workspaceDir: join(ctx.botDir, 'workspace'),
         secret: name => ctx.secret(name),
       });
       assembly.onCreate?.(world);

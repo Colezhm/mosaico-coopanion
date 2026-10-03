@@ -13,6 +13,9 @@ bool coop_render_atlas(coop_render_handle_t handle, const uint8_t *bytes, size_t
 bool coop_atlas_validate(const uint8_t *bytes, size_t size);
 void coop_render_draw(coop_render_handle_t handle, const coop_snapshot_t *state, uint16_t *pixels,
                       size_t stride, int x, int y, int width, int height);
+/** Degrees the panel itself is rotated by (0, 90, 180, 270): the renderer then
+ *  draws only the remaining orientation. Safe from any task; read every frame. */
+void coop_render_set_screen_rotation(coop_render_handle_t handle, int degrees);
 /** Conservative screen rectangle containing every non-background pixel that
  *  coop_render_draw() would produce for @p state. Everything outside is black. */
 void coop_render_bounds(coop_render_handle_t handle, const coop_snapshot_t *state,

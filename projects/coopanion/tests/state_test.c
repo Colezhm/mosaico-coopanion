@@ -209,6 +209,17 @@ static void physical_test(void)
     feed(h, &now, 0, 0, 1, 0, 2500);
     assert(fabsf(coop_state_get(h)->body_dx) < .5f && fabsf(coop_state_get(h)->squash) < .02f);
 
+    /* The AI key is heard during any animation but a transfer or a turn. */
+    feed(h, &now, .5f, 0, 1, 0, 20);
+    feed(h, &now, 0, 0, 1, 0, 60);
+    assert(coop_state_animation_busy(h));
+    unsigned starts = e.voice_start;
+    coop_state_button(h, true, now);
+    assert(coop_state_get(h)->listening && coop_state_get(h)->motion == COOP_LISTEN && e.voice_start == starts + 1);
+    coop_state_button(h, false, now + 400);
+    coop_state_voice_result(h, "好的", false, now + 900);
+    feed(h, &now, 0, 0, 1, 0, 3000);
+
     /* Left alone: drowsy, then dozing with Zs; a touch wakes him. */
     for (int i = 0; i < 200; i++)
         feed(h, &now, 0, 0, 1, 0, 1000);
@@ -293,31 +304,54 @@ static void motion_test(void)
     coop_state_presence(h, true, 1, false);
     coop_state_connection(h, true);
     coop_state_imu(h, 0, 0, 1, 0, 0, 0, 2000);
-    coop_state_imu(h, .22f, 0, 1, 20, 0, 0, 2100);
+    coop_state_imu(h, .4f, 0, 1, 20, 0, 0, 2100);
     assert(coop_state_get(h)->motion==COOP_SWAY);
     coop_state_action(h,"stumble",2200);
     assert(coop_state_get(h)->motion==COOP_SWAY);
     assert(e.say==0 && e.touch==0 && e.vibrate==0);
-    /* Tilt >55 degrees queues a fall without truncating the sway. */
-    for (uint64_t t = 2210; t <= 3200; t += 10) {
+    /* Gravity turning to the left edge interrupts the sway and turns at once:
+     * never a fall toward the old ground first. */
+    uint64_t turned = 0;
+    for (uint64_t t = 2210; t <= 3400; t += 10) {
+        coop_state_imu(h, .9063f, 0, .4226f, 0, 0, 0, t);
+        coop_state_tick(h, t);
+        assert(coop_state_get(h)->motion != COOP_FALL);
+        if (!turned && coop_state_get(h)->motion == COOP_SETTLE)
+            turned = t;
+    }
+    assert(turned && turned - 2210 <= 400);
+    assert(coop_state_get(h)->edge == 1 && fabsf(coop_state_get(h)->orientation - 90) < .1f);
+    assert(e.vibrate == 1); /* one buzz when he lands on the new ground */
+    for (uint64_t t = 3410; t <= 6000; t += 10) {
         coop_state_imu(h, .9063f, 0, .4226f, 0, 0, 0, t);
         coop_state_tick(h, t);
     }
-    assert(coop_state_get(h)->motion==COOP_SWAY);
-    for(uint64_t t=3210;t<=3350;t+=10){
-        coop_state_imu(h,.9063f,0,.4226f,0,0,0,t);coop_state_tick(h,t);
-    }
-    assert(coop_state_get(h)->motion==COOP_FALL && e.vibrate==1);
-    coop_state_action(h,"jump",3360);
-    coop_state_touch(h,true,3370);
-    coop_state_say(h,"不要打断摔倒",true,3380);
-    assert(coop_state_get(h)->motion==COOP_FALL && e.say==0);
-    for (uint64_t t = 3390; t <= 10000; t += 10) {
-        coop_state_imu(h,.9063f,0,.4226f,0,0,0,t);
+    assert(e.vibrate == 1 && coop_state_get(h)->edge == 1);
+    coop_state_delete(h);
+
+    /* A steep slope that is not yet another edge: he loses balance once. */
+    memset(&e, 0, sizeof(e));
+    h = create(&e);
+    coop_state_presence(h, true, 1, false);
+    coop_state_connection(h, true);
+    for (uint64_t t = 1000; t <= 3000; t += 10) {
+        coop_state_imu(h, 0, 1, 0, 0, 0, 0, t);
         coop_state_tick(h, t);
     }
-    assert(e.vibrate==1); /* Holding the tilt does not repeatedly trip. */
-    assert(coop_state_get(h)->edge==1);
+    bool fell = false;
+    for (uint64_t t = 3010; t <= 9000; t += 10) {
+        coop_state_imu(h, .66f, .66f, .35f, 0, 0, 0, t);
+        coop_state_tick(h, t);
+        fell |= coop_state_get(h)->motion == COOP_FALL;
+    }
+    assert(fell && coop_state_get(h)->edge == 0);
+    coop_state_action(h, "jump", 9010);
+    unsigned buzz = e.vibrate;
+    for (uint64_t t = 9020; t <= 14000; t += 10) {
+        coop_state_imu(h, .66f, .66f, .35f, 0, 0, 0, t);
+        coop_state_tick(h, t);
+    }
+    assert(e.vibrate == buzz); /* holding the slope does not trip him again */
     coop_state_restore(h, false, false, true, 9, "restart", false);
     assert(!coop_state_get(h)->visible && coop_state_get(h)->epoch == 9);
     coop_state_presence(h, true, 8, false);

@@ -6,6 +6,7 @@
 #include "coop_script.h"
 #include "coop_receipt.h"
 #include "bsp/esp_mosaico.h"
+#include "esp_gsp_esp_lcd.h"
 #include "esp_iris.h"
 #include "esp_timer.h"
 #include "esp_system.h"
@@ -82,6 +83,11 @@ struct coop_board_t {
     uint32_t pairing_session;
     uint64_t pairing_deadline;
     bool pairing_restarting;
+    /* Standing edge the UI wants (written by the render task) and the one the
+     * panel shows (owned by the sensors task, which rotates it). */
+    atomic_int desired_edge;
+    int applied_edge;
+    uint64_t rotate_retry_at;
 };
 static uint64_t now(void *ctx)
 {
@@ -331,6 +337,40 @@ static void release(void *button, void *ctx)
     bool down = false;
     xQueueSend(h->buttons, &down, 0);
 }
+/* Edge -> panel rotation. The renderer's edge 1 maps a logical point to
+ * (W-1-y, x), which is BSP_DISPLAY_ROTATE_90 (swap XY + mirror X); if a board
+ * shows sideways edges mirrored, swap the 90 and 270 entries. */
+static const bsp_display_rotation_t EDGE_ROTATION[4] = {
+    BSP_DISPLAY_ROTATE_0, BSP_DISPLAY_ROTATE_90, BSP_DISPLAY_ROTATE_180, BSP_DISPLAY_ROTATE_270};
+#define ROTATE_PAUSE_MS 300
+#define ROTATE_RETRY_MS 1000
+/* Turns the whole UI (captions, status, menu, touch) to the standing edge.
+ * The panel scan (MADCTL) and touch transform change while GSP is paused;
+ * GSP redraws the full frame on resume. Never called from the render task. */
+static void rotate_screen(coop_board_handle_t h)
+{
+    int edge = atomic_load(&h->desired_edge);
+    if (!h->gsp || edge == h->applied_edge || edge < 0 || edge > 3 || now(NULL) < h->rotate_retry_at)
+        return;
+    esp_gsp_esp_lcd_pause_t *pause = NULL;
+    if (esp_gsp_esp_lcd_pause(h->gsp, ROTATE_PAUSE_MS, &pause) != ESP_OK) {
+        h->rotate_retry_at = now(NULL) + ROTATE_RETRY_MS;
+        return;
+    }
+    esp_err_t err = bsp_display_set_rotation(EDGE_ROTATION[edge]);
+    if (err == ESP_OK) {
+        coop_ui_set_screen_rotation(h->ui, edge * 90);
+        h->applied_edge = edge;
+    } else {
+        ESP_LOGW("coopanion", "screen rotation to edge %d failed (%s)", edge, esp_err_to_name(err));
+        h->rotate_retry_at = now(NULL) + ROTATE_RETRY_MS;
+    }
+    esp_gsp_handle_t resumed = NULL;
+    if (esp_gsp_esp_lcd_resume_paused(pause, &resumed) != ESP_OK)
+        ESP_LOGE("coopanion", "GSP did not resume after rotating the screen");
+    else if (resumed != h->gsp)
+        ESP_LOGW("coopanion", "GSP resumed a different UI handle after rotation");
+}
 static void sensors(void *ctx)
 {
     coop_board_handle_t h = ctx;
@@ -347,6 +387,7 @@ static void sensors(void *ctx)
                 imu_running = false;
             }
         }
+        rotate_screen(h);
         if (imu_running) {
             imu_sample_t s = {.at = now(NULL)};
             if (bsp_imu_get_accel(&s.a[0], &s.a[1], &s.a[2]) == ESP_OK &&
@@ -421,6 +462,7 @@ static void poll(void *ctx, coop_state_handle_t s)
 {
     coop_board_handle_t h = ctx;
     uint64_t time = now(NULL);
+    atomic_store(&h->desired_edge, coop_state_get(s)->edge);
     coop_state_voice_level(s, coop_audio_level(h->audio));
     asset_notice_t *asset;
     if (xQueueReceive(h->asset_notices, &asset, 0) == pdTRUE) {

@@ -3,6 +3,7 @@
 #include "coop_animation.h"
 #include "coop_fx.h"
 #include <math.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #define ATLAS_W 192
@@ -46,6 +47,8 @@ struct coop_render_t {
     float eye_y, eye_wide;
     /* Emote effect of the current frame; render-task only, rebuilt by plan(). */
     coop_fx_frame_t fx;
+    /* Written by the task that rotates the panel while rendering is paused. */
+    atomic_int screen_rotation;
 };
 static uint16_t u16(const uint8_t *p)
 {
@@ -110,6 +113,11 @@ void coop_render_delete(coop_render_handle_t h)
         free(h->scratch);
         free(h);
     }
+}
+void coop_render_set_screen_rotation(coop_render_handle_t h, int degrees)
+{
+    if (h)
+        atomic_store(&h->screen_rotation, degrees);
 }
 bool coop_atlas_validate(const uint8_t *p, size_t n)
 {
@@ -431,7 +439,8 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
     /* Squash keeps the volume roughly constant. */
     f->sx = s->scale_x * (1 + .5f * s->squash);
     f->sy = s->scale_y * (1 - s->squash);
-    float orientation=s->orientation*.017453293f;
+    /* The panel may already be rotated to the standing edge; draw the rest. */
+    float orientation=(s->orientation-(float)atomic_load(&h->screen_rotation))*.017453293f;
     f->oc = cosf(orientation);
     f->os = sinf(orientation);
     /* On side edges, roam below the horizontal caption area. Blend the
