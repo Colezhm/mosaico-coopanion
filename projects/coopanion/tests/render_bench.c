@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #define W 480
 #define STRIDE (W * 2)
@@ -103,6 +104,15 @@ static void run(bench_t *b, uint64_t *now, uint64_t ms)
     for (uint64_t end = *now + ms; *now < end; *now += 33)
         frame(b, *now);
 }
+static void imu(bench_t *b, uint64_t *now, float ax, float ay, float az, float gx, float gy, float gz,
+                uint64_t ms)
+{
+    for (uint64_t start = *now, end = *now + ms; *now < end; *now += 10) {
+        coop_state_imu(b->state, ax, ay, az, gx, gy, gz, *now);
+        if ((*now - start) % 30 == 0)
+            frame(b, *now);
+    }
+}
 static void tilt(bench_t *b, uint64_t *now, float ax, float ay, uint64_t ms)
 {
     for (uint64_t end = *now + ms; *now < end; *now += 10) {
@@ -163,6 +173,30 @@ int main(int argc, char **argv)
     tilt(&b, &now, 0, -1, 2000); /* top edge */
     tilt(&b, &now, -1, 0, 2000); /* right edge */
     tilt(&b, &now, 0, 0, 2000);  /* upright again */
+    /* Physical layer: toss and catch, shake, knocks, spin, face down, petting. */
+    for (int i = 0; i < 3; i++) {
+        imu(&b, &now, 0, 0, 1, 0, 0, 0, 400);
+        imu(&b, &now, 0, 0, .05f, 0, 0, 0, 350);
+        imu(&b, &now, 0, 0, 2.8f, 0, 0, 0, 20);
+        imu(&b, &now, 0, 0, 1, 0, 0, 0, 1200);
+    }
+    for (uint64_t start = now, end = now + 1500; now < end; now += 10) {
+        float swing = 1.2f * sinf((float)(now - start) / 1000.f * 6.2831853f * 5);
+        coop_state_imu(b.state, swing, 0, 1, 0, 0, 0, now);
+        if ((now - start) % 30 == 0)
+            frame(&b, now);
+    }
+    imu(&b, &now, 0, 0, 1, 0, 0, 0, 2500);
+    imu(&b, &now, .9f, 0, 1, 0, 0, 0, 20);
+    imu(&b, &now, 0, 0, 1, 0, 0, 0, 200);
+    imu(&b, &now, .9f, 0, 1, 0, 0, 0, 20);
+    imu(&b, &now, 0, 0, 1, 0, 0, 0, 1500);
+    imu(&b, &now, 0, 0, 1, 0, 0, 340, 2200);
+    imu(&b, &now, 0, 0, 1, 0, 0, 0, 2500);
+    imu(&b, &now, 0, 0, -1, 0, 0, 0, 2500);
+    imu(&b, &now, 0, 0, 1, 0, 0, 0, 1500);
+    coop_state_touch(b.state, true, now);
+    run(&b, &now, 1800);
     coop_state_menu(b.state, true);
     run(&b, &now, 300);
     coop_state_presence(b.state, false, 2, false);

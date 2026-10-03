@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "coop_render.h"
 #include "coop_animation.h"
+#include "coop_fx.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,12 @@ struct coop_render_t {
      * the dirty rectangle, never to change a pixel's value. */
     int opaque_x0, opaque_y0, opaque_x1, opaque_y1;
     int light_x0, light_y0, light_x1, light_y1;
+    /* Coo's ring-eye poses have their eyes removed from the decoded texels and
+     * drawn procedurally instead, centered at (COO_EYE_LX/RX, eye_y). */
+    bool eyes;
+    float eye_y, eye_wide;
+    /* Emote effect of the current frame; render-task only, rebuilt by plan(). */
+    coop_fx_frame_t fx;
 };
 static uint16_t u16(const uint8_t *p)
 {
@@ -136,6 +143,9 @@ bool coop_render_atlas(coop_render_handle_t h, const uint8_t *p, size_t n)
 }
 static int pose_for(const coop_snapshot_t *s)
 {
+    /* Spiral eyes are drawn on the plain ring-eye face. */
+    if (s->eye_mode == 1 && s->motion != COOP_WALK && s->motion != COOP_RUN && s->motion != COOP_SIT)
+        return 0;
     if (s->motion == COOP_WALK || s->motion == COOP_RUN)
         return 14 + ((int)(s->phase * 12) % 8);
     if (s->motion == COOP_SLEEP)
@@ -144,8 +154,10 @@ static int pose_for(const coop_snapshot_t *s)
         return 13;
     if (s->motion == COOP_CRY)
         return 7;
+    /* His back: the plain ring, face features hidden in figure_pixel; the
+     * anger mark comes from the effect layer. */
     if (s->motion == COOP_SULK)
-        return 6;
+        return 0;
     if (s->motion == COOP_FALL || s->motion == COOP_GETUP)
         return 10;
     if (s->motion == COOP_THINK)
@@ -199,6 +211,40 @@ static void opaque_bounds(coop_render_handle_t h)
                 h->opaque_y1 = y > h->opaque_y1 ? y : h->opaque_y1;
             }
 }
+/* Coo's ring eyes: mint rings around transparent pupils, measured from the
+ * COO1 atlas. Neutral, surprised, sit and the eight walk poses use them. */
+#define COO_EYE_COLOR 0x2eb3
+#define COO_EYE_LX 87.f
+#define COO_EYE_RX 117.f
+#define COO_EYE_Y 99.f
+#define COO_SIT_EYE_Y 117.f
+#define COO_EYE_OUTER 12.7f
+#define COO_EYE_INNER 6.4f
+#define COO_POSE_SURPRISED 5
+#define COO_POSE_SIT 13
+#define COO_RING_X 96.f
+#define COO_RING_Y 106.f
+#define COO_FACE_R 38.f
+#define COO_POSE_ANGRY 6
+#define COO_POSE_DRAGGED 11
+#define COO_POSE_WALK0 14
+#define COO_POSE_WALK7 21
+static void procedural_eyes(coop_render_handle_t h, int pose)
+{
+    h->eyes = pose == 0 || pose == COO_POSE_SURPRISED || pose == COO_POSE_SIT ||
+              (pose >= COO_POSE_WALK0 && pose <= COO_POSE_WALK7);
+    if (!h->eyes)
+        return;
+    h->eye_y = pose == COO_POSE_SIT ? COO_SIT_EYE_Y : COO_EYE_Y;
+    h->eye_wide = pose == COO_POSE_SURPRISED ? 1.18f : 1;
+    /* Clear the baked eyes; nothing else in that box is mint. */
+    for (int y = (int)h->eye_y - 18; y <= (int)h->eye_y + 18; y++)
+        for (int x = 66; x <= 138; x++) {
+            size_t at = (size_t)y * ATLAS_W + x;
+            if (h->rgb[at] == COO_EYE_COLOR)
+                h->alpha[at] = 0;
+        }
+}
 static void decode(coop_render_handle_t h, int pose)
 {
     if (!h->atlas || h->pose == pose)
@@ -209,6 +255,7 @@ static void decode(coop_render_handle_t h, int pose)
         const uint8_t *palette=coop_animation_palette(p);
         for(unsigned i=0;i<ATLAS_PIXELS;i++){unsigned at=h->indices[i]*3;h->rgb[i]=u16(palette+at);h->alpha[i]=palette[at+2];}
         h->pose=pose;
+        h->eyes=false;
         opaque_bounds(h);
         return;
     }
@@ -224,6 +271,7 @@ static void decode(coop_render_handle_t h, int pose)
         }
     }
     h->pose = pose;
+    procedural_eyes(h, pose);
     opaque_bounds(h);
 }
 static uint16_t blend(uint16_t a, uint16_t b, unsigned opacity)
@@ -260,45 +308,6 @@ static bool uniform_quad(coop_render_handle_t h, int x, int y)
 #define TEAR_X1 119
 #define TEAR_Y0 115
 #define TEAR_Y1 152
-static uint16_t figure_pixel(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t background,
-                             float px, float py, bool whale)
-{
-    int ix = (int)floorf(px), iy = (int)floorf(py);
-    if (ix < -1 || ix >= ATLAS_W || iy < -1 || iy >= ATLAS_H)
-        return background;
-    /* Coo's sulk pose hides the face region to read as a turned back. */
-    if (!whale && s->motion == COOP_SULK && ix > 75 && ix < 132 && iy > 72 && iy < 129)
-        return background;
-    uint16_t color = background;
-    /* Four transparent texels blend to exactly the background; most of the
-     * sprite's rectangle is transparent, so skip the filter there. */
-    if (alpha_at(h, ix, iy) | alpha_at(h, ix + 1, iy) | alpha_at(h, ix, iy + 1) |
-        alpha_at(h, ix + 1, iy + 1)) {
-        if (!whale && uniform_quad(h, ix, iy)) {
-            /* Blending equal colors returns that color, so one blend gives the
-             * filtered result inside Coo's flat-colored areas. The whale's
-             * shaded art rarely has such blocks; checking would only cost time. */
-            size_t at = (size_t)iy * ATLAS_W + ix;
-            color = blend(background, h->rgb[at], h->alpha[at]);
-        } else {
-            /* Bilinear filtering against this pixel's background: smooth edges for
-             * the up-scaled sprite without a dark fringe from transparent texels. */
-            unsigned fx = (unsigned)((px - ix) * 255), fy = (unsigned)((py - iy) * 255);
-            uint16_t top =
-                blend(sampled(h, background, ix, iy), sampled(h, background, ix + 1, iy), fx);
-            uint16_t bottom = blend(sampled(h, background, ix, iy + 1),
-                                    sampled(h, background, ix + 1, iy + 1), fx);
-            color = blend(top, bottom, fy);
-        }
-    }
-    if (!whale && s->motion == COOP_CRY && iy > 114 && iy < 153) {
-        int drop = 118 + ((int)(s->phase * 45) % 30);
-        if ((abs(ix - 88) < 2 || abs(ix - 118) < 2) && abs(iy - drop) < 5)
-            color = rgb565(105, 207, 247);
-    }
-    return color;
-}
-
 /* A local-space (pre-orientation) box; empty when x0 > x1. */
 typedef struct {
     float x0, y0, x1, y1;
@@ -329,20 +338,99 @@ static box_t box_pad(box_t b, float pad)
  * unchanged; the boxes are conservative supersets of each layer's footprint. */
 typedef struct {
     bool whale, shadow, figure, away;
-    float c, sn, scale, oc, os, cx, cy, lying_shift, glow, portal_cx;
+    float c, sn, scale, sx, sy, oc, os, cx, cy, lying_shift, glow, portal_cx;
     float lift, shadow_rx;
     int portal_dy;
-    box_t shadow_box, light_box, figure_box;
+    box_t shadow_box, light_box, figure_box, fx_box;
+    /* Procedural eyes, atlas coordinates. */
+    bool eyes;
+    uint8_t eye_mode;
+    float eye_shift_x, eye_y, eye_outer, eye_inner, pupil_x, pupil_y, eye_open, eye_spin, eye_aa;
+    float eye_x0, eye_y0, eye_x1, eye_y1;
 } frame_t;
+
+static float eye_distance(const frame_t *f, float px, float py)
+{
+    float ex = px - ((px < 102 ? COO_EYE_LX : COO_EYE_RX) + f->eye_shift_x), ey = py - f->eye_y;
+    if (f->eye_mode == 1) {
+        /* Dizzy: a two-turn Archimedean spiral that keeps turning. */
+        float r = sqrtf(ex * ex + ey * ey), turn = atan2f(ey, ex) + f->eye_spin;
+        const float pitch = COO_EYE_OUTER / (2.2f * 6.2831853f);
+        float n = roundf((r / pitch - turn) / 6.2831853f);
+        return fmaxf(fabsf(r - pitch * (turn + 6.2831853f * n)) - 1.9f, r - COO_EYE_OUTER);
+    }
+    if (f->eye_open < .22f) {
+        /* Shut: a short lid line. */
+        float w = f->eye_outer * .8f, x = fmaxf(fabsf(ex) - w, 0);
+        return sqrtf(x * x + ey * ey) - 2.3f;
+    }
+    ey /= f->eye_open;
+    float outer = sqrtf(ex * ex + ey * ey) - f->eye_outer;
+    float hx = ex - f->pupil_x, hy = ey - f->pupil_y;
+    float hole = sqrtf(hx * hx + hy * hy) - f->eye_inner;
+    return fmaxf(outer, -hole) * f->eye_open;
+}
+static uint16_t figure_pixel(coop_render_handle_t h, const coop_snapshot_t *s, const frame_t *f,
+                             uint16_t background, float px, float py, bool whale)
+{
+    int ix = (int)floorf(px), iy = (int)floorf(py);
+    if (ix < -1 || ix >= ATLAS_W || iy < -1 || iy >= ATLAS_H)
+        return background;
+    /* Coo's sulk pose turns his back: hide every face feature inside the ring
+     * (inner radius 39.5 around (96, 106)) and keep the ring whole. */
+    if (!whale && s->motion == COOP_SULK) {
+        float fx = px - COO_RING_X, fy = py - COO_RING_Y;
+        if (fx * fx + fy * fy < COO_FACE_R * COO_FACE_R)
+            return background;
+    }
+    uint16_t color = background;
+    /* Four transparent texels blend to exactly the background; most of the
+     * sprite's rectangle is transparent, so skip the filter there. */
+    if (alpha_at(h, ix, iy) | alpha_at(h, ix + 1, iy) | alpha_at(h, ix, iy + 1) |
+        alpha_at(h, ix + 1, iy + 1)) {
+        if (!whale && uniform_quad(h, ix, iy)) {
+            /* Blending equal colors returns that color, so one blend gives the
+             * filtered result inside Coo's flat-colored areas. The whale's
+             * shaded art rarely has such blocks; checking would only cost time. */
+            size_t at = (size_t)iy * ATLAS_W + ix;
+            color = blend(background, h->rgb[at], h->alpha[at]);
+        } else {
+            /* Bilinear filtering against this pixel's background: smooth edges for
+             * the up-scaled sprite without a dark fringe from transparent texels. */
+            unsigned fx = (unsigned)((px - ix) * 255), fy = (unsigned)((py - iy) * 255);
+            uint16_t top =
+                blend(sampled(h, background, ix, iy), sampled(h, background, ix + 1, iy), fx);
+            uint16_t bottom = blend(sampled(h, background, ix, iy + 1),
+                                    sampled(h, background, ix + 1, iy + 1), fx);
+            color = blend(top, bottom, fy);
+        }
+    }
+    if (f->eyes && px >= f->eye_x0 && px <= f->eye_x1 && py >= f->eye_y0 && py <= f->eye_y1) {
+        float coverage = .5f - eye_distance(f, px, py) * f->eye_aa;
+        if (coverage > 0)
+            color = blend(color, COO_EYE_COLOR, coverage >= 1 ? 255 : (unsigned)(coverage * 255));
+    }
+    if (!whale && s->motion == COOP_CRY && iy > 114 && iy < 153) {
+        int drop = 118 + ((int)(s->phase * 45) % 30);
+        if ((abs(ix - 88) < 2 || abs(ix - 118) < 2) && abs(iy - drop) < 5)
+            color = rgb565(105, 207, 247);
+    }
+    return color;
+}
+
 
 static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
 {
     f->whale = h->atlas && h->atlas[3] == '2';
     decode(h, f->whale ? coop_animation_frame(h->atlas, clip_for(s), s->phase) : pose_for(s));
-    const float angle = s->angle * .017453293f;
+    /* The spring sway leans the body a little, as if it pivots on its feet. */
+    const float angle = (s->angle + s->body_dx * .45f) * .017453293f;
     f->c = cosf(angle);
     f->sn = sinf(angle);
     f->scale = f->whale ? WHALE_SCALE : COO_SCALE;
+    /* Squash keeps the volume roughly constant. */
+    f->sx = s->scale_x * (1 + .5f * s->squash);
+    f->sy = s->scale_y * (1 - s->squash);
     float orientation=s->orientation*.017453293f;
     f->oc = cosf(orientation);
     f->os = sinf(orientation);
@@ -350,9 +438,9 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
      * supporting point during rotation so changing edges never teleports it. */
     float lateral = fabsf(f->os);
     float side_x = (f->os > 0 ? 240 : 130) + s->x * 110;
-    f->cx = (70 + s->x * 340) * (1-lateral) + side_x * lateral;
+    f->cx = (70 + s->x * 340) * (1-lateral) + side_x * lateral + s->body_dx;
     float lying = s->motion == COOP_FALL || s->motion == COOP_GETUP ? fabsf(f->sn) : 0;
-    f->cy = GROUND_Y + s->y - lying * LYING_HALF_WIDTH * f->scale;
+    f->cy = GROUND_Y + s->y - s->air - lying * LYING_HALF_WIDTH * f->scale;
     /* The shadow follows the body's middle, which moves sideways as it tips over. */
     f->lying_shift = lying ? f->sn * LYING_BODY_MID * f->scale : 0;
     /* Idle portal while away: a slow breath, never a full-intensity arrival. */
@@ -363,7 +451,7 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
     f->portal_dy = f->away ? AWAY_PORTAL_Y - PORTAL_Y : 0;
 
     f->shadow = s->visible && s->motion != COOP_DEPART && s->motion != COOP_ARRIVE;
-    f->lift = fminf(1, fmaxf(0, -s->y / SHADOW_LIFT_FADE));
+    f->lift = fminf(1, fmaxf(0, -(s->y - s->air) / SHADOW_LIFT_FADE));
     f->shadow_rx = SHADOW_RX * f->scale / COO_SCALE * (1 - .35f * f->lift);
     f->shadow_box = EMPTY_BOX;
     if (f->shadow) {
@@ -384,6 +472,30 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
     if (f->figure) {
         float x0 = h->opaque_x0 - 1, y0 = h->opaque_y0 - 1, x1 = h->opaque_x1 + 1,
               y1 = h->opaque_y1 + 1;
+        f->eyes = !f->whale && h->eyes;
+        if (f->eyes) {
+            /* Wider than this and the two rings touch. */
+            float wide = fminf(1.22f, h->eye_wide * (s->eye_wide > 0 ? s->eye_wide : 1));
+            f->eye_mode = s->eye_mode;
+            f->eye_outer = COO_EYE_OUTER * wide;
+            f->eye_inner = COO_EYE_INNER * (wide > 1 ? 1.05f : 1);
+            f->eye_shift_x = s->look_x * 2.5f;
+            f->eye_y = h->eye_y + s->look_y * 2.2f;
+            f->pupil_x = s->look_x * 3.4f;
+            f->pupil_y = s->look_y * 2.6f;
+            f->eye_open = fmaxf(.05f, 1 - s->blink);
+            f->eye_spin = s->phase * 6;
+            f->eye_aa = f->scale * fminf(fabsf(f->sx), fabsf(f->sy));
+            float reach = f->eye_outer + 4;
+            f->eye_x0 = COO_EYE_LX + f->eye_shift_x - reach;
+            f->eye_x1 = COO_EYE_RX + f->eye_shift_x + reach;
+            f->eye_y0 = f->eye_y - reach;
+            f->eye_y1 = f->eye_y + reach;
+            x0 = fminf(x0, floorf(f->eye_x0));
+            y0 = fminf(y0, floorf(f->eye_y0));
+            x1 = fmaxf(x1, ceilf(f->eye_x1));
+            y1 = fmaxf(y1, ceilf(f->eye_y1));
+        }
         if (!f->whale && s->motion == COOP_CRY) {
             x0 = fminf(x0, TEAR_X0);
             y0 = fminf(y0, TEAR_Y0);
@@ -394,12 +506,29 @@ static void plan(coop_render_handle_t h, const coop_snapshot_t *s, frame_t *f)
             /* Map the atlas rectangle back through the sprite transform. */
             const float atlas_x[2] = {x0, x1}, atlas_y[2] = {y0, y1};
             for (int i = 0; i < 4; i++) {
-                float u = (atlas_x[i & 1] - 96) * f->scale * s->scale_x,
-                      v = (atlas_y[i >> 1] - 182) * f->scale * s->scale_y;
+                float u = (atlas_x[i & 1] - 96) * f->scale * f->sx,
+                      v = (atlas_y[i >> 1] - 182) * f->scale * f->sy;
                 box_add(&f->figure_box, f->cx + u * f->c - v * f->sn, f->cy + u * f->sn + v * f->c);
             }
             f->figure_box = box_pad(f->figure_box, 1);
         }
+    }
+
+    /* Emote effects float around the top of the head, upright in the
+     * character frame whatever the body's lean. */
+    f->fx_box = EMPTY_BOX;
+    h->fx.count = 0;
+    /* Some faces already carry their mark in the art: both figures' surprised
+     * faces an exclamation, Coo's angry face an anger mark and his flustered
+     * face a sweat drop. Never draw a second one. */
+    bool baked = (s->fx == COOP_FX_EXCLAIM && !strcmp(s->expression, "surprised")) ||
+                 (!f->whale && s->fx == COOP_FX_ANGER && h->pose == COO_POSE_ANGRY) ||
+                 (!f->whale && s->fx == COOP_FX_SWEAT && h->pose == COO_POSE_DRAGGED);
+    if (f->figure && s->fx && !baked && h->opaque_y0 <= h->opaque_y1) {
+        float v = (h->opaque_y0 - 182) * f->scale * f->sy;
+        coop_fx_build(&h->fx, s->fx, s->fx_t, f->cx - v * f->sn, f->cy + v * f->c, f->scale);
+        if (h->fx.count)
+            f->fx_box = (box_t){h->fx.x0, h->fx.y0, h->fx.x1, h->fx.y1};
     }
 }
 
@@ -429,7 +558,7 @@ void coop_render_bounds(coop_render_handle_t h, const coop_snapshot_t *s, coop_r
         return;
     frame_t f;
     plan(h, s, &f);
-    const box_t *boxes[] = {&f.shadow_box, &f.light_box, &f.figure_box};
+    const box_t *boxes[] = {&f.shadow_box, &f.light_box, &f.figure_box, &f.fx_box};
     box_t screen = EMPTY_BOX;
     for (unsigned i = 0; i < sizeof(boxes) / sizeof(boxes[0]); i++) {
         const box_t *b = boxes[i];
@@ -482,10 +611,12 @@ void coop_render_draw(coop_render_handle_t h, const coop_snapshot_t *s, uint16_t
             }
             if (inside(&f.figure_box, lx, ly) && (!s->transferring || ly>=26)) {
                 float dx = lx - f.cx, dy = ly - f.cy;
-                float px = (dx * f.c + dy * f.sn) / (f.scale * s->scale_x) + 96,
-                      py = (-dx * f.sn + dy * f.c) / (f.scale * s->scale_y) + 182;
-                color = figure_pixel(h, s, color, px, py, f.whale);
+                float px = (dx * f.c + dy * f.sn) / (f.scale * f.sx) + 96,
+                      py = (-dx * f.sn + dy * f.c) / (f.scale * f.sy) + 182;
+                color = figure_pixel(h, s, &f, color, px, py, f.whale);
             }
+            if (inside(&f.fx_box, lx, ly))
+                color = coop_fx_pixel(&h->fx, lx, ly, color);
             if (s->listening && y >= METER_Y0 && y < METER_Y1 && x >= METER_X0 && x < METER_X1) {
                 color = x < METER_X0 + (int)(100 * s->voice_level) ? rgb565(100, 239, 188)
                                                                    : rgb565(20, 45, 37);

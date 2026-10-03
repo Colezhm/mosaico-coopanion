@@ -6,6 +6,20 @@ CJSON_DIR (CI checks out the same upstream release).
 """
 from pathlib import Path
 import os, subprocess, tempfile, sys
+import re
+
+# Every non-ASCII character in a C string literal must exist in the scene's
+# font subsets, or the device shows '?' in its place (the caption font is a
+# GB2312 subset without, for example, the em dash).
+glyphs = set((Path(__file__).resolve().parents[1] / 'ui/charset.txt').read_text(encoding='utf8'))
+glyphs |= set((Path(__file__).resolve().parents[1] / 'ui/main.json').read_text(encoding='utf8'))
+for source in sorted((Path(__file__).resolve().parents[1] / 'main').glob('*.c')):
+    code = re.sub(r'/\*.*?\*/|//[^\n]*', '', source.read_text(encoding='utf8'), flags=re.S)
+    for literal in re.findall(r'"((?:[^"\\]|\\.)*)"', code):
+        missing = sorted({ch for ch in literal if ord(ch) > 127 and ch not in glyphs})
+        if missing:
+            raise SystemExit(f'{source.name}: {literal!r} uses glyphs missing from the UI font: {missing}')
+print('PASS: caption glyphs present in the UI font subset')
 
 root = Path(__file__).resolve().parents[1]
 whale = root.parents[1] / 'desktop/coopanion/packages/cortico-world-desktop-pet/web/whale/mosaico-deepseek.bin'
@@ -15,9 +29,10 @@ if not (cjson / 'cJSON.h').exists():
 cc = os.environ.get('CC', 'cc')
 flags = ['-std=c11', '-g', '-O1', '-fsanitize=address,undefined', '-fno-sanitize-recover=all']
 main = lambda *names: [str(root / 'main' / n) for n in names]
-SHARED = ('coop_state.c', 'coop_render.c', 'coop_animation.c', 'coop_subtitle.c', 'coop_hud.c')
+SHARED = ('coop_state.c', 'coop_body.c', 'coop_fx.c', 'coop_render.c', 'coop_animation.c', 'coop_subtitle.c', 'coop_hud.c')
 SCENARIOS = ['idle', 'happy', 'subtitle', 'walk', 'jump', 'listen', 'offline', 'reconnected', 'away',
-             'away-offline', 'edge-left', 'edge-top', 'sit', 'sulk', 'cry', 'fall', 'arrive', 'flustered', 'delighted', 'cheeky']
+             'away-offline', 'edge-left', 'edge-top', 'sit', 'sulk', 'cry', 'fall', 'arrive', 'flustered', 'delighted', 'cheeky',
+             'toss', 'land', 'shake', 'dizzy', 'angry', 'tap', 'spin', 'face-down', 'petting', 'look']
 atlases = [root / 'main/coo-atlas.bin', *(Path(a) for a in (sys.argv[1:] or [str(whale)]))]
 
 with tempfile.TemporaryDirectory(prefix='coopanion-test-') as tmp:

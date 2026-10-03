@@ -21,7 +21,7 @@ endif()
 
 add_subdirectory("${ESP_GSP_COMPONENT_DIR}/tools/sim_bridge" sim_bridge)
 gsp_add_backend(coop_backend
-    SOURCES ../main/coop_state.c ../main/coop_hud.c ../main/coop_render.c ../main/coop_animation.c ../main/coop_ui.c ../main/coop_subtitle.c platform_pc.c link_pc.c ../main/coop_script.c ../managed_components/espressif__cjson/cJSON/cJSON.c
+    SOURCES ../main/coop_state.c ../main/coop_body.c ../main/coop_fx.c ../main/coop_hud.c ../main/coop_render.c ../main/coop_animation.c ../main/coop_ui.c ../main/coop_subtitle.c platform_pc.c link_pc.c ../main/coop_script.c ../managed_components/espressif__cjson/cJSON/cJSON.c
     INCLUDE_DIRECTORIES ../main ../managed_components/espressif__cjson/cJSON
     SCENES ../ui/main.json)
 target_compile_definitions(coop_backend PRIVATE COOP_ATLAS_PATH="${CMAKE_CURRENT_LIST_DIR}/../main/coo-atlas.bin")

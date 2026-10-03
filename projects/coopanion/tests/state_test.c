@@ -3,6 +3,7 @@
 #include "coop_render.h"
 #include "coop_script.h"
 #include "coop_subtitle.h"
+#include "coop_fx.h"
 #include <math.h>
 #include <assert.h>
 #include <stdio.h>
@@ -46,6 +47,178 @@ static coop_state_handle_t create(events_t *e)
     assert(coop_state_create(&cfg, &h) == ESP_OK);
     return h;
 }
+/* ---------- physical layer ---------- */
+
+/* Constant IMU reading at 100 Hz for @p ms with UI ticks every 30 ms. */
+static void feed(coop_state_handle_t h, uint64_t *now, float ax, float ay, float az, float gz, uint64_t ms)
+{
+    for (uint64_t start = *now, end = *now + ms; *now < end; *now += 10) {
+        coop_state_imu(h, ax, ay, az, 0, 0, gz, *now);
+        if ((*now - start) % 30 == 0)
+            coop_state_tick(h, *now);
+    }
+}
+static void toss_and_catch(coop_state_handle_t h, uint64_t *now, float impact)
+{
+    feed(h, now, 0, 0, 1, 0, 400);
+    feed(h, now, 0, 0, .05f, 0, 300);
+    feed(h, now, 0, 0, impact, 0, 20);
+    feed(h, now, 0, 0, 1, 0, 300);
+}
+static void shake_board(coop_state_handle_t h, uint64_t *now, float g, uint64_t ms)
+{
+    for (uint64_t start = *now, end = *now + ms; *now < end; *now += 10) {
+        coop_state_imu(h, g * sinf((float)(*now - start) / 1000.f * 6.2831853f * 5), 0, 1, 0, 0, 0, *now);
+        if ((*now - start) % 30 == 0)
+            coop_state_tick(h, *now);
+    }
+}
+static coop_state_handle_t resident(events_t *e, uint64_t *now)
+{
+    coop_state_handle_t h = create(e);
+    coop_state_presence(h, true, 1, false);
+    coop_state_connection(h, true);
+    coop_state_tick(h, *now);
+    feed(h, now, 0, 0, 1, 0, 500);
+    return h;
+}
+static void physical_test(void)
+{
+    events_t e = {0};
+    uint64_t now = 1000;
+    coop_state_handle_t h = resident(&e, &now);
+
+    /* Tossed: floats with wide eyes; caught hard: a playful landing that buzzes. */
+    feed(h, &now, 0, 0, 1, 0, 400);
+    feed(h, &now, 0, 0, .05f, 0, 300);
+    assert(coop_state_get(h)->air > 20 && !strcmp(coop_state_get(h)->expression, "surprised"));
+    assert(coop_state_get(h)->eye_wide > 1 && coop_state_get(h)->fx == COOP_FX_EXCLAIM);
+    assert(coop_state_get(h)->motion != COOP_FALL && coop_state_get(h)->motion != COOP_STUMBLE);
+    unsigned buzz = e.vibrate;
+    feed(h, &now, 0, 0, 2.6f, 0, 20);
+    feed(h, &now, 0, 0, 1, 0, 300);
+    assert(e.vibrate == buzz + 1);
+    assert(!strcmp(coop_state_get(h)->expression, "delighted") && coop_state_get(h)->fx == COOP_FX_SPARKLE);
+    assert(strstr(coop_state_get(h)->subtitle, "再来一次"));
+    feed(h, &now, 0, 0, 1, 0, 800);
+    assert(coop_state_get(h)->air == 0);
+
+    /* Tolerance: repeated tosses escalate to a sulk with an anger mark. */
+    for (int i = 0; i < 6; i++)
+        toss_and_catch(h, &now, 3);
+    assert(coop_state_get(h)->motion == COOP_SULK && coop_state_get(h)->fx == COOP_FX_ANGER);
+    /* Petted mid-sulk: forgiven, with hearts, once the sulk ends. */
+    coop_state_touch(h, true, now);
+    for (int i = 0; i < 200 && coop_state_get(h)->motion == COOP_SULK; i++)
+        feed(h, &now, 0, 0, 1, 0, 30);
+    feed(h, &now, 0, 0, 1, 0, 60);
+    assert(coop_state_get(h)->motion != COOP_SULK && coop_state_get(h)->fx == COOP_FX_HEARTS);
+    assert(strstr(coop_state_get(h)->subtitle, "原谅"));
+    feed(h, &now, 0, 0, 1, 0, 2000);
+    /* Petting and a calm minute restore the playful mood. */
+    coop_state_touch(h, true, now);
+    assert(coop_state_get(h)->fx == COOP_FX_HEARTS);
+    feed(h, &now, 0, 0, 1, 0, 30000);
+    toss_and_catch(h, &now, 2.2f);
+    assert(!strcmp(coop_state_get(h)->expression, "delighted"));
+    coop_state_delete(h);
+
+    /* Shaking giggles with notes, then wobbles; never a stumble while shaking. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    shake_board(h, &now, 1.1f, 900);
+    assert(coop_state_get(h)->fx == COOP_FX_NOTES && coop_state_get(h)->motion != COOP_STUMBLE);
+    feed(h, &now, 0, 0, 1, 0, 1800);
+    assert(strstr(coop_state_get(h)->subtitle, "好痒"));
+    coop_state_delete(h);
+
+    /* Turning onto another edge is not a shake, however abrupt. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    feed(h, &now, 1, 0, 0, 0, 3000);
+    assert(coop_state_get(h)->fx != COOP_FX_NOTES && coop_state_get(h)->fx != COOP_FX_STARS);
+    assert(!strstr(coop_state_get(h)->subtitle, "好痒") && !strstr(coop_state_get(h)->subtitle, "晕"));
+    coop_state_delete(h);
+
+    /* A knock on the left side: look left with a question mark; two knocks hop. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    feed(h, &now, .9f, 0, 1, 0, 20);
+    feed(h, &now, 0, 0, 1, 0, 200);
+    assert(coop_state_get(h)->fx == COOP_FX_QUESTION && coop_state_get(h)->look_x < -.5f);
+    feed(h, &now, .9f, 0, 1, 0, 20);
+    feed(h, &now, 0, 0, 1, 0, 60);
+    assert(coop_state_get(h)->motion == COOP_JUMP);
+    feed(h, &now, 0, 0, 1, 0, 2000);
+    /* The bump of a screen touch is not a knock. */
+    coop_state_touch(h, false, now);
+    feed(h, &now, 0, 0, 1, 0, 800);
+    coop_state_touch(h, false, now);
+    unsigned fx = coop_state_get(h)->fx;
+    feed(h, &now, .9f, 0, 1, 0, 20);
+    feed(h, &now, 0, 0, 1, 0, 100);
+    assert(coop_state_get(h)->fx == fx);
+    coop_state_delete(h);
+
+    /* Spinning flat on the table: dizzy spiral eyes, not a tumble. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    feed(h, &now, 0, 0, 1, 320, 1900);
+    assert(coop_state_get(h)->eye_mode == 1 && strstr(coop_state_get(h)->subtitle, "转晕"));
+    assert(coop_state_get(h)->motion != COOP_STUMBLE && e.vibrate == 0);
+    coop_state_delete(h);
+
+    /* Face down: sleeps instead of falling; face up: wakes asking. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    for (int i = 0; i < 150; i++) {
+        feed(h, &now, 0, 0, -1, 0, 10);
+        assert(coop_state_get(h)->motion != COOP_FALL);
+    }
+    feed(h, &now, 0, 0, -1, 0, 1500);
+    assert(coop_state_get(h)->motion == COOP_SLEEP && coop_state_get(h)->fx == COOP_FX_ZZZ);
+    feed(h, &now, 0, 0, 1, 0, 600);
+    /* Being flipped back over may wobble him; he is awake either way. */
+    assert(coop_state_get(h)->motion != COOP_SLEEP && strstr(coop_state_get(h)->subtitle, "天亮"));
+    assert(e.vibrate == 0);
+    coop_state_delete(h);
+
+    /* A reply on screen survives physical captions until it is old. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    coop_state_say(h, "这是刚收到的回复", false, now);
+    toss_and_catch(h, &now, 2.2f);
+    assert(!strcmp(coop_state_get(h)->subtitle, "这是刚收到的回复"));
+    feed(h, &now, 0, 0, 1, 0, 9000);
+    toss_and_catch(h, &now, 2.2f);
+    assert(strcmp(coop_state_get(h)->subtitle, "这是刚收到的回复"));
+    coop_state_delete(h);
+
+    /* A push sways the body on its spring, which settles again. */
+    memset(&e, 0, sizeof(e));
+    now = 1000;
+    h = resident(&e, &now);
+    feed(h, &now, -.6f, 0, 1, 0, 150);
+    assert(fabsf(coop_state_get(h)->body_dx) > 3);
+    feed(h, &now, 0, 0, 1, 0, 2500);
+    assert(fabsf(coop_state_get(h)->body_dx) < .5f && fabsf(coop_state_get(h)->squash) < .02f);
+
+    /* Left alone: drowsy, then dozing with Zs; a touch wakes him. */
+    for (int i = 0; i < 200; i++)
+        feed(h, &now, 0, 0, 1, 0, 1000);
+    assert(coop_state_get(h)->motion == COOP_SLEEP && coop_state_get(h)->fx == COOP_FX_ZZZ);
+    coop_state_touch(h, true, now);
+    coop_state_tick(h, now + 30);
+    assert(coop_state_get(h)->motion != COOP_SLEEP && coop_state_get(h)->fx != COOP_FX_ZZZ);
+    coop_state_delete(h);
+}
+
 static void transfer_test(void)
 {
     events_t e = {0};
@@ -339,11 +512,12 @@ int main(int argc, char **argv)
     input_test();
     motion_test();
     stumble_and_edges_test();
+    physical_test();
     subtitle_test();
     caption_test();
     atlas_test(argv[1]);
     for(int i=2;i<argc;i++)atlas_test(argv[i]);
     puts("PASS: transfer timing, stale messages, button arbitration, IMU recovery, restart "
-         "snapshot and atlas bounds");
+         "snapshot, physical reactions and atlas bounds");
     return 0;
 }

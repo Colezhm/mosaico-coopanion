@@ -43,6 +43,13 @@ typedef struct {
     coop_motion_t motion;
     float x, y, angle, scale_x, scale_y, gaze, glow, phase, gravity_x, gravity_y, voice_level;
     float orientation;
+    /* Physical layer, character frame in screen px: spring sway, squash
+     * (+ flattened), height floated while tossed, gaze (-1..1). */
+    float body_dx, squash, air, look_x, look_y;
+    /* Procedural eyes: blink 0 open .. 1 shut, eye_wide 1 normal; eye_mode 0
+     * rings, 1 dizzy spirals. fx is a coop_fx_kind_t started fx_t seconds ago. */
+    float blink, eye_wide, fx_t;
+    uint8_t eye_mode, fx;
     uint8_t edge; /* 0 bottom, 1 left, 2 top, 3 right; screen gravity = (-ax, ay). */
     uint8_t battery;
     uint32_t epoch, utterance;
