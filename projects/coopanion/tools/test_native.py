@@ -12,7 +12,8 @@ import re
 # font subsets, or the device shows '?' in its place (the caption font is a
 # GB2312 subset without, for example, the em dash).
 glyphs = set((Path(__file__).resolve().parents[1] / 'ui/charset.txt').read_text(encoding='utf8'))
-glyphs |= set((Path(__file__).resolve().parents[1] / 'ui/main.json').read_text(encoding='utf8'))
+# Only the caption font: a label with its own small charset must not hide a
+# glyph that the caption labels lack (the middle dot once showed as '?').
 for source in sorted((Path(__file__).resolve().parents[1] / 'main').glob('*.c')):
     code = re.sub(r'/\*.*?\*/|//[^\n]*', '', source.read_text(encoding='utf8'), flags=re.S)
     for literal in re.findall(r'"((?:[^"\\]|\\.)*)"', code):
@@ -29,7 +30,7 @@ if not (cjson / 'cJSON.h').exists():
 cc = os.environ.get('CC', 'cc')
 flags = ['-std=c11', '-g', '-O1', '-fsanitize=address,undefined', '-fno-sanitize-recover=all']
 main = lambda *names: [str(root / 'main' / n) for n in names]
-SHARED = ('coop_state.c', 'coop_body.c', 'coop_fx.c', 'coop_touch.c', 'coop_carry.c', 'coop_bubbles.c', 'coop_render.c', 'coop_animation.c', 'coop_subtitle.c', 'coop_hud.c')
+SHARED = ('coop_state.c', 'coop_body.c', 'coop_fx.c', 'coop_touch.c', 'coop_carry.c', 'coop_bubbles.c', 'coop_wifi_pick.c', 'coop_render.c', 'coop_animation.c', 'coop_subtitle.c', 'coop_hud.c')
 SCENARIOS = ['idle', 'happy', 'subtitle', 'walk', 'jump', 'listen', 'offline', 'reconnected', 'away',
              'away-offline', 'edge-left', 'edge-top', 'sit', 'sulk', 'cry', 'fall', 'arrive', 'flustered', 'delighted', 'cheeky',
              'toss', 'land', 'shake', 'dizzy', 'angry', 'tap', 'spin', 'face-down', 'petting', 'look',

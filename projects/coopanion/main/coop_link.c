@@ -2,6 +2,7 @@
 #include "coop_link.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "coop_wifi_device.h"
 #include "esp_wifi.h"
 #include "esp_websocket_client.h"
 #include "esp_timer.h"
@@ -35,11 +36,9 @@ typedef struct {
 struct coop_link_t {
     coop_link_config_t cfg;
     esp_websocket_client_handle_t ws;
-    esp_netif_t *netif;
     QueueHandle_t tx;
     SemaphoreHandle_t mutex;
     TaskHandle_t worker;
-    esp_event_handler_instance_t wifi_handler, ip_handler;
     char *rx, *provision, *certificate;
     size_t rx_size, rx_expected;
     char session[48], uri[256], headers[100];
@@ -48,7 +47,6 @@ struct coop_link_t {
     atomic_uint generation;
     bool started, power_save_applied, power_save_known;
     unsigned dropped;
-    wifi_config_t wifi;
 };
 static const char *str(cJSON *j, const char *key)
 {
@@ -93,18 +91,6 @@ static esp_err_t system_wifi_read(system_wifi_t *wifi)
     if (err != ESP_OK)
         clear_secret(wifi, sizeof(*wifi));
     return err;
-}
-static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
-{
-    (void)data;
-    coop_link_handle_t h = arg;
-    if (base == WIFI_EVENT && (id == WIFI_EVENT_STA_START || id == WIFI_EVENT_STA_DISCONNECTED)) {
-        if (!h->stop)
-            esp_wifi_connect();
-    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        if (h->worker)
-            xTaskNotifyGive(h->worker);
-    }
 }
 static void receive(coop_link_handle_t h, cJSON *m)
 {
@@ -211,7 +197,11 @@ static void apply_power_save(coop_link_handle_t h)
 static void worker(void *arg)
 {
     coop_link_handle_t h = arg;
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    /* Wait for an address unless Wi-Fi already has one. */
+    coop_wifi_status_t wifi;
+    coop_wifi_status(&wifi);
+    if (wifi.link != COOP_WIFI_CONNECTED)
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     if (!h->stop) {
         /* The desktop certificate is pinned (cert_pem is the only trust anchor),
          * and ESP-IDF's default mbedTLS build does not check certificate dates.
@@ -331,10 +321,10 @@ esp_err_t coop_link_provision(coop_link_handle_t h, const uint8_t *data, size_t 
     free(text);
     return err;
 }
-esp_err_t coop_link_start(coop_link_handle_t h)
+/* Reads the pairing: desktop address, token and pinned certificate, plus the
+ * Wi-Fi it was paired with (unless that is Vibe Mode's own). */
+static esp_err_t read_provision(coop_link_handle_t h, system_wifi_t *wifi)
 {
-    if (!h || h->started)
-        return ESP_ERR_INVALID_ARG;
     nvs_handle_t nvs;
     size_t size = 0;
     esp_err_t err = nvs_open("coo_pair", NVS_READONLY, &nvs);
@@ -359,17 +349,9 @@ esp_err_t coop_link_start(coop_link_handle_t h)
         snprintf(h->uri, sizeof(h->uri), "%s", str(j, "uri"));
         snprintf(h->headers, sizeof(h->headers), "Authorization: Bearer %s\r\n", str(j, "token"));
         h->certificate = strdup(str(j, "certificate"));
-        if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "use_system_wifi"))) {
-            system_wifi_t wifi;
-            err = system_wifi_read(&wifi);
-            if (err == ESP_OK) {
-                memcpy(h->wifi.sta.ssid, wifi.ssid, strlen(wifi.ssid));
-                memcpy(h->wifi.sta.password, wifi.password, strlen(wifi.password));
-            }
-            clear_secret(&wifi, sizeof(wifi));
-        } else {
-            strncpy((char *)h->wifi.sta.ssid, str(j, "ssid"), sizeof(h->wifi.sta.ssid));
-            strncpy((char *)h->wifi.sta.password, str(j, "password"), sizeof(h->wifi.sta.password));
+        if (!cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(j, "use_system_wifi"))) {
+            snprintf(wifi->ssid, sizeof(wifi->ssid), "%s", str(j, "ssid"));
+            snprintf(wifi->password, sizeof(wifi->password), "%s", str(j, "password"));
         }
         clear_json_secrets(j);
         cJSON_Delete(j);
@@ -379,41 +361,47 @@ esp_err_t coop_link_start(coop_link_handle_t h)
     clear_secret(h->provision, size);
     free(h->provision);
     h->provision = NULL;
+    return err;
+}
+static void got_ip(void *ctx)
+{
+    coop_link_handle_t h = ctx;
+    if (h->worker)
+        xTaskNotifyGive(h->worker);
+}
+esp_err_t coop_link_start(coop_link_handle_t h)
+{
+    if (!h || h->started)
+        return ESP_ERR_INVALID_ARG;
+    /* Wi-Fi comes up even before pairing, so the board's Wi-Fi page works; the
+     * paired network (or Vibe Mode's) is its read-only default. */
+    system_wifi_t wifi = {0};
+    esp_err_t err = read_provision(h, &wifi);
+    if (!wifi.ssid[0]) {
+        system_wifi_t vibe;
+        if (system_wifi_read(&vibe) == ESP_OK)
+            wifi = vibe;
+        clear_secret(&vibe, sizeof(vibe));
+    }
+    esp_err_t wifi_err = coop_wifi_start(wifi.ssid[0] ? wifi.ssid : NULL, wifi.password, got_ip, h);
+    clear_secret(&wifi, sizeof(wifi));
+    if (wifi_err != ESP_OK)
+        return wifi_err;
     if (err != ESP_OK)
         return err;
     if (!h->certificate)
         return ESP_ERR_NO_MEM;
-    err = esp_netif_init();
-    if (err != ESP_OK)
-        return err;
-    err = esp_event_loop_create_default();
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
-        return err;
-    h->netif = esp_netif_create_default_wifi_sta();
-    if (!h->netif)
-        return ESP_ERR_NO_MEM;
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    err = esp_wifi_init(&cfg);
-    if (err != ESP_OK)
-        return err;
     /* Start awake: pairing, clock sampling and the first asset sync all need
      * low latency. apply_power_save() owns the mode afterwards. */
     atomic_store(&h->low_latency, true);
-    err = esp_wifi_set_ps(WIFI_PS_NONE);
-    if (err != ESP_OK)
-        return err;
-    h->power_save_known = true;
-    h->power_save_applied = false;
-    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_handler_instance_register(
-        WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event, h, &h->wifi_handler));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_handler_instance_register(
-        IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event, h, &h->ip_handler));
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_config(WIFI_IF_STA, &h->wifi);
+    if (esp_wifi_set_ps(WIFI_PS_NONE) == ESP_OK) {
+        h->power_save_known = true;
+        h->power_save_applied = false;
+    }
     h->started = true;
     if (xTaskCreate(worker, "coo_link", 6144, h, 5, &h->worker) != pdPASS)
         return ESP_ERR_NO_MEM;
-    return esp_wifi_start();
+    return ESP_OK;
 }
 bool coop_link_send(coop_link_handle_t h, cJSON *m)
 {
@@ -478,14 +466,7 @@ void coop_link_delete(coop_link_handle_t h)
         while (h->worker)
             vTaskDelay(pdMS_TO_TICKS(10));
     }
-    if (h->started) {
-        esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, h->wifi_handler);
-        esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, h->ip_handler);
-        esp_wifi_stop();
-        esp_wifi_deinit();
-    }
-    if (h->netif)
-        esp_netif_destroy_default_wifi(h->netif);
+    /* Wi-Fi belongs to coop_wifi and outlives the link. */
     if (h->tx) {
         tx_item_t item;
         while (xQueueReceive(h->tx, &item, 0) == pdTRUE)

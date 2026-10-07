@@ -3,6 +3,7 @@
 #include "coop_render.h"
 #include "coop_subtitle.h"
 #include "coop_hud.h"
+#include "coop_wifi_ui.h"
 #define GSP_BUNDLE_ENABLE_RAW_IDS
 #include "bundle_gsp.h"
 #include <stdlib.h>
@@ -36,6 +37,12 @@ struct coop_ui_t {
     /* Touch samples reach the figure directly (pointer observer); the scene's
      * own canvas tap is then redundant. */
     bool pointer_ok;
+    /* Hidden Wi-Fi pages, opened by a long press on the status line. */
+    coop_wifi_ui_t wifi;
+    /* A press held on the status line opens the Wi-Fi page (not the menu). */
+    bool status_press;
+    uint64_t status_press_at;
+    unsigned wifi_repaint; /* frames left to repaint the whole canvas */
 };
 static void state_event(void *ctx, const coop_event_t *e)
 {
@@ -62,15 +69,29 @@ static void draw(const esp_gsp_canvas_surface_t *s, void *ctx)
 }
 /* Every touch sample, before GSP routes gestures: the figure's own gestures
  * (pokes by body part, strokes, tickles, carrying, bubbles). */
+/* The hidden Wi-Fi entry: a press held this long on the top status band. */
+#define STATUS_BAND_PX 40
+#define STATUS_HOLD_MS 700
+#define WIFI_REPAINT_FRAMES 2
 static void pointer(esp_gsp_handle_t gsp, int32_t x, int32_t y, bool pressed, void *ctx)
 {
-    (void)gsp;
     coop_ui_handle_t h = ctx;
     const coop_snapshot_t *s = coop_state_get(h->state);
     uint64_t now = h->cfg.now(h->cfg.ctx);
+    if (!coop_wifi_ui_open(&h->wifi) && !s->menu) {
+        if (pressed && !h->status_press && y < STATUS_BAND_PX && !coop_state_pointer_claimed(h->state)) {
+            h->status_press = true;
+            h->status_press_at = now;
+        } else if (!pressed || y >= STATUS_BAND_PX + 20)
+            h->status_press = false;
+        if (h->status_press && now - h->status_press_at >= STATUS_HOLD_MS) {
+            h->status_press = false;
+            coop_wifi_ui_show(&h->wifi, gsp);
+        }
+    }
     float lx = 0, ly = 0;
-    /* Buttons drawn over the canvas (menu, answers) own their touches. */
-    if (s->menu || h->answers > 0) {
+    /* Buttons drawn over the canvas (menu, answers, Wi-Fi pages) own their touches. */
+    if (s->menu || h->answers > 0 || coop_wifi_ui_open(&h->wifi)) {
         coop_state_pointer(h->state, lx, ly, false, COOP_PART_NONE, now);
         return;
     }
@@ -142,7 +163,20 @@ static void tick(esp_gsp_handle_t gsp, void *ctx)
     coop_render_bounds(h->render, s, &now);
     coop_render_rect_t dirty = coop_render_rect_union(h->painted, now);
     h->painted = now;
-    if (dirty.x2 > dirty.x1 && dirty.y2 > dirty.y1)
+    /* A still finger may send no further samples: finish the held press here. */
+    if (h->status_press && h->cfg.now(h->cfg.ctx) - h->status_press_at >= STATUS_HOLD_MS) {
+        h->status_press = false;
+        coop_wifi_ui_show(&h->wifi, gsp);
+    }
+    /* List rows and shown/hidden buttons on the Wi-Fi page repaint only where
+     * the canvas below them does, so repaint all of it when the page changes
+     * (twice: list rows are bound on the following frame). */
+    if (coop_wifi_ui_tick(&h->wifi, gsp))
+        h->wifi_repaint = WIFI_REPAINT_FRAMES;
+    if (h->wifi_repaint) {
+        h->wifi_repaint--;
+        esp_gsp_canvas_invalidate(gsp, GSP_COOP_BIND_CANVAS);
+    } else if (dirty.x2 > dirty.x1 && dirty.y2 > dirty.y1)
         esp_gsp_canvas_invalidate_dirty(gsp, GSP_COOP_BIND_CANVAS,
                                         (gsp_rect_t){dirty.x1, dirty.y1, dirty.x2, dirty.y2});
     /* Submit the changed frame before asking the board's I/O worker to fence
@@ -162,12 +196,15 @@ static void event(esp_gsp_handle_t gsp, const esp_gsp_event_t *e, void *ctx)
     coop_ui_handle_t h = ctx;
     uint64_t now = h->cfg.now(h->cfg.ctx);
     const coop_snapshot_t *s = coop_state_get(h->state);
+    if (coop_wifi_ui_event(&h->wifi, gsp, e))
+        return;
     if (gsp_coop_event_is_poke(e)) {
         if (!h->pointer_ok)
             coop_state_touch(h->state, false, now);
     } else if (gsp_coop_event_is_menu_open(e)) {
-        /* A long press on the figure picks it up instead. */
-        if (!coop_state_pointer_claimed(h->state))
+        /* A long press on the figure picks it up, and one on the status line
+         * opens the Wi-Fi page, instead. */
+        if (!coop_state_pointer_claimed(h->state) && !h->status_press && !coop_wifi_ui_open(&h->wifi))
             coop_state_menu(h->state, true);
     }
     else if (gsp_coop_event_is_menu_close(e))
@@ -220,6 +257,8 @@ esp_err_t coop_ui_create(esp_gsp_handle_t gsp, const coop_ui_config_t *cfg, coop
         err = esp_gsp_on_event(gsp, event, h);
     if (err == ESP_GSP_OK)
         h->pointer_ok = esp_gsp_set_pointer_observer(gsp, pointer, h) == ESP_GSP_OK;
+    if (err == ESP_GSP_OK)
+        coop_wifi_ui_init(&h->wifi, gsp);
     if (err == ESP_GSP_OK)
         h->timer = esp_gsp_timer_create(gsp, 33, tick, h);
     if (err != ESP_GSP_OK || !h->timer) {

@@ -5,6 +5,7 @@
 #include "coop_subtitle.h"
 #include "coop_fx.h"
 #include "coop_touch.h"
+#include "coop_wifi_pick.h"
 #include <math.h>
 #include <assert.h>
 #include <stdio.h>
@@ -446,6 +447,33 @@ static void interaction_test(void)
     assert(!strcmp(e.last_touch, "putdown") && strstr(coop_state_get(h)->subtitle, "放下我啦"));
     coop_state_delete(h);
 }
+static void wifi_pick_test(void)
+{
+    coop_wifi_cred_t known[COOP_WIFI_SAVED] = {{"Home", "pw-home"}, {"Office", "pw-office"}};
+    coop_wifi_ap_t seen[] = {{"Office", -65, true, false}, {"Home", -70, true, false}, {"Cafe", -40, false, false}};
+    /* The most recent network wins unless another is clearly stronger. */
+    assert(coop_wifi_pick(known, 2, seen, 3) == 0);
+    seen[0].rssi = -55;
+    assert(coop_wifi_pick(known, 2, seen, 3) == 1);
+    assert(coop_wifi_pick(known, 2, seen + 2, 1) == -1);
+    /* Tidy: strongest per SSID, hidden ones dropped, saved first, then signal. */
+    coop_wifi_ap_t aps[] = {{"Cafe", -40, false, false}, {"Home", -80, true, false}, {"", -30, true, false},
+                            {"Home", -65, true, false}, {"Office", -75, true, false}};
+    unsigned n = coop_wifi_tidy(aps, 5, known, 2);
+    assert(n == 3 && !strcmp(aps[0].ssid, "Home") && aps[0].rssi == -65 && aps[0].saved);
+    assert(!strcmp(aps[1].ssid, "Office") && aps[1].saved && !strcmp(aps[2].ssid, "Cafe") && !aps[2].saved);
+    /* Remember moves to the front and keeps at most the capacity; drop removes. */
+    unsigned count = 2;
+    count = coop_wifi_remember(known, count, COOP_WIFI_SAVED, "Office", "new");
+    assert(count == 2 && !strcmp(known[0].ssid, "Office") && !strcmp(known[0].password, "new"));
+    const char *more[] = {"A", "B", "C", "D"};
+    for (int i = 0; i < 4; i++)
+        count = coop_wifi_remember(known, count, COOP_WIFI_SAVED, more[i], "x");
+    assert(count == COOP_WIFI_SAVED && !strcmp(known[0].ssid, "D") && !strcmp(known[4].ssid, "Office"));
+    count = coop_wifi_drop(known, count, "B");
+    assert(count == 4 && strcmp(known[1].ssid, "B") && strcmp(known[2].ssid, "B"));
+    assert(!strcmp(coop_wifi_strength(-50), "信号强") && !strcmp(coop_wifi_strength(-80), "信号弱"));
+}
 static void transfer_test(void)
 {
     events_t e = {0};
@@ -766,6 +794,7 @@ int main(int argc, char **argv)
     walk_test();
     touch_test();
     interaction_test();
+    wifi_pick_test();
     subtitle_test();
     caption_test();
     atlas_test(argv[1]);

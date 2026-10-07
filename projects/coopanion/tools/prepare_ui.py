@@ -12,7 +12,7 @@ for a in range(0xa1,0xf8):
  for b in range(0xa1,0xff):
   try: chars.add(bytes([a,b]).decode('gb2312'))
   except UnicodeDecodeError: pass
-chars.update('□，。！？：；（）…')
+chars.update('□，。！？：；（）…·')
 (root/'charset.txt').write_text(''.join(sorted(chars)),encoding='utf8')
 # ui/main.json is the hand-maintained scene source; this tool only refreshes
 # the transparent canvas placeholder and the GB2312 caption charset.
