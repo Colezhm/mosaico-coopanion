@@ -129,7 +129,14 @@
       "text_align": "center",
       "bind": "status",
       "font_charset": "已连接离线传送中倾听思考回复电量低 ·0123456789%MOSAICO×/",
-      "name": "status"
+      "name": "status",
+      "events": [
+        {
+          "event": "long",
+          "action": "call",
+          "target_name": "wifi_open"
+        }
+      ]
     },
     {
       "type": "container",
@@ -287,6 +294,382 @@
       ],
       "font_charset_file": "charset.txt",
       "name": "answer_2"
+    },
+    {
+      "type": "layer",
+      "parent": -1,
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "name": "wifi",
+      "bind": "wifi_visible",
+      "bind_target": "visible",
+      "hidden": true
+    },
+    {
+      "type": "container",
+      "parent": 13,
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "name": "wifi_bg",
+      "bg_color": "#0B1512",
+      "radius": 0
+    },
+    {
+      "type": "button",
+      "parent": 13,
+      "x": 12,
+      "y": 12,
+      "w": 52,
+      "h": 48,
+      "text": "‹",
+      "font_size": 26,
+      "fg_color": "#E8FFF5",
+      "bg_color": "#254D40",
+      "radius": 14,
+      "name": "wifi_back",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "wifi_back"
+        }
+      ],
+      "font_charset": "‹"
+    },
+    {
+      "type": "label",
+      "parent": 13,
+      "x": 76,
+      "y": 20,
+      "w": 300,
+      "h": 36,
+      "text": "Wi-Fi",
+      "font_size": 26,
+      "fg_color": "#59C9AA",
+      "text_align": "left",
+      "name": "wifi_title",
+      "font_charset": "-FWi"
+    },
+    {
+      "type": "label",
+      "parent": 13,
+      "x": 24,
+      "y": 76,
+      "w": 318,
+      "h": 34,
+      "text": "正在连接：WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+      "font_size": 22,
+      "fg_color": "#E8FFF5",
+      "text_align": "left",
+      "name": "wifi_current",
+      "bind": "wifi_current",
+      "font_charset_file": "charset.txt"
+    },
+    {
+      "type": "label",
+      "parent": 13,
+      "x": 24,
+      "y": 110,
+      "w": 318,
+      "h": 28,
+      "text": "IP 255.255.255.255，信号强",
+      "font_size": 22,
+      "fg_color": "#8FB7AA",
+      "text_align": "left",
+      "name": "wifi_detail",
+      "bind": "wifi_detail",
+      "font_charset_file": "charset.txt"
+    },
+    {
+      "type": "container",
+      "parent": 13,
+      "x": 350,
+      "y": 84,
+      "w": 106,
+      "h": 44,
+      "bg_opacity": 0,
+      "name": "wifi_forget_box",
+      "bind": "wifi_forget_visible",
+      "bind_target": "visible",
+      "hidden": true
+    },
+    {
+      "type": "button",
+      "parent": 19,
+      "x": 0,
+      "y": 0,
+      "w": 106,
+      "h": 44,
+      "text": "忘记",
+      "font_size": 20,
+      "fg_color": "#E8FFF5",
+      "bg_color": "#254D40",
+      "radius": 14,
+      "name": "wifi_forget",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "wifi_forget"
+        }
+      ],
+      "bind": "wifi_forget",
+      "font_charset": "忘记"
+    },
+    {
+      "type": "label",
+      "parent": 13,
+      "x": 24,
+      "y": 166,
+      "w": 316,
+      "h": 36,
+      "text": "附近的网络（16）",
+      "font_size": 20,
+      "fg_color": "#8FB7AA",
+      "text_align": "left",
+      "name": "wifi_scan",
+      "bind": "wifi_scan",
+      "font_charset": "0123456789…在扫描正的络网近附（）"
+    },
+    {
+      "type": "button",
+      "parent": 13,
+      "x": 356,
+      "y": 164,
+      "w": 100,
+      "h": 40,
+      "text": "扫描",
+      "font_size": 20,
+      "fg_color": "#E8FFF5",
+      "bg_color": "#254D40",
+      "radius": 14,
+      "name": "wifi_rescan",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "wifi_rescan"
+        }
+      ],
+      "font_charset": "扫描"
+    },
+    {
+      "type": "list",
+      "parent": 13,
+      "x": 24,
+      "y": 212,
+      "w": 432,
+      "h": 228,
+      "name": "networks",
+      "item_height": 72,
+      "item_count": 0,
+      "row_template": "networks_row",
+      "scroll_snapshot": true,
+      "bg_color": "#0B1512",
+      "fg_color": "#E8FFF5"
+    },
+    {
+      "type": "label",
+      "parent": 13,
+      "x": 24,
+      "y": 446,
+      "w": 432,
+      "h": 28,
+      "text": "连接失败：WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW：找不到这个网络",
+      "font_size": 22,
+      "fg_color": "#8FB7AA",
+      "text_align": "left",
+      "name": "wifi_note",
+      "bind": "wifi_note",
+      "font_charset_file": "charset.txt"
+    },
+    {
+      "type": "container",
+      "parent": -1,
+      "x": 0,
+      "y": 0,
+      "w": 432,
+      "h": 72,
+      "template": "networks_row",
+      "callback": "select_network",
+      "bg_color": "#0B1512",
+      "radius": 0
+    },
+    {
+      "type": "label",
+      "parent": 25,
+      "x": 16,
+      "y": 6,
+      "w": 400,
+      "h": 30,
+      "text": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+      "font_size": 22,
+      "fg_color": "#E8FFF5",
+      "text_align": "left",
+      "name": "networks_title",
+      "bind": "networks_title",
+      "font_charset_file": "charset.txt"
+    },
+    {
+      "type": "label",
+      "parent": 25,
+      "x": 16,
+      "y": 38,
+      "w": 400,
+      "h": 24,
+      "text": "当前，已保存，信号强",
+      "font_size": 16,
+      "fg_color": "#8FB7AA",
+      "text_align": "left",
+      "name": "networks_detail",
+      "bind": "networks_detail",
+      "font_charset": "中保信前号存密已开弱强当放码络网要需，"
+    },
+    {
+      "type": "layer",
+      "parent": -1,
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "name": "password",
+      "bind": "password_visible",
+      "bind_target": "visible",
+      "hidden": true
+    },
+    {
+      "type": "container",
+      "parent": 28,
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "name": "password_bg",
+      "bg_color": "#0B1512",
+      "radius": 0
+    },
+    {
+      "type": "button",
+      "parent": 28,
+      "x": 12,
+      "y": 12,
+      "w": 52,
+      "h": 48,
+      "text": "‹",
+      "font_size": 26,
+      "fg_color": "#E8FFF5",
+      "bg_color": "#254D40",
+      "radius": 14,
+      "name": "password_back",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "password_back"
+        }
+      ],
+      "font_charset": "‹"
+    },
+    {
+      "type": "label",
+      "parent": 28,
+      "x": 76,
+      "y": 20,
+      "w": 380,
+      "h": 36,
+      "text": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+      "font_size": 22,
+      "fg_color": "#59C9AA",
+      "text_align": "left",
+      "name": "password_ssid",
+      "bind": "password_ssid",
+      "font_charset_file": "charset.txt"
+    },
+    {
+      "type": "label",
+      "parent": 28,
+      "x": 24,
+      "y": 124,
+      "w": 340,
+      "h": 45,
+      "text": "**********************",
+      "font_size": 24,
+      "fg_color": "#E8FFF5",
+      "text_align": "left",
+      "name": "password_display",
+      "bind": "password_display",
+      "font_charset": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~入密码输"
+    },
+    {
+      "type": "button",
+      "parent": 28,
+      "x": 370,
+      "y": 124,
+      "w": 86,
+      "h": 45,
+      "text": "显示",
+      "font_size": 20,
+      "fg_color": "#E8FFF5",
+      "bg_color": "#254D40",
+      "radius": 14,
+      "name": "password_toggle",
+      "events": [
+        {
+          "event": "click",
+          "action": "call",
+          "target_name": "toggle_password"
+        }
+      ],
+      "bind": "password_toggle",
+      "font_charset": "显示藏隐"
+    },
+    {
+      "type": "label",
+      "parent": 28,
+      "x": 24,
+      "y": 180,
+      "w": 432,
+      "h": 33,
+      "text": "现在不能连接，请稍后再试",
+      "font_size": 16,
+      "fg_color": "#FF8A65",
+      "text_align": "left",
+      "name": "password_error",
+      "bind": "password_error",
+      "font_charset": " 8不位再后在密少接现码稍能至试请连，"
+    },
+    {
+      "type": "keyboard",
+      "parent": 28,
+      "x": 0,
+      "y": 231,
+      "w": 480,
+      "h": 233,
+      "name": "password_keyboard",
+      "bg_color": "#0B1512",
+      "fg_color": "#E8FFF5",
+      "font_size": 24,
+      "key_color": "#2A3B36",
+      "function_color": "#1C2925",
+      "function_text_color": "#E8FFF5",
+      "delete_color": "#1C2925",
+      "delete_text_color": "#E8FFF5",
+      "space_color": "#2A3B36",
+      "space_text_color": "#E8FFF5",
+      "ok_color": "#59C9AA",
+      "ok_text_color": "#08130F",
+      "key_radius": 8,
+      "shift_label": "SHIFT",
+      "delete_label": "DEL",
+      "ok_label": "OK",
+      "symbols_label": "#+=",
+      "letters_label": "ABC",
+      "space_label": "",
+      "function_font_size": 18
     }
   ]
 }

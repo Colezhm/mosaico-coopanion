@@ -154,13 +154,14 @@ describe('voice input', () => {
     expect(host.events[0].text).toBe('[语音] 伙伴:帮我看看这个');
   });
 
-  it('a talk key that cannot be read falls back to listening all the time', async () => {
+  it('a talk key that cannot be read keeps the microphone closed and says why', async () => {
     const { watch } = scriptedKey('no keyboard here');
-    const { host, page, world } = await setup('还是听得见', 'hold', watch);
-    expect(world.voiceState().input).toMatchObject({ mode: 'hold', effectiveMode: 'always', hotkeyProblem: 'no keyboard here', open: true });
+    const { host, page, world } = await setup('不该听到', 'hold', watch);
+    expect(world.voiceState().input).toMatchObject({ mode: 'hold', effectiveMode: 'hold', hotkeyProblem: 'no keyboard here', open: false });
     expect((world.voiceState().input as { hint: string }).hint).toContain('no keyboard here');
     for (const fr of [...tone(900, .3), ...tone(900, 0)]) page.audio(fr);
-    await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
+    await new Promise((r) => setTimeout(r, 600));
+    expect(host.events).toHaveLength(0);
   });
 
   it('the microphone button held down sends the sentence without waiting for its closing pause', async () => {

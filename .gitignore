@@ -14,3 +14,6 @@
 
 # Local agent experiments; shared skills and tools remain versioned.
 /.agents/analysis/
+
+# macOS Finder metadata
+.DS_Store

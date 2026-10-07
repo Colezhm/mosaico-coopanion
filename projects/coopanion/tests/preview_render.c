@@ -10,9 +10,11 @@
 #include "coop_render.h"
 #include "coop_state.h"
 #include "coop_subtitle.h"
+#include "coop_touch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static void ignore(void *ctx, const coop_event_t *e)
 {
@@ -41,6 +43,32 @@ static void run(coop_state_handle_t s, uint64_t *now, uint64_t until)
 {
     for (; *now < until; *now += 33)
         coop_state_tick(s, *now);
+}
+/* Feeds a constant IMU reading at 100 Hz for @p ms, ticking the UI at ~30 Hz. */
+static void hold(coop_state_handle_t s, uint64_t *now, float ax, float ay, float az, float gz, uint64_t ms)
+{
+    for (uint64_t start = *now, end = *now + ms; *now < end; *now += 10) {
+        coop_state_imu(s, ax, ay, az, 0, 0, gz, *now);
+        if ((*now - start) % 30 == 0)
+            coop_state_tick(s, *now);
+    }
+}
+/* Toss the board and catch it with an impact of @p g. */
+static void toss(coop_state_handle_t s, uint64_t *now, float g)
+{
+    hold(s, now, 0, 0, 1, 0, 400);
+    hold(s, now, 0, 0, .05f, 0, 300);
+    hold(s, now, 0, 0, g, 0, 20);
+    hold(s, now, 0, 0, 1, 0, 300);
+}
+static void shake(coop_state_handle_t s, uint64_t *now, float g, uint64_t ms)
+{
+    for (uint64_t start = *now, end = *now + ms; *now < end; *now += 10) {
+        float swing = g * sinf((float)(*now - start) / 1000.f * 6.2831853f * 5);
+        coop_state_imu(s, swing, 0, 1, 0, 0, 0, *now);
+        if ((*now - start) % 30 == 0)
+            coop_state_tick(s, *now);
+    }
 }
 int main(int argc, char **argv)
 {
@@ -121,6 +149,65 @@ int main(int argc, char **argv)
         coop_state_transfer(s, "transfer_prepare", "t2", 3, 0, now);
         coop_state_transfer(s, "transfer_arrive", "t2", 3, now + 100, now);
         run(s, &now, now + 100 + 750);
+    } else if (!strcmp(scenario, "toss")) {
+        hold(s, &now, 0, 0, 1, 0, 400);
+        hold(s, &now, 0, 0, .05f, 0, 400);
+    } else if (!strcmp(scenario, "land")) {
+        toss(s, &now, 2.6f);
+    } else if (!strcmp(scenario, "shake")) {
+        hold(s, &now, 0, 0, 1, 0, 400);
+        shake(s, &now, 1.1f, 900);
+    } else if (!strcmp(scenario, "dizzy")) {
+        toss(s, &now, 2.2f);
+        toss(s, &now, 2.2f);
+        shake(s, &now, 1.2f, 1200);
+        hold(s, &now, 0, 0, 1, 0, 500);
+    } else if (!strcmp(scenario, "angry")) {
+        for (int i = 0; i < 6; i++)
+            toss(s, &now, 3);
+    } else if (!strcmp(scenario, "tap")) {
+        hold(s, &now, 0, 0, 1, 0, 400);
+        hold(s, &now, .9f, 0, 1, 0, 20);
+        hold(s, &now, 0, 0, 1, 0, 250);
+    } else if (!strcmp(scenario, "spin")) {
+        hold(s, &now, 0, 0, 1, 0, 300);
+        hold(s, &now, 0, 0, 1, 320, 1900);
+        hold(s, &now, 0, 0, 1, 0, 300);
+    } else if (!strcmp(scenario, "face-down")) {
+        hold(s, &now, 0, 0, 1, 0, 300);
+        hold(s, &now, 0, 0, -1, 0, 1500);
+    } else if (!strcmp(scenario, "petting")) {
+        coop_state_touch(s, true, now);
+        run(s, &now, now + 500);
+    } else if (!strcmp(scenario, "walk-left")) {
+        coop_state_walk(s, .1f, false, now);
+        run(s, &now, now + 700);
+    } else if (!strcmp(scenario, "bubbles")) {
+        coop_state_action(s, "bubbles", now);
+        run(s, &now, now + 1200);
+    } else if (!strcmp(scenario, "carry")) {
+        coop_state_pointer(s, 240, 330, true, COOP_PART_BODY, now);
+        for (int i = 0; i < 20; i++) {
+            now += 20;
+            coop_state_pointer(s, 240, 330, true, COOP_PART_BODY, now);
+        }
+        for (int i = 1; i <= 10; i++) {
+            now += 20;
+            coop_state_pointer(s, 240 + 8 * i, 330 - 16 * i, true, COOP_PART_NONE, now);
+            coop_state_tick(s, now);
+        }
+    } else if (!strcmp(scenario, "petted")) {
+        for (int i = 0; i < 3; i++) {
+            coop_state_pointer(s, 200, 260, true, COOP_PART_HEAD, now);
+            for (float x = 200; x <= 270; x += 5) {
+                now += 16;
+                coop_state_pointer(s, x, 260, true, COOP_PART_HEAD, now);
+            }
+            coop_state_pointer(s, 270, 260, false, COOP_PART_HEAD, now);
+            run(s, &now, now + 120);
+        }
+    } else if (!strcmp(scenario, "look")) {
+        hold(s, &now, .25f, 0, .97f, 0, 400);
     } else if (!strcmp(scenario, "away") || !strcmp(scenario, "away-offline")) {
         coop_state_presence(s, false, 2, false);
         if (!strcmp(scenario, "away-offline"))
@@ -148,6 +235,10 @@ int main(int argc, char **argv)
     if (!hud)
         return 1;
     fprintf(hud, "%d\n%s\n%s\n", v->edge, status, page);
+    if (getenv("COOP_PREVIEW_DEBUG"))
+        fprintf(stderr, "motion=%d face=%s fx=%u fx_t=%.2f eyes=%u dx=%.1f squash=%.2f air=%.1f look=%.2f,%.2f\n",
+                v->motion, v->expression, v->fx, v->fx_t, v->eye_mode, v->body_dx, v->squash, v->air,
+                v->look_x, v->look_y);
     fclose(hud);
     free(frame);
     coop_state_delete(s);

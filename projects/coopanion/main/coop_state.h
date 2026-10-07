@@ -2,6 +2,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "coop_bubbles.h"
 #ifdef ESP_PLATFORM
 #include "esp_err.h"
 #else
@@ -36,13 +37,26 @@ typedef enum {
     COOP_SPEAK,
     COOP_SETTLE,
     COOP_DEPART,
-    COOP_ARRIVE
+    COOP_ARRIVE,
+    COOP_CARRY,  /* hanging from a finger on the board's screen */
+    COOP_THROWN  /* flying after being flung */
 } coop_motion_t;
 typedef struct {
     bool resident, visible, connected, muted, menu, listening, transferring;
     coop_motion_t motion;
     float x, y, angle, scale_x, scale_y, gaze, glow, phase, gravity_x, gravity_y, voice_level;
     float orientation;
+    /* Physical layer, character frame in screen px: spring sway, squash
+     * (+ flattened), height floated while tossed, gaze (-1..1). */
+    float body_dx, squash, air, look_x, look_y;
+    /* Procedural eyes: blink 0 open .. 1 shut, eye_wide 1 normal; eye_mode 0
+     * rings, 1 dizzy spirals. fx is a coop_fx_kind_t started fx_t seconds ago. */
+    float blink, eye_wide, fx_t;
+    /* +1 faces right (the art's own direction), -1 left. gait is seconds of
+     * full-speed stepping, so walk frames follow the distance covered. */
+    float facing, gait;
+    coop_bubbles_t bubbles;
+    uint8_t eye_mode, fx;
     uint8_t edge; /* 0 bottom, 1 left, 2 top, 3 right; screen gravity = (-ax, ay). */
     uint8_t battery;
     uint32_t epoch, utterance;
@@ -86,6 +100,16 @@ void coop_state_battery(coop_state_handle_t handle, uint8_t percent, bool chargi
 void coop_state_menu(coop_state_handle_t handle, bool open);
 void coop_state_mute(coop_state_handle_t handle, bool mute);
 void coop_state_colors(coop_state_handle_t handle, uint32_t body, uint32_t eyes);
+/** One touch sample in the character frame (coop_render_locate) with the part
+ *  under the finger. Gestures on the figure, bubbles and flinging live here. */
+void coop_state_pointer(coop_state_handle_t handle, float x, float y, bool pressed, int part, uint64_t now);
+/** True while the current press belongs to the figure: the scene's own tap and
+ *  long-press menu should stand aside. */
+bool coop_state_pointer_claimed(coop_state_handle_t handle);
+/** Hand-tremor readings, for calibrating the hug detector on real hardware. */
+void coop_state_tremor(coop_state_handle_t handle, float *dps, float *g, bool *held);
+/** Names the figure in system captions: Coo, or the DeepSeek whale. */
+void coop_state_figure(coop_state_handle_t handle, bool whale);
 void coop_state_voice_level(coop_state_handle_t handle, float level);
 void coop_state_emotion(coop_state_handle_t handle, const char *face);
 void coop_state_voice_result(coop_state_handle_t handle, const char *text, bool thinking,
