@@ -281,7 +281,7 @@ const ptBR: Translation<PetText> = {
     capture: 'Pressione a nova tecla para falar: uma combinação de teclas ou um botão lateral do mouse… (Esc cancela)',
     listening: 'Ouvindo',
     waitingKey: 'Aguardando a tecla para falar',
-    keyProblem: (problem: string) => `${problem}; ouvindo o tempo todo`,
+    keyProblem: (problem: string) => `${problem}; por enquanto a fala não é reconhecida`,
     results: 'O que foi ouvido',
     resultsHint: 'As linhas riscadas eram curtas demais ou provavelmente alucinadas, e não foram enviadas',
     talkKeyName: 'Tecla para falar',

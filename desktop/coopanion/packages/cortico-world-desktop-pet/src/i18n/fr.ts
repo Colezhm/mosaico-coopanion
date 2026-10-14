@@ -281,7 +281,7 @@ const fr: Translation<PetText> = {
     capture: 'Appuyez sur la nouvelle touche de parole : une combinaison de touches ou un bouton latéral de la souris… (Échap pour annuler)',
     listening: 'Écoute',
     waitingKey: 'En attente de la touche de parole',
-    keyProblem: (problem: string) => `${problem} ; écoute continue à la place`,
+    keyProblem: (problem: string) => `${problem} ; la parole n'est pas reconnue pour l'instant`,
     results: 'Ce qui a été entendu',
     resultsHint: "Les lignes barrées étaient trop courtes ou probablement hallucinées, et n'ont pas été envoyées",
     talkKeyName: 'Touche de parole',

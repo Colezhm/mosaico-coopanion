@@ -281,7 +281,7 @@ const es419: Translation<PetText> = {
     capture: 'Presiona la nueva tecla para hablar: una combinación de teclas o un botón lateral del mouse… (Esc cancela)',
     listening: 'Escuchando',
     waitingKey: 'Esperando la tecla para hablar',
-    keyProblem: (problem: string) => `${problem}; se escucha todo el tiempo`,
+    keyProblem: (problem: string) => `${problem}; por ahora no se reconoce la voz`,
     results: 'Lo que se escuchó',
     resultsHint: 'Las líneas tachadas eran demasiado cortas o probables alucinaciones, y no se enviaron',
     talkKeyName: 'Tecla para hablar',

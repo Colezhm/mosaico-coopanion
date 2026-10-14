@@ -281,7 +281,7 @@ const ja: Translation<PetText> = {
     capture: '新しい発話キーを押してください：キーの組み合わせ、またはマウスのサイドボタン…（Esc でキャンセル）',
     listening: '聞き取り中',
     waitingKey: '発話キー待ち',
-    keyProblem: (problem: string) => `${problem}。代わりに常に聞き取ります`,
+    keyProblem: (problem: string) => `${problem}。当面は音声を認識しません`,
     results: '聞き取った内容',
     resultsHint: '取り消し線の行は短すぎるか幻覚の可能性が高いため、送信されませんでした',
     talkKeyName: '発話キー',

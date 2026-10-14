@@ -281,7 +281,7 @@ const ko: Translation<PetText> = {
     capture: '새 말하기 키를 누르세요. 키 조합이나 마우스 측면 버튼을 쓸 수 있습니다…(Esc로 취소)',
     listening: '듣는 중',
     waitingKey: '말하기 키 대기 중',
-    keyProblem: (problem: string) => `${problem}. 대신 항상 듣습니다`,
+    keyProblem: (problem: string) => `${problem}. 당분간 음성을 인식하지 않습니다`,
     results: '들은 내용',
     resultsHint: '취소선이 그어진 줄은 너무 짧거나 환각으로 보여 보내지 않았습니다',
     talkKeyName: '말하기 키',

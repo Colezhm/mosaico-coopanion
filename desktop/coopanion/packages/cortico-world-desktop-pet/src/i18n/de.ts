@@ -281,7 +281,7 @@ const de: Translation<PetText> = {
     capture: 'Drück die neue Sprechtaste: eine Tastenkombination oder eine Maus-Seitentaste… (Esc bricht ab)',
     listening: 'Hört zu',
     waitingKey: 'Wartet auf die Sprechtaste',
-    keyProblem: (problem: string) => `${problem}; hört stattdessen die ganze Zeit zu`,
+    keyProblem: (problem: string) => `${problem}; Sprache wird vorerst nicht erkannt`,
     results: 'Was gehört wurde',
     resultsHint: 'Durchgestrichene Zeilen waren zu kurz oder vermutlich halluziniert und wurden nicht gesendet',
     talkKeyName: 'Sprechtaste',

@@ -310,7 +310,7 @@ const en: PetText = {
     capture: 'Press the new talk key: a key combination or a mouse side button… (Esc cancels)',
     listening: 'Listening',
     waitingKey: 'Waiting for the talk key',
-    keyProblem: (problem: string) => `${problem}; listening all the time instead`,
+    keyProblem: (problem: string) => `${problem}; speech is not recognized for now`,
     results: 'What was heard',
     resultsHint: 'Struck-through lines were too short or likely hallucinated, and were not sent',
     talkKeyName: 'Talk key',

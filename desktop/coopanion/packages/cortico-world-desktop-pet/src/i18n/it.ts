@@ -281,7 +281,7 @@ const it: Translation<PetText> = {
     capture: 'Premi il nuovo tasto per parlare: una combinazione di tasti o un tasto laterale del mouse… (Esc annulla)',
     listening: 'In ascolto',
     waitingKey: 'In attesa del tasto per parlare',
-    keyProblem: (problem: string) => `${problem}; al suo posto ascolto continuo`,
+    keyProblem: (problem: string) => `${problem}; per ora la voce non viene riconosciuta`,
     results: 'Cosa è stato sentito',
     resultsHint: 'Le righe barrate erano troppo brevi o probabilmente allucinate, e non sono state inviate',
     talkKeyName: 'Tasto per parlare',

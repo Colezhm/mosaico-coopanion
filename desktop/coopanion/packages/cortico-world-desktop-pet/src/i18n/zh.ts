@@ -307,7 +307,7 @@ export default {
     capture: '按下新的说话键，可以是组合键或鼠标侧键…（Esc 取消）',
     listening: '正在倾听',
     waitingKey: '等待说话键',
-    keyProblem: (problem: string) => `${problem}，已改为持续收音`,
+    keyProblem: (problem: string) => `${problem}，暂不识别说话`,
     results: '识别结果',
     resultsHint: '划线的条目过短或疑似幻觉，未发送',
     /** 语音输入页:说话键单独一行、识别结果为空时的那一行、音量条左边的字 */

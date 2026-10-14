@@ -281,7 +281,7 @@ const zhHant: Translation<PetText> = {
     capture: '按下新的說話鍵，可以是組合鍵或滑鼠側鍵…（Esc 取消）',
     listening: '正在傾聽',
     waitingKey: '等待說話鍵',
-    keyProblem: (problem: string) => `${problem}，已改為持續收音`,
+    keyProblem: (problem: string) => `${problem}，暫不辨識說話`,
     results: '辨識結果',
     resultsHint: '劃線的項目過短或疑似幻覺，未送出',
     talkKeyName: '說話鍵',

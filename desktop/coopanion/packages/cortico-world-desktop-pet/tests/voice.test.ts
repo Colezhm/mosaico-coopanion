@@ -163,7 +163,7 @@ describe('voice input', () => {
     expect(host.events[0].text).toBe('[语音] 伙伴:帮我看看这个');
   });
 
-  it('a talk key that cannot be read leaves the microphone closed, not open all the time', async () => {
+  it('a talk key that cannot be read keeps the configured mode and the recognition gate closed', async () => {
     const { watch } = scriptedKey('no keyboard here');
     const { host, page, world } = await setup('不该听见', 'hold', watch);
     expect(world.voiceState().input).toMatchObject({ mode: 'hold', effectiveMode: 'hold', hotkeyProblem: 'no keyboard here', open: false });
