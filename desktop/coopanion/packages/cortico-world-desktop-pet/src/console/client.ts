@@ -31,7 +31,7 @@ interface VoiceState {
     mode: MicMode;
     hotkey: string;
     deviceId: string;
-    /** `always` while the talk key cannot be read */
+    /** The mode in force: the configured one, also while the talk key cannot be read */
     effectiveMode: MicMode;
     /** The keys alone; how they are pressed is the press choice beside them */
     keyLabel: string;

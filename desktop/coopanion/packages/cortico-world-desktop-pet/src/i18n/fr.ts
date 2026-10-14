@@ -16,7 +16,7 @@ const fr: Translation<PetText> = {
     notRunning: "La reconnaissance vocale n'est pas lancée",
     modelMissing: (mb: number) => `Le modèle vocal n'est pas encore téléchargé (environ ${mb} Mo) : téléchargez-le sur la page Saisie vocale`,
     badKey: (hotkey: string) => `Touche inconnue « ${hotkey} »`,
-    fallback: (problem: string) => `La touche de parole est indisponible, le micro reste donc coupé pour l'instant : ${problem}`,
+    fallback: (problem: string) => `La touche de parole est indisponible, la parole n'est donc pas reconnue pour l'instant : ${problem}`,
     always: 'Écoute continue : parlez, tout simplement',
     toggleTaps: (label: string, taps: number) => `${label} pour commencer l'écoute, encore un ${taps === 2 ? 'double' : 'triple'} appui pour arrêter`,
     toggle: (key: string) => `Appuyez sur ${key} pour commencer l'écoute, appuyez à nouveau pour arrêter`,

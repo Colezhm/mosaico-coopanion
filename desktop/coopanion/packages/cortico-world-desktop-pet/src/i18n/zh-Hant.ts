@@ -16,7 +16,7 @@ const zhHant: Translation<PetText> = {
     notRunning: '辨識服務沒有執行',
     modelMissing: (mb: number) => `辨識模型尚未下載（約 ${mb} MB），請在「語音輸入」頁下載`,
     badKey: (hotkey: string) => `無法辨識按鍵「${hotkey}」`,
-    fallback: (problem: string) => `說話鍵無法使用，麥克風先關著：${problem}`,
+    fallback: (problem: string) => `說話鍵無法使用，暫不辨識說話：${problem}`,
     always: '持續收音，直接說話即可',
     toggleTaps: (label: string, taps: number) => `${label} 開始收音，再按${taps === 2 ? '兩' : '三'}下停止`,
     toggle: (key: string) => `按一下 ${key} 開始收音，再按一下停止`,

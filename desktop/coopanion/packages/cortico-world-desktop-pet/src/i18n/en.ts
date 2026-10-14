@@ -27,8 +27,8 @@ const en: PetText = {
     notRunning: 'Speech recognition is not running',
     modelMissing: (mb: number) => `The speech model is not downloaded yet (about ${mb} MB): download it on the Voice input page`,
     badKey: (hotkey: string) => `Unknown key "${hotkey}"`,
-    /** The talk key cannot be read, so the microphone listens all the time for now. */
-    fallback: (problem: string) => `The talk key is unavailable, so the microphone stays off for now: ${problem}`,
+    /** The talk key cannot be read; the configured mode stays and nothing reaches recognition. */
+    fallback: (problem: string) => `The talk key is unavailable, so speech is not recognized for now: ${problem}`,
     always: 'Always listening: just talk',
     /** The talk key switches listening on and off; `label` is the full key name with its presses ("Double-press Left Alt"). */
     toggleTaps: (label: string, taps: number) => `${label} to start listening, ${taps === 2 ? 'double' : 'triple'}-press again to stop`,

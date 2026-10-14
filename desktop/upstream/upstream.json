@@ -6,6 +6,7 @@
   "keep": [
     "packages/coopanion-mosaico/",
     "console/features/mosaico/",
-    "installer/package-lock.json"
+    "installer/package-lock.json",
+    "pnpm-lock.yaml"
   ]
 }

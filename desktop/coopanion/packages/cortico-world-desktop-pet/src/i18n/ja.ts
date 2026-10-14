@@ -16,7 +16,7 @@ const ja: Translation<PetText> = {
     notRunning: '音声認識が動作していません',
     modelMissing: (mb: number) => `音声モデルがまだダウンロードされていません（約 ${mb} MB）：「音声入力」ページでダウンロードしてください`,
     badKey: (hotkey: string) => `不明なキー「${hotkey}」`,
-    fallback: (problem: string) => `発話キーが使えないため、当面マイクはオフのままです：${problem}`,
+    fallback: (problem: string) => `発話キーが使えないため、当面は音声を認識しません：${problem}`,
     always: '常に聞き取り中：そのまま話してください',
     toggleTaps: (label: string, taps: number) => `${label}と聞き取り開始、もう一度 ${taps === 2 ? 2 : 3} 回押すと停止`,
     toggle: (key: string) => `${key} を押すと聞き取り開始、もう一度押すと停止`,

@@ -16,7 +16,7 @@ const ptBR: Translation<PetText> = {
     notRunning: 'O reconhecimento de voz não está em execução',
     modelMissing: (mb: number) => `O modelo de voz ainda não foi baixado (cerca de ${mb} MB): baixe-o na página Entrada de voz`,
     badKey: (hotkey: string) => `Tecla desconhecida “${hotkey}”`,
-    fallback: (problem: string) => `A tecla para falar não está disponível, então por enquanto o microfone fica desligado: ${problem}`,
+    fallback: (problem: string) => `A tecla para falar não está disponível, então por enquanto a fala não é reconhecida: ${problem}`,
     always: 'Sempre ouvindo: é só falar',
     toggleTaps: (label: string, taps: number) => `Pressione ${label} para começar a ouvir e de novo ${taps === 2 ? 'duas' : 'três'} vezes para parar`,
     toggle: (key: string) => `Pressione ${key} para começar a ouvir e de novo para parar`,

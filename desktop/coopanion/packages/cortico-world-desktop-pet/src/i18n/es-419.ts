@@ -16,7 +16,7 @@ const es419: Translation<PetText> = {
     notRunning: 'El reconocimiento de voz no está en ejecución',
     modelMissing: (mb: number) => `El modelo de voz aún no está descargado (unos ${mb} MB): descárgalo en la página Entrada de voz`,
     badKey: (hotkey: string) => `Tecla desconocida “${hotkey}”`,
-    fallback: (problem: string) => `La tecla para hablar no está disponible, así que por ahora el micrófono queda apagado: ${problem}`,
+    fallback: (problem: string) => `La tecla para hablar no está disponible, así que por ahora no se reconoce la voz: ${problem}`,
     always: 'Siempre escuchando: solo habla',
     toggleTaps: (label: string, taps: number) => `Presiona ${label} para empezar a escuchar y de nuevo ${taps === 2 ? 'dos' : 'tres'} veces para parar`,
     toggle: (key: string) => `Presiona ${key} para empezar a escuchar y otra vez para parar`,

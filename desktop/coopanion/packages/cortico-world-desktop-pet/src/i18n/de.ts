@@ -16,7 +16,7 @@ const de: Translation<PetText> = {
     notRunning: 'Spracherkennung läuft nicht',
     modelMissing: (mb: number) => `Das Sprachmodell ist noch nicht heruntergeladen (etwa ${mb} MB): Lade es auf der Seite Spracheingabe herunter`,
     badKey: (hotkey: string) => `Unbekannte Taste „${hotkey}“`,
-    fallback: (problem: string) => `Die Sprechtaste ist nicht verfügbar, deshalb bleibt das Mikrofon vorerst aus: ${problem}`,
+    fallback: (problem: string) => `Die Sprechtaste ist nicht verfügbar, deshalb wird Sprache vorerst nicht erkannt: ${problem}`,
     always: 'Ich höre immer zu: Sprich einfach',
     toggleTaps: (label: string, taps: number) => `${label}, um zuzuhören; zum Beenden wieder ${taps === 2 ? 'zweimal' : 'dreimal'} drücken`,
     toggle: (key: string) => `Drück ${key}, um zuzuhören, und noch einmal, um aufzuhören`,

@@ -338,7 +338,7 @@ export class DesktopPetWorld implements World {
   /** The talk key is down (hold) or was switched on (toggle). */
   private talking = false;
   private keyWatcher: KeyWatcher | null = null;
-  /** Why the talk key cannot be read; the gate then stays open as in `always`. */
+  /** Why the talk key cannot be read; the gate then stays closed. */
   private hotkeyProblem: string | null = null;
   private hotkeyKey = '';
   private level = -100;
@@ -1289,11 +1289,7 @@ export class DesktopPetWorld implements World {
 
   /* ---------- talk key ---------- */
 
-  /**
-   * The mode in force. A talk key that cannot be read (on a Mac without Input Monitoring, say) leaves the
-   * microphone closed, not open all the time: an open microphone turns room noise and other voices into
-   * messages the person never meant to send.
-   */
+  /** The mode in force: the configured one, also while the talk key cannot be read. */
   private micMode(): MicMode {
     return this.cfg.asr.mic.mode;
   }
@@ -1329,7 +1325,7 @@ export class DesktopPetWorld implements World {
     if (key !== this.hotkeyKey) { if (typeof watcher !== 'string') watcher.stop(); return; }
     if (typeof watcher === 'string') {
       this.hotkeyProblem = watcher;
-      this.log?.warn(`说话键不可用,麦克风先关着:${watcher}`);
+      this.log?.warn(`说话键不可用,暂不识别说话:${watcher}`);
     } else this.keyWatcher = watcher;
     this.segmenter.configure(this.segmentConfig());
   }

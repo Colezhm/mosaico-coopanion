@@ -16,7 +16,7 @@ const ko: Translation<PetText> = {
     notRunning: '음성 인식이 실행되고 있지 않습니다',
     modelMissing: (mb: number) => `음성 모델을 아직 다운로드하지 않았습니다(약 ${mb} MB). 음성 입력 페이지에서 다운로드하세요`,
     badKey: (hotkey: string) => `알 수 없는 키 "${hotkey}"`,
-    fallback: (problem: string) => `말하기 키를 쓸 수 없어 당분간 마이크를 꺼 둡니다: ${problem}`,
+    fallback: (problem: string) => `말하기 키를 쓸 수 없어 당분간 음성을 인식하지 않습니다: ${problem}`,
     always: '항상 듣는 중: 그냥 말하세요',
     toggleTaps: (label: string, taps: number) => `${label} 눌러 듣기 시작, 다시 ${taps === 2 ? '두' : '세'} 번 누르면 멈춥니다`,
     toggle: (key: string) => `${key}을(를) 누르면 듣기 시작, 다시 누르면 멈춥니다`,

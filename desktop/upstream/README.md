@@ -9,7 +9,7 @@
 | 组成 | 位置 | 同步时 |
 |---|---|---|
 | 上游源码 | `desktop/coopanion/` 除下两行外的全部 | 整体替换成钉住的提交 |
-| Mosaico 自有文件 | `upstream.json` 的 `keep`：`packages/coopanion-mosaico/`、`console/features/mosaico/`、`installer/package-lock.json` | 不动 |
+| Mosaico 自有文件 | `upstream.json` 的 `keep`：`packages/coopanion-mosaico/`、`console/features/mosaico/`、`installer/package-lock.json`、`pnpm-lock.yaml` | 不动；工作区锁文件随后由 `pnpm install` 按新的 package.json 更新 |
 | 补丁 | `patches/*.patch`，按文件名顺序 | 替换后重新打上 |
 
 现有补丁：
@@ -18,7 +18,7 @@
 |---|---|---|
 | `0001-desktop-pet-body-relay` | 桌宠 World 的身体转接接口（`src/relay.ts`）及测试、文档 | 是，草稿见 `PR-body-relay.md` |
 | `0002-mosaico-app` | 应用接上 Mosaico、人格按形象切换；应用名、appId、版本、发布地址改为 Mosaico 分支；遥测默认关闭；打包带上 Mosaico 包和锁定的运行时依赖 | 否，Mosaico 分支自己的 |
-| `0003-desktop-pet-talk-key-keeps-mic-closed` | 说话键读不到时麦克风保持关闭，不再改为一直收音 | 是，草稿见 `PR-talk-key.md` |
+| `0003-desktop-pet-talk-key-keeps-mic-closed` | 说话键读不到时不再改为一直收音，收音方式不变、不送去识别 | 已提交 [Pal-AI-Lab/Coopanion#182](https://github.com/Pal-AI-Lab/Coopanion/pull/182)（`PR-talk-key.md` 为当时的草稿） |
 
 上游合并了 0001 和 0003 之后，`patches/` 只剩 0002（约 40 行，品牌与装配）。
 

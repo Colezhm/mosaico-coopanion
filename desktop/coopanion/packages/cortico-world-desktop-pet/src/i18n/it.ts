@@ -16,7 +16,7 @@ const it: Translation<PetText> = {
     notRunning: 'Il riconoscimento vocale non è in esecuzione',
     modelMissing: (mb: number) => `Il modello vocale non è ancora scaricato (circa ${mb} MB): scaricalo nella pagina Input vocale`,
     badKey: (hotkey: string) => `Tasto sconosciuto «${hotkey}»`,
-    fallback: (problem: string) => `Il tasto per parlare non è disponibile, quindi per ora il microfono resta spento: ${problem}`,
+    fallback: (problem: string) => `Il tasto per parlare non è disponibile, quindi per ora la voce non viene riconosciuta: ${problem}`,
     always: 'Ascolto sempre: parla e basta',
     toggleTaps: (label: string, taps: number) => `${label} per iniziare ad ascoltare, di nuovo ${taps === 2 ? 'doppia' : 'tripla'} pressione per smettere`,
     toggle: (key: string) => `Premi ${key} per iniziare ad ascoltare, premilo di nuovo per smettere`,
