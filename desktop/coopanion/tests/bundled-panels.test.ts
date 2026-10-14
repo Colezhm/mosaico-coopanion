@@ -13,7 +13,6 @@ describe('bundled World panels', () => {
   it('the console has a bundle for the desktop pet page and serves its files', () => {
     const table = bundledConsoleAssets([
       { id: 'desktop-pet', packageName: 'cortico-world-desktop-pet' },
-      { id: 'cua', packageName: 'cortico-world-cua' },
     ]);
     expect(table.map((a) => a.pageId)).toEqual(['world:desktop-pet']);
     expect(existsSync(table[0].jsFile) && existsSync(table[0].cssFile!)).toBe(true);

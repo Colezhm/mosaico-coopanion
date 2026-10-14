@@ -3,8 +3,11 @@ MIT License
 Copyright (c) 2026 mosaico-coopanion contributors
 
 This license applies to the newly authored Mosaico integration modules in
-desktop/coopanion and projects/coopanion. Existing upstream code, assets,
-fonts and dependencies retain their respective copyright notices and licenses.
+desktop/coopanion (packages/coopanion-mosaico, console/features/mosaico and the
+new code in desktop/upstream/patches) and in projects/coopanion. Existing
+upstream code, assets, fonts and dependencies retain their respective copyright
+notices and licenses; upstream Coopanion v0.1.26 is AGPL-3.0-or-later, so the
+desktop application built from desktop/coopanion is distributed under it.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

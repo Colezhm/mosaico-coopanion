@@ -1,0 +1,239 @@
+From 5a2dd158761b2888fc08eec18ca488757aebc113 Mon Sep 17 00:00:00 2001
+From: Colezhm <jnfbr5bywg@privaterelay.appleid.com>
+Date: Wed, 14 Oct 2026 07:46:16 -0400
+Subject: [PATCH 3/3] =?UTF-8?q?fix(desktop-pet):=20=E8=AF=B4=E8=AF=9D?=
+ =?UTF-8?q?=E9=94=AE=E4=B8=8D=E5=8F=AF=E7=94=A8=E6=97=B6=E9=BA=A6=E5=85=8B?=
+ =?UTF-8?q?=E9=A3=8E=E4=BF=9D=E6=8C=81=E5=85=B3=E9=97=AD,=E4=B8=8D?=
+ =?UTF-8?q?=E5=86=8D=E6=94=B9=E6=88=90=E4=B8=80=E7=9B=B4=E6=94=B6=E9=9F=B3?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+在没有输入监控权限的 Mac 上读不到说话键,原先改为一直收音:房间里的声音和别人的话
+被当成使用者说的发了出去。现在模式保持原样,麦克风关着,提示里写明说话键为什么不可用。
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ packages/cortico-world-desktop-pet/src/i18n/de.ts   |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/en.ts   |  2 +-
+ .../cortico-world-desktop-pet/src/i18n/es-419.ts    |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/fr.ts   |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/it.ts   |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/ja.ts   |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/ko.ts   |  2 +-
+ .../cortico-world-desktop-pet/src/i18n/pt-BR.ts     |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/ru.ts   |  2 +-
+ .../cortico-world-desktop-pet/src/i18n/zh-Hant.ts   |  2 +-
+ packages/cortico-world-desktop-pet/src/i18n/zh.ts   |  2 +-
+ packages/cortico-world-desktop-pet/src/world.ts     | 13 +++++++++----
+ .../cortico-world-desktop-pet/tests/voice.test.ts   |  9 +++++----
+ 13 files changed, 25 insertions(+), 19 deletions(-)
+
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/de.ts b/packages/cortico-world-desktop-pet/src/i18n/de.ts
+index 7a76a51..3f47e20 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/de.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/de.ts
+@@ -16,7 +16,7 @@ const de: Translation<PetText> = {
+     notRunning: 'Spracherkennung läuft nicht',
+     modelMissing: (mb: number) => `Das Sprachmodell ist noch nicht heruntergeladen (etwa ${mb} MB): Lade es auf der Seite Spracheingabe herunter`,
+     badKey: (hotkey: string) => `Unbekannte Taste „${hotkey}“`,
+-    fallback: (problem: string) => `Die Sprechtaste ist nicht verfügbar, deshalb höre ich vorerst immer zu: ${problem}`,
++    fallback: (problem: string) => `Die Sprechtaste ist nicht verfügbar, deshalb bleibt das Mikrofon vorerst aus: ${problem}`,
+     always: 'Ich höre immer zu: Sprich einfach',
+     toggleTaps: (label: string, taps: number) => `${label}, um zuzuhören; zum Beenden wieder ${taps === 2 ? 'zweimal' : 'dreimal'} drücken`,
+     toggle: (key: string) => `Drück ${key}, um zuzuhören, und noch einmal, um aufzuhören`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/en.ts b/packages/cortico-world-desktop-pet/src/i18n/en.ts
+index 4f46fa8..9e09954 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/en.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/en.ts
+@@ -28,7 +28,7 @@ const en: PetText = {
+     modelMissing: (mb: number) => `The speech model is not downloaded yet (about ${mb} MB): download it on the Voice input page`,
+     badKey: (hotkey: string) => `Unknown key "${hotkey}"`,
+     /** The talk key cannot be read, so the microphone listens all the time for now. */
+-    fallback: (problem: string) => `The talk key is unavailable, so I listen all the time for now: ${problem}`,
++    fallback: (problem: string) => `The talk key is unavailable, so the microphone stays off for now: ${problem}`,
+     always: 'Always listening: just talk',
+     /** The talk key switches listening on and off; `label` is the full key name with its presses ("Double-press Left Alt"). */
+     toggleTaps: (label: string, taps: number) => `${label} to start listening, ${taps === 2 ? 'double' : 'triple'}-press again to stop`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/es-419.ts b/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
+index e25553b..ba9356e 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
+@@ -16,7 +16,7 @@ const es419: Translation<PetText> = {
+     notRunning: 'El reconocimiento de voz no está en ejecución',
+     modelMissing: (mb: number) => `El modelo de voz aún no está descargado (unos ${mb} MB): descárgalo en la página Entrada de voz`,
+     badKey: (hotkey: string) => `Tecla desconocida “${hotkey}”`,
+-    fallback: (problem: string) => `La tecla para hablar no está disponible, así que por ahora escucho todo el tiempo: ${problem}`,
++    fallback: (problem: string) => `La tecla para hablar no está disponible, así que por ahora el micrófono queda apagado: ${problem}`,
+     always: 'Siempre escuchando: solo habla',
+     toggleTaps: (label: string, taps: number) => `Presiona ${label} para empezar a escuchar y de nuevo ${taps === 2 ? 'dos' : 'tres'} veces para parar`,
+     toggle: (key: string) => `Presiona ${key} para empezar a escuchar y otra vez para parar`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/fr.ts b/packages/cortico-world-desktop-pet/src/i18n/fr.ts
+index bee8bbb..339326e 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/fr.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/fr.ts
+@@ -16,7 +16,7 @@ const fr: Translation<PetText> = {
+     notRunning: "La reconnaissance vocale n'est pas lancée",
+     modelMissing: (mb: number) => `Le modèle vocal n'est pas encore téléchargé (environ ${mb} Mo) : téléchargez-le sur la page Saisie vocale`,
+     badKey: (hotkey: string) => `Touche inconnue « ${hotkey} »`,
+-    fallback: (problem: string) => `La touche de parole est indisponible, j'écoute donc en continu pour l'instant : ${problem}`,
++    fallback: (problem: string) => `La touche de parole est indisponible, le micro reste donc coupé pour l'instant : ${problem}`,
+     always: 'Écoute continue : parlez, tout simplement',
+     toggleTaps: (label: string, taps: number) => `${label} pour commencer l'écoute, encore un ${taps === 2 ? 'double' : 'triple'} appui pour arrêter`,
+     toggle: (key: string) => `Appuyez sur ${key} pour commencer l'écoute, appuyez à nouveau pour arrêter`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/it.ts b/packages/cortico-world-desktop-pet/src/i18n/it.ts
+index ae11b26..003568a 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/it.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/it.ts
+@@ -16,7 +16,7 @@ const it: Translation<PetText> = {
+     notRunning: 'Il riconoscimento vocale non è in esecuzione',
+     modelMissing: (mb: number) => `Il modello vocale non è ancora scaricato (circa ${mb} MB): scaricalo nella pagina Input vocale`,
+     badKey: (hotkey: string) => `Tasto sconosciuto «${hotkey}»`,
+-    fallback: (problem: string) => `Il tasto per parlare non è disponibile, quindi per ora ascolto sempre: ${problem}`,
++    fallback: (problem: string) => `Il tasto per parlare non è disponibile, quindi per ora il microfono resta spento: ${problem}`,
+     always: 'Ascolto sempre: parla e basta',
+     toggleTaps: (label: string, taps: number) => `${label} per iniziare ad ascoltare, di nuovo ${taps === 2 ? 'doppia' : 'tripla'} pressione per smettere`,
+     toggle: (key: string) => `Premi ${key} per iniziare ad ascoltare, premilo di nuovo per smettere`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/ja.ts b/packages/cortico-world-desktop-pet/src/i18n/ja.ts
+index dbd601d..e7f3ff2 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/ja.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/ja.ts
+@@ -16,7 +16,7 @@ const ja: Translation<PetText> = {
+     notRunning: '音声認識が動作していません',
+     modelMissing: (mb: number) => `音声モデルがまだダウンロードされていません（約 ${mb} MB）：「音声入力」ページでダウンロードしてください`,
+     badKey: (hotkey: string) => `不明なキー「${hotkey}」`,
+-    fallback: (problem: string) => `発話キーが使えないため、当面は常に聞き取ります：${problem}`,
++    fallback: (problem: string) => `発話キーが使えないため、当面マイクはオフのままです：${problem}`,
+     always: '常に聞き取り中：そのまま話してください',
+     toggleTaps: (label: string, taps: number) => `${label}と聞き取り開始、もう一度 ${taps === 2 ? 2 : 3} 回押すと停止`,
+     toggle: (key: string) => `${key} を押すと聞き取り開始、もう一度押すと停止`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/ko.ts b/packages/cortico-world-desktop-pet/src/i18n/ko.ts
+index 34151e5..ca2ec6b 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/ko.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/ko.ts
+@@ -16,7 +16,7 @@ const ko: Translation<PetText> = {
+     notRunning: '음성 인식이 실행되고 있지 않습니다',
+     modelMissing: (mb: number) => `음성 모델을 아직 다운로드하지 않았습니다(약 ${mb} MB). 음성 입력 페이지에서 다운로드하세요`,
+     badKey: (hotkey: string) => `알 수 없는 키 "${hotkey}"`,
+-    fallback: (problem: string) => `말하기 키를 쓸 수 없어 당분간 항상 듣습니다: ${problem}`,
++    fallback: (problem: string) => `말하기 키를 쓸 수 없어 당분간 마이크를 꺼 둡니다: ${problem}`,
+     always: '항상 듣는 중: 그냥 말하세요',
+     toggleTaps: (label: string, taps: number) => `${label} 눌러 듣기 시작, 다시 ${taps === 2 ? '두' : '세'} 번 누르면 멈춥니다`,
+     toggle: (key: string) => `${key}을(를) 누르면 듣기 시작, 다시 누르면 멈춥니다`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts b/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
+index c2bf35c..b9db768 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
+@@ -16,7 +16,7 @@ const ptBR: Translation<PetText> = {
+     notRunning: 'O reconhecimento de voz não está em execução',
+     modelMissing: (mb: number) => `O modelo de voz ainda não foi baixado (cerca de ${mb} MB): baixe-o na página Entrada de voz`,
+     badKey: (hotkey: string) => `Tecla desconhecida “${hotkey}”`,
+-    fallback: (problem: string) => `A tecla para falar não está disponível, então por enquanto eu ouço o tempo todo: ${problem}`,
++    fallback: (problem: string) => `A tecla para falar não está disponível, então por enquanto o microfone fica desligado: ${problem}`,
+     always: 'Sempre ouvindo: é só falar',
+     toggleTaps: (label: string, taps: number) => `Pressione ${label} para começar a ouvir e de novo ${taps === 2 ? 'duas' : 'três'} vezes para parar`,
+     toggle: (key: string) => `Pressione ${key} para começar a ouvir e de novo para parar`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/ru.ts b/packages/cortico-world-desktop-pet/src/i18n/ru.ts
+index 708cd6d..bd433a6 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/ru.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/ru.ts
+@@ -22,7 +22,7 @@ const ru: Translation<PetText> = {
+     notRunning: 'Распознавание речи не запущено',
+     modelMissing: (mb: number) => `Модель распознавания речи ещё не загружена (около ${mb} МБ): загрузите её на странице «Голосовой ввод»`,
+     badKey: (hotkey: string) => `Неизвестная клавиша «${hotkey}»`,
+-    fallback: (problem: string) => `Клавиша разговора недоступна, поэтому пока я слушаю всё время: ${problem}`,
++    fallback: (problem: string) => `Клавиша разговора недоступна, поэтому пока микрофон выключен: ${problem}`,
+     always: 'Слушаю всё время: просто говорите',
+     toggleTaps: (label: string, taps: number) => `Нажмите ${label}, чтобы начать прослушивание, и ещё раз ${taps === 2 ? 'дважды' : 'трижды'}, чтобы остановить`,
+     toggle: (key: string) => `Нажмите ${key}, чтобы начать прослушивание, и ещё раз, чтобы остановить`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts b/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
+index cb1f99a..4cdfc95 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
+@@ -16,7 +16,7 @@ const zhHant: Translation<PetText> = {
+     notRunning: '辨識服務沒有執行',
+     modelMissing: (mb: number) => `辨識模型尚未下載（約 ${mb} MB），請在「語音輸入」頁下載`,
+     badKey: (hotkey: string) => `無法辨識按鍵「${hotkey}」`,
+-    fallback: (problem: string) => `說話鍵無法使用，暫時改為自動收音：${problem}`,
++    fallback: (problem: string) => `說話鍵無法使用，麥克風先關著：${problem}`,
+     always: '持續收音，直接說話即可',
+     toggleTaps: (label: string, taps: number) => `${label} 開始收音，再按${taps === 2 ? '兩' : '三'}下停止`,
+     toggle: (key: string) => `按一下 ${key} 開始收音，再按一下停止`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/zh.ts b/packages/cortico-world-desktop-pet/src/i18n/zh.ts
+index 4cf8f92..0c437ce 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/zh.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/zh.ts
+@@ -25,7 +25,7 @@ export default {
+     modelMissing: (mb: number) => `识别模型尚未下载（约 ${mb} MB），请在「语音输入」页下载`,
+     badKey: (hotkey: string) => `无法识别按键「${hotkey}」`,
+     /** 说话键读不了,临时改为一直收音 */
+-    fallback: (problem: string) => `说话键不可用，暂时自动收音：${problem}`,
++    fallback: (problem: string) => `说话键不可用，麦克风先关着：${problem}`,
+     always: '持续收音，直接说话即可',
+     /** 用说话键开关收音;label 是含连击的完整按键名(「双击 左 Alt」) */
+     toggleTaps: (label: string, taps: number) => `${label} 开始收音，再${taps === 2 ? '双击' : '三击'}停止`,
+diff --git a/packages/cortico-world-desktop-pet/src/world.ts b/packages/cortico-world-desktop-pet/src/world.ts
+index 7c26569..ff2f804 100644
+--- a/packages/cortico-world-desktop-pet/src/world.ts
++++ b/packages/cortico-world-desktop-pet/src/world.ts
+@@ -1289,9 +1289,13 @@ export class DesktopPetWorld implements World {
+ 
+   /* ---------- talk key ---------- */
+ 
+-  /** The mode in force: hold and toggle fall back to always while the talk key cannot be read. */
++  /**
++   * The mode in force. A talk key that cannot be read (on a Mac without Input Monitoring, say) leaves the
++   * microphone closed, not open all the time: an open microphone turns room noise and other voices into
++   * messages the person never meant to send.
++   */
+   private micMode(): MicMode {
+-    return this.hotkeyProblem ? 'always' : this.cfg.asr.mic.mode;
++    return this.cfg.asr.mic.mode;
+   }
+ 
+   /** Audio reaches the segmenter only while this is true. */
+@@ -1325,7 +1329,7 @@ export class DesktopPetWorld implements World {
+     if (key !== this.hotkeyKey) { if (typeof watcher !== 'string') watcher.stop(); return; }
+     if (typeof watcher === 'string') {
+       this.hotkeyProblem = watcher;
+-      this.log?.warn(`按键收音不可用,改为一直收音:${watcher}`);
++      this.log?.warn(`说话键不可用,麦克风先关着:${watcher}`);
+     } else this.keyWatcher = watcher;
+     this.segmenter.configure(this.segmentConfig());
+   }
+@@ -1336,7 +1340,8 @@ export class DesktopPetWorld implements World {
+     const ui = this.ui, v = ui.voice;
+     const key = comboLabel(hotkey, process.platform, ui), { taps } = splitTaps(hotkey);
+     const mode = this.micMode();
+-    if (mode === 'always') return this.hotkeyProblem ? v.fallback(this.hotkeyProblem) : v.always;
++    if (mode === 'always') return v.always;
++    if (this.hotkeyProblem) return v.fallback(this.hotkeyProblem);
+     if (mode === 'toggle') return taps > 1 ? v.toggleTaps(hotkeyLabel(hotkey, process.platform, ui), taps) : v.toggle(key);
+     return taps > 1 ? v.holdTaps(key, taps) : v.hold(key);
+   }
+diff --git a/packages/cortico-world-desktop-pet/tests/voice.test.ts b/packages/cortico-world-desktop-pet/tests/voice.test.ts
+index c40d6c2..09b3e7e 100644
+--- a/packages/cortico-world-desktop-pet/tests/voice.test.ts
++++ b/packages/cortico-world-desktop-pet/tests/voice.test.ts
+@@ -163,13 +163,14 @@ describe('voice input', () => {
+     expect(host.events[0].text).toBe('[语音] 伙伴:帮我看看这个');
+   });
+ 
+-  it('a talk key that cannot be read falls back to listening all the time', async () => {
++  it('a talk key that cannot be read leaves the microphone closed, not open all the time', async () => {
+     const { watch } = scriptedKey('no keyboard here');
+-    const { host, page, world } = await setup('还是听得见', 'hold', watch);
+-    expect(world.voiceState().input).toMatchObject({ mode: 'hold', effectiveMode: 'always', hotkeyProblem: 'no keyboard here', open: true });
++    const { host, page, world } = await setup('不该听见', 'hold', watch);
++    expect(world.voiceState().input).toMatchObject({ mode: 'hold', effectiveMode: 'hold', hotkeyProblem: 'no keyboard here', open: false });
+     expect((world.voiceState().input as { hint: string }).hint).toContain('no keyboard here');
+     for (const fr of [...tone(900, .3), ...tone(900, 0)]) page.audio(fr);
+-    await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
++    await new Promise((r) => setTimeout(r, 1500));
++    expect(host.events).toHaveLength(0);
+   });
+ 
+   it('the microphone button held down sends the sentence without waiting for its closing pause', async () => {
+-- 
+2.50.1 (Apple Git-155)
+

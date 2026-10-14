@@ -5,17 +5,18 @@
 ## 识别运行库
 
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 的 Node 插件 `sherpa-onnx-node` 1.13.8 与各平台的
-预编译包(`sherpa-onnx-win-x64`、`sherpa-onnx-darwin-arm64`、`sherpa-onnx-darwin-x64` 等),随 npm 依赖安装。
+预编译包(`sherpa-onnx-win-x64`、`sherpa-onnx-darwin-arm64`、`sherpa-onnx-darwin-x64`、`sherpa-onnx-linux-x64` 等),随 npm 依赖安装。
 Apache-2.0;其中的 onnxruntime 为 MIT。
 
 ## 模型
 
-FunASR 的 SenseVoiceSmall(FunAudioLLM,通义实验室)经 k2-fsa 转成 sherpa-onnx 用的 int8 ONNX,
-放在 `<模型根>/desktop-pet/sensevoice-small-int8-2024-07-17/`,按固定的 SHA-256 校验。
+FunASR 的 SenseVoiceSmall(FunAudioLLM,通义实验室)与 OpenAI 的 Whisper small,都经 k2-fsa 转成 sherpa-onnx 用的 int8 ONNX,
+分别放在 `<模型根>/desktop-pet/sensevoice-small-int8-2024-07-17/` 与 `<模型根>/desktop-pet/whisper-small-int8-2024-07-13/`,按固定的 SHA-256 校验。
 
 | 文件 | 来源(按顺序尝试) | 许可 |
 |---|---|---|
 | `model.int8.onnx`、`tokens.txt` | [ModelScope pengzhendong/sherpa-onnx-sense-voice-zh-en-ja-ko-yue](https://modelscope.cn/models/pengzhendong/sherpa-onnx-sense-voice-zh-en-ja-ko-yue),再 [Hugging Face csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17](https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17) | [FunASR 模型开源协议](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE) |
+| `small-encoder.int8.onnx`、`small-decoder.int8.onnx`、`small-tokens.txt` | [ModelScope pengzhendong/sherpa-onnx-whisper-small](https://modelscope.cn/models/pengzhendong/sherpa-onnx-whisper-small),再 [Hugging Face csukuangfj/sherpa-onnx-whisper-small](https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small) | [MIT](https://github.com/openai/whisper/blob/main/LICENSE) |
 
 ## 桌宠窗口
 
@@ -29,16 +30,16 @@ DeepSeek 女仆装二创参考 ZipZipPipe。围裙上的标志是 DeepSeek、Ope
 阿里云(通义千问)、月之暗面(Kimi)、MiniMax 的商标图形,归各自的公司所有,只用来标明配色对应哪一家,
 与这些公司没有关联,也不代表其认可。
 
-Mosaico 1.1.0 的 `mosaico-deepseek.bin` 从上述原版部件模型采样生成。
-新增 `sulk-back.png` 为 OpenAI 图像生成工具参考原版渲染和用户提供的角色图制作的透明背身立绘，
-用于生闷气动作；未将用户原始参考图打包发布。来源说明与生成要求见
-[大肥鱼资源记录](../../../../docs/coopanion-whale.md)。
+这些贴图不在本包的 AGPL 授权范围内。它们随 Coopanion 分发,想在别处使用请自行确认原设与各家标志的权利。
 
 ## 其他运行时依赖
 
 - `ws`:MIT
 - `opencc-js`(繁简转换):MIT AND Apache-2.0
+- [koffi](https://koffi.dev/)(电脑操作调 Win32 API 与 macOS CoreGraphics 的 FFI):MIT
+- [jpeg-js](https://github.com/jpeg-js/jpeg-js)(电脑操作截图的 JPEG 编码与解码):BSD-3-Clause
 
 ## 本包的许可
 
-MIT,见 [`LICENSE`](LICENSE)。
+AGPL-3.0-or-later,见 [`LICENSE`](LICENSE);`web/whale/` 的贴图除外,见上。
+并入 Coopanion 之前的版本(独立仓库 `Pal-AI-Lab/cortico-world-desktop-pet` 里的历史)是 MIT。

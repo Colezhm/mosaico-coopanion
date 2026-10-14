@@ -1,4 +1,4 @@
-<!-- Owner: desktop/coopanion/packages/cortico-world-desktop-pet/src/mosaico/, projects/coopanion/ -->
+<!-- Owner: desktop/coopanion/packages/coopanion-mosaico/, desktop/upstream/, projects/coopanion/ -->
 
 # Mosaico × Coopanion 开发与使用
 
@@ -12,8 +12,9 @@
 
 | 组件 | 版本 |
 |---|---|
-| Coopanion（MIT，保留原 LICENSE） | `78a46f83d779836c182d8176234c93c26c02d539` |
-| Cortico 子模块 | `9a1d562201413e6751a17f732d972ef19b86b466` |
+| Coopanion（AGPL-3.0-or-later，保留原 LICENSE） | v0.1.26 `f70613c7a98a33bf20098e3981ab1a63c26c20f8` + `desktop/upstream/patches/` |
+| Cortico 子模块 | `dce5c12f1b731ef5f9782faaa2071cb4ca51ccd5`（上游 v0.1.26 所钉） |
+| 桌面应用版本 | `0.1.26-mosaico.8` |
 | ESP-IDF / esp32s31 | `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe` |
 | BSP | `a2c985ad698b3f04a21c63e006b43e7e948bc1d7` |
 | utils | `fc63d43f3ac72aa54e701b07b07fbed07a16b3ca` |
@@ -23,11 +24,13 @@
 | 保留 Vibe Mode | utils 评审包 `0.1.4` |
 | 板端应用描述符版本 | `1.1.1`（传送回执修复候选；实机当前为 `1.1.0`，并非硬件验收结论） |
 
-桌面扩展遵循 [Cortina](https://github.com/Pal-AI-Lab/Cortina/tree/454895173ebbac408f0840679d79738185a9e202)
-的分层和三级验证流程。开发入口为 `desktop/coopanion/AGENTS.md`，实际接口以固定 Cortico 源码为准。
-Mosaico 作为现有 `desktop-pet` World 的设备后端；Cortico Core、Persona 和 Memory 无修改。
-身体归属、传送记录与表情缓存位于 `<部署 dataDir>/desktop-pet/mosaico/`；表情缓存不代表人格记忆。
-`desktop-pet.presence` 以 piggyback 投递可核实的连接与身体状态。禁用 Mosaico 时不添加传送工具。
+桌面端是上游 Coopanion 的原样发布加三个小补丁，同步与升级方法见 [desktop/upstream](../desktop/upstream/README.md)。
+Mosaico 的全部桌面代码在 `desktop/coopanion/packages/coopanion-mosaico/`（[说明](../desktop/coopanion/packages/coopanion-mosaico/README.md)），
+作为桌宠 World 的「身体转接」（`PetBodyRelay`，补丁 0001，拟提交上游）接入；Cortico Core、Persona、Memory
+和桌宠 World 的其余代码不改。上游升级时 Mosaico 包不用动，只需重新打补丁并跑测试。
+身体归属、传送记录、表情缓存与 Mosaico 设置位于 `<部署 dataDir>/desktop-pet/mosaico/`；表情缓存不代表人格记忆。
+`desktop-pet.presence` 以 piggyback 投递可核实的连接与身体状态。禁用 Mosaico 时不添加传送工具，也不加提示词。
+桌宠形象的词表来自上游形象包；板子不认识的新词由 `src/words.ts` 映射到最接近的板端动作或表情，固件无需随之更新。
 
 锁文件：桌面 `pnpm-lock.yaml`、安装包 `installer/package-lock.json`、板端 `dependencies.lock`。
 Noto Sans SC 来自 Google Fonts `ofl/notosanssc`，用 fontTools 4.61.1 实例化为字重 450，
@@ -42,17 +45,12 @@ git submodule update --init --recursive submodule/esp-mosaico-utils submodule/es
 cd desktop/coopanion
 pnpm install --frozen-lockfile
 pnpm run typecheck
-pnpm run typecheck:worlds
+pnpm run typecheck:worlds          # 含 packages/coopanion-mosaico
 pnpm run build:cortico
-pnpm run typecheck:web
+pnpm run typecheck:web             # 含设置窗口的 Mosaico 页
 pnpm test
-pnpm run test:worlds
-pnpm --dir packages/cortico-world-desktop-pet typecheck
-pnpm --dir packages/cortico-world-desktop-pet test
-pnpm --dir packages/cortico-world-cua typecheck
-pnpm --dir packages/cortico-world-cua test
+pnpm run test:worlds               # 桌宠 World 与 Mosaico 包的测试
 pnpm --dir vendor/cortico check:extension ../../packages/cortico-world-desktop-pet
-pnpm --dir vendor/cortico check:extension ../../packages/cortico-world-cua
 pnpm exec tsx scripts/pack.ts --dir
 ```
 
@@ -71,8 +69,9 @@ python projects/coopanion/tools/export_browser_image.py --output artifacts/mosai
 ```
 
 新主机不能依赖本机忽略目录 `.tools/`。UI 源为 `ui/main.json`，可用 `tools/prepare_ui.py`
-重建；默认 Coo 使用桌面包 `host/export-coo.cjs` 导出。运行时换装由网页导出，经 SHA-256
-和像素边界校验后写入板端专用缓存，校验完成才开放迁入。
+重建；固件内置的默认 Coo 图集 `main/coo-atlas.bin` 由 0.1.0-mosaico.7 的 `host/export-coo.cjs` 导出，
+该脚本随旧桌宠结构移除，需要重新导出时改用 `packages/coopanion-mosaico/web/assets.js` 的 `exportAtlas`。
+运行时换装由桌宠页里的该模块导出，经 SHA-256 和像素边界校验后写入板端专用缓存，校验完成才开放迁入。
 
 ## 初装和配对
 
@@ -119,7 +118,8 @@ TLS 要求正确时钟，当前通过 SNTP 设置，不绕过验证。
 `CORTICO_MOSAICO_TOKEN` 到其 `.env`，保留其他密钥，拒绝覆盖不同的已有令牌。
 省略此项时，令牌保存在私有配对目录的 `.env`，需要导入部署 `.env`。
 World 只通过 `WorldContext.secret()` 读取令牌，`pairing.json` 不包含令牌；TLS 私钥仍在私有目录。
-在桌面「Mosaico」→「配置」启用 Mosaico、选择生成的 `pairing.json` 后重启；可关闭自主迁移。
+在设置窗口的「Mosaico」页勾选启用、填入生成的 `pairing.json` 路径并保存，然后重启应用；可关闭空闲自主前往。
+0.1.0-mosaico.7 及更早写在 `worlds.desktop-pet.mosaico` 的设置会在首次启动时迁移到 Mosaico 自己的 `settings.json`。
 配对私钥、token 和 Wi-Fi 密码不得提交仓库。FunASR 模型仍从上游语音设置准备。
 
 ## 交互与实现边界
@@ -181,16 +181,9 @@ export COOP_SIM_ASSET_PATH="$PWD/artifacts/mosaico-coopanion/preview/sim-atlas.b
 python mosaico.py project sim --project projects/coopanion --interactive
 ```
 
-第二终端：
-
-```sh
-cd desktop/coopanion
-pnpm exec tsx scripts/mosaico-preview.ts
-```
-
-打开 `http://127.0.0.1:5199/`。真实桌面网页 + 真实 WSS + 共享 C 后端，
-不调用模型、不打开真实麦克风、不执行电脑任务。事件写入
-`artifacts/mosaico-coopanion/preview/events.jsonl`，测试密钥和状态被 Git 忽略。
+第二终端原用 `scripts/mosaico-preview.ts` 把真实桌面网页接到模拟器；它依赖旧版桌宠内部结构，
+升级到 v0.1.26 时没有移植，暂缺。桌面一侧的协议与传送由 `packages/coopanion-mosaico/tests/`
+（真实 WSS、jsdom 页面模块）覆盖；与模拟器的联调需要用真机或重新写这个预览脚本。
 
 ## 尚需验收
 

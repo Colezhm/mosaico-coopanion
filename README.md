@@ -11,7 +11,7 @@ A paired WSS channel coordinates durable single-body transfers with two 500 ms t
 Full-image installation overwrites all 16 MiB of NOR, including existing settings and pairing.
 The retained Vibe Mode partition layout is preserved; existing data is not preserved by initial installation.
 
-- Desktop source: `desktop/coopanion` (Coopanion `78a46f83`, original MIT license retained).
+- Desktop source: `desktop/coopanion` (upstream Coopanion v0.1.26, AGPL-3.0-or-later, plus the patches and the Mosaico package described in [desktop/upstream](desktop/upstream/README.md)).
 - Device and shared simulator: `projects/coopanion` (GSP 1.5.1; pinned ESP-IDF/ESP32-S31).
 - Reproducible setup, private pairing, preview and image export: [guide](docs/coopanion-implementation.md).
 - Original workspace documentation: [English](README.upstream.md) / [Chinese](README_CN.upstream.md).
@@ -20,4 +20,4 @@ Version 1.1.0 adds the original DeepSeek whale rig, 36 device animation clips an
 Version 1.2.0 (desktop 0.1.0-mosaico.4) fixes false offline states, captions and version reporting, adds idle Wi-Fi power saving and refines board art; hardware acceptance is pending.
 Version 1.3.0 (desktop 0.1.0-mosaico.5) adds physical feedback — inertia, toss and catch, knocks, shaking, spinning and sleeping face down — procedural eyes and emote effects, and dirty-rectangle rendering about 3–5× faster. Installed on the board; hands-on feel still needs a person.
 No camera or external modules are included.
-Dependencies retain their original licenses. New desktop and application modules carry MIT licensing.
+Dependencies retain their original licenses. New Mosaico desktop and application modules carry MIT licensing; the desktop app as a whole is distributed under upstream's AGPL-3.0-or-later.
