@@ -1,25 +1,14 @@
 /**
  * 字标下面那一行:当前版本与项目地址;GitHub 上最新的正式 Release 比当前版本新时,再多一行去下载的链接。
- * 版本号由 scripts/stage.ts 从 package.json 写进 app-version.ts。查询失败就只显示当前版本。
+ * Steam 版由 Steam 更新,不查。版本号与渠道由 scripts/stage.ts 写进 app-version.ts。查询失败就只显示当前版本。
  */
-import { pick } from '../core/language.ts';
-import { APP_VERSION } from '../app-version.ts';
+import { APP_CHANNEL, APP_VERSION } from '../app-version.ts';
+import { S } from './strings.ts';
 
 export const REPO_URL = 'https://github.com/Colezhm/mosaico-coopanion';
 const RELEASE_API = 'https://api.github.com/repos/Colezhm/mosaico-coopanion/releases/latest';
 /** 与 Cortico 控制台查框架 Release 同一时限。 */
 const RELEASE_TIMEOUT_MS = 15_000;
-
-const S = pick({
-  zh: {
-    repoHint: '在 GitHub 上打开 Coopanion 项目',
-    update: (latest: string) => `Coopanion ${latest} 已发布,点这里下载更新`,
-  },
-  en: {
-    repoHint: 'Open the Coopanion project on GitHub',
-    update: (latest: string) => `Coopanion ${latest} is out: download the update`,
-  },
-});
 
 export interface ReleaseUpdate { version: string; url: string }
 
@@ -64,13 +53,14 @@ function link(doc: Document, className: string, text: string, href: string): HTM
   return a;
 }
 
-/** 把版本行放进字标容器;有新版本时在它下面补上下载链接。 */
-export function mountRelease(doc: Document, brand: Element, signal: AbortSignal): void {
+/** 把版本行放进字标容器;有新版本时把下载链接交给 `onUpdate`。 */
+export function mountRelease(doc: Document, brand: Element, onUpdate: (link: HTMLAnchorElement) => void, signal: AbortSignal): void {
   const repo = link(doc, 'companion-version', `v${APP_VERSION} · GitHub`, REPO_URL);
   repo.title = S.repoHint;
   brand.appendChild(repo);
+  if (APP_CHANNEL === 'steam') return;
   void checkRelease().then((update) => {
     if (signal.aborted || !update) return;
-    brand.appendChild(link(doc, 'release-hint', S.update(update.version), update.url));
+    onUpdate(link(doc, 'release-hint', S.update(update.version), update.url));
   });
 }

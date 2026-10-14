@@ -2,8 +2,9 @@
   "name": "cortico-provider-coo",
   "version": "0.2.0",
   "type": "module",
-  "description": "Coo Pet Provider: DeepSeek, Qwen, Kimi, GLM, Doubao, Baidu Qianfan, MiniMax, StepFun and OpenRouter for Cortico through their Responses endpoints",
-  "license": "MIT",
+  "description": "Coo Pet Provider: DeepSeek, Qwen, Kimi, GLM, Doubao, MiniMax, StepFun, Baidu Qianfan, OpenRouter, OpenAI, Anthropic, Gemini and xAI for Cortico, over Responses, Chat Completions, the Messages API or the Gemini API; and a ChatGPT plan through Sign in with ChatGPT",
+  "author": "Pal AI Lab",
+  "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/Pal-AI-Lab/Coopanion.git",
@@ -16,6 +17,11 @@
     "qwen",
     "kimi",
     "glm",
+    "openai",
+    "chatgpt",
+    "anthropic",
+    "gemini",
+    "grok",
     "llm"
   ],
   "engines": {
@@ -33,5 +39,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.128.0"
   }
 }

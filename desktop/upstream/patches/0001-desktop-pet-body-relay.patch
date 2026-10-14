@@ -1,0 +1,1194 @@
+From e559f6cdfeb5910d80208f93bd4f512d997776c0 Mon Sep 17 00:00:00 2001
+From: Colezhm <jnfbr5bywg@privaterelay.appleid.com>
+Date: Wed, 14 Oct 2026 07:32:15 -0400
+Subject: [PATCH 1/3] =?UTF-8?q?feat(desktop-pet):=20=E8=BA=AB=E4=BD=93?=
+ =?UTF-8?q?=E8=BD=AC=E6=8E=A5,=E5=BA=94=E7=94=A8=E5=8F=AF=E4=BB=A5?=
+ =?UTF-8?q?=E6=8A=8A=E6=A1=8C=E5=AE=A0=E7=9A=84=E8=BA=AB=E4=BD=93=E6=90=AC?=
+ =?UTF-8?q?=E5=88=B0=E5=88=AB=E7=9A=84=E8=AE=BE=E5=A4=87=E4=B8=8A?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+desktopPetDefinition({ relay }) 为每个 World 实例造一个 PetBodyRelay(src/relay.ts)。
+发给身体的指令先交给转接,转接决定由桌宠页还是自己的设备来显示;bot 看到的仍是同一个
+World,工具、事件与 Memory 不变。
+
+- 身体不在这台电脑上时,电脑的麦克风和说话键不收音;没有桌宠页时转接仍可保留输出流
+- 转接设备的输入经 port.input 当作桌宠页发来的处理,听到的话经 port.heard 投递
+- 转接可以加工具、{{pet.relay}} 一节环境提示词、控制台面板和设备独有的触摸
+- 电脑操作在看屏幕或动手之前先等 beforeComputer,让身体回到这块屏幕
+- 桌宠页加载转接在 /relay/ 下提供的页面模块,held 时不推进身体、不接指针
+
+没有转接时行为不变。
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ packages/cortico-world-desktop-pet/README.md  |  19 +-
+ .../src/ENV_PROMPT.en.md                      |   2 +
+ .../src/ENV_PROMPT.md                         |   2 +
+ .../cortico-world-desktop-pet/src/cua/cua.ts  |   3 +
+ .../src/definition.ts                         |  16 ++
+ .../cortico-world-desktop-pet/src/i18n/de.ts  |   1 +
+ .../cortico-world-desktop-pet/src/i18n/en.ts  |   1 +
+ .../src/i18n/es-419.ts                        |   1 +
+ .../cortico-world-desktop-pet/src/i18n/fr.ts  |   1 +
+ .../cortico-world-desktop-pet/src/i18n/it.ts  |   1 +
+ .../cortico-world-desktop-pet/src/i18n/ja.ts  |   1 +
+ .../cortico-world-desktop-pet/src/i18n/ko.ts  |   1 +
+ .../src/i18n/pt-BR.ts                         |   1 +
+ .../cortico-world-desktop-pet/src/i18n/ru.ts  |   1 +
+ .../src/i18n/zh-Hant.ts                       |   1 +
+ .../cortico-world-desktop-pet/src/i18n/zh.ts  |   1 +
+ .../cortico-world-desktop-pet/src/index.ts    |   4 +-
+ .../cortico-world-desktop-pet/src/relay.ts    |  83 ++++++++
+ .../cortico-world-desktop-pet/src/server.ts   |   9 +
+ .../cortico-world-desktop-pet/src/world.ts    | 126 +++++++++---
+ .../tests/relay.test.ts                       | 192 ++++++++++++++++++
+ .../cortico-world-desktop-pet/web/pet-app.js  |  41 +++-
+ tests/pet-relay.test.js                       |  64 ++++++
+ 23 files changed, 538 insertions(+), 34 deletions(-)
+ create mode 100644 packages/cortico-world-desktop-pet/src/relay.ts
+ create mode 100644 packages/cortico-world-desktop-pet/tests/relay.test.ts
+ create mode 100644 tests/pet-relay.test.js
+
+diff --git a/packages/cortico-world-desktop-pet/README.md b/packages/cortico-world-desktop-pet/README.md
+index 670ba41..1785ddc 100644
+--- a/packages/cortico-world-desktop-pet/README.md
++++ b/packages/cortico-world-desktop-pet/README.md
+@@ -373,7 +373,7 @@ macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)
+ 
+ ## 给内嵌应用
+ 
+-`desktopPetDefinition({ controls, onCreate, onSkin, packRoots, onBotChange, language })` 生成定义(`packRoots` 是更多形象包目录,`onBotChange` 在 bot 用 `pet_set` 改了设置之后调用,`language` 见下面「文字」一节):`controls`(`PetBotControls`)给右键菜单借出暂停、设置、退出,
++`desktopPetDefinition({ controls, onCreate, onSkin, packRoots, onBotChange, language, relay })` 生成定义(`packRoots` 是更多形象包目录,`onBotChange` 在 bot 用 `pet_set` 改了设置之后调用,`language` 见下面「文字」一节):`controls`(`PetBotControls`)给右键菜单借出暂停、设置、退出,
+ 借了哪个就只画哪个按钮或菜单行(暂停要 `isPaused` 和 `setPaused`,设置要 `openSettings`,退出要 `quit` 与可选的 `quitLabel`,可以是每次开菜单时调用的函数);
+ `onCreate` 拿到 World 实例,应用可以调 `world.confirm(问题, [同意, 不同意])` 弹一个两选项气泡(或 `[同意, 以后都同意, 不同意]` 三选项,中间那项答 `always`),
+ 结果是 `yes` / `no` / `dismissed` / `timeout`(60 秒没人答) / `unavailable`(没有桌宠页),不会作为事件送给 bot。
+@@ -386,6 +386,23 @@ macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)
+ `/api/config` 写不了列表和对象,所以「习惯」页的两个自定义弹窗经 `pet` 面板方法保存:`setWakeKinds(种类数组)` 把 `touch.wakeOn` 设成 `custom` 并写 `touch.wakeKinds`,
+ `setSelfAdjustCustom({ 项: true/false })` 把 `selfAdjust` 设成 `custom` 并写 `selfAdjustCustom`;`pet.state` 的 `wake`、`selfAdjust` 给出当前值(旧的布尔值已按新含义读出)。
+ 
++### 身体转接
++
++应用可以给身体另找一个去处(桌上的开发板、手机、另一台电脑的屏幕):`desktopPetDefinition({ relay })` 的 `relay(ctx)`
++为每个 World 实例造一个 `PetBodyRelay`(`src/relay.ts`),`ctx` 给出部署里这个 World 的数据目录、`.env` 密钥和配置段。
++bot 看到的仍是同一个 World:同样的工具、事件与 Memory,转接只搬动身体。
++
++- 发给身体的每条指令(`say`、`ask`、`confirm`、`act`、`walk`、`listen`、`status`、对话步骤)先交给 `send`:
++  返回 `true` / `false` 表示转接已经送达 / 送不到,返回 `undefined` 时照常发给桌宠页。
++- `here()` 为假时身体不在这台电脑上:电脑的麦克风和说话键都不收音,`reachable()` 为真时没有桌宠页也保留输出流。
++- 桌宠页的消息先过 `fromPage`(转接自己的交接握手);转接的设备听到、摸到、点到的,经 `port.input` 当作桌宠页发来的处理,
++  经 `port.heard` 当作麦克风听到的话投递(有没答的提问时作为回答),`port.transcribe` 用当前的识别引擎转写设备录的音。
++- `touchText` 给桌宠页没有的触摸(设备上的拥抱、挠痒)写事件正文;`tools`、`envPrompt`(`{{pet.relay}}`)和 `panel`
++  分别加工具、环境提示词一节和控制台面板;`unavailable` 说明工具为什么没执行;电脑操作在看屏幕或动手之前先等 `beforeComputer`。
++- 桌宠页的一侧:`page()` 的返回值作为 `init.relay` 交给页面,`module` 是 `/relay/` 下的页面模块(从 `pageDir` 提供),
++  页面加载它并调用 `install(api)`,模块借此在身体离开和回来时做动画。`held` 为真时页面不推进身体、不接指针、不开麦克风,
++  `hidden` 为真时从第一帧起就不显示身体。
++
+ ### 对话页
+ 
+ 控制台页 `world:desktop-pet` 的 `chat` 推送连接(`src/chat.ts`,没有对应的面板)给应用做对话页:
+diff --git a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md
+index 1de7594..d8bf611 100644
+--- a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md
++++ b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md
+@@ -47,3 +47,5 @@ Each event starts with {{pet.user}}'s local time when it happened, like `[14:32]
+ - `[figure] …`: {{pet.user}} changed your figure or dress, or the figure could not be shown and you are back to Coo; any change to the vocabulary is spelled out with it.
+ 
+ {{pet.cua}}
++
++{{pet.relay}}
+diff --git a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md
+index e3144b1..0304726 100644
+--- a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md
++++ b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md
+@@ -47,3 +47,5 @@
+ - `[形象] …`:{{pet.user}}给你换了形象或打扮,或者形象没能显示出来、换回了 Coo;词表有变化时一并写明。
+ 
+ {{pet.cua}}
++
++{{pet.relay}}
+diff --git a/packages/cortico-world-desktop-pet/src/cua/cua.ts b/packages/cortico-world-desktop-pet/src/cua/cua.ts
+index 8856196..0f51715 100644
+--- a/packages/cortico-world-desktop-pet/src/cua/cua.ts
++++ b/packages/cortico-world-desktop-pet/src/cua/cua.ts
+@@ -62,6 +62,8 @@ export interface CuaOptions {
+   modelLanguage?: () => ModelLanguage;
+   /** The app language: the permission question and the system dialog's words. Read at each use; `zh` when absent. */
+   language?: () => Language;
++  /** Before each request that sees or acts on the screen, ahead of the permission question: resolves once the screen is ready for it. */
++  beforeAct?: () => Promise<void>;
+ }
+ 
+ /** The person did not allow this turn's computer use. */
+@@ -198,6 +200,7 @@ export class Cua {
+    * gets a cancel and the call still resolves with what the engine reports it did.
+    */
+   private async call<T>(req: EngineRequest, signal?: AbortSignal): Promise<T> {
++    if (req.op !== 'info' && req.op !== 'confirm') await this.opts.beforeAct?.();
+     if (req.op !== 'info' && req.op !== 'confirm') await this.permit(req.op === 'screenshot' || req.op === 'windows' ? 'see' : 'act', signal);
+     if (signal?.aborted) throw new Interrupted(this.t.interruptedBeforeAct);
+     if (!this.engine) { this.engine = this.spawn(); this.engineExit = null; }
+diff --git a/packages/cortico-world-desktop-pet/src/definition.ts b/packages/cortico-world-desktop-pet/src/definition.ts
+index 2d12a58..0d67a45 100644
+--- a/packages/cortico-world-desktop-pet/src/definition.ts
++++ b/packages/cortico-world-desktop-pet/src/definition.ts
+@@ -7,6 +7,7 @@ import { DesktopPetWorld, modelsDirFor, type PetBotControls } from './world.ts';
+ import type { DescribeTool } from './status.ts';
+ import type { ModelLanguage } from './model-text.ts';
+ import type { Answer } from './cua/engine-ipc.ts';
++import type { PetBodyRelay } from './relay.ts';
+ import { petText } from './i18n/index.ts';
+ 
+ /** The console keeps the bot's avatar here, in the deployment directory. */
+@@ -33,6 +34,20 @@ export interface DesktopPetAssembly {
+   language?(): Language;
+   /** Called with each answer to computer use's question in the pet's bubble. */
+   onCuaAnswer?(answer: Answer): void;
++  /**
++   * Another place the body can be (src/relay.ts), made for each World instance Core creates. `dataDir` is the
++   * deployment's own directory for the World (`<data>/desktop-pet`), for the relay's state.
++   */
++  relay?(ctx: PetRelayContext): PetBodyRelay | null;
++}
++
++/** What a relay is made with. */
++export interface PetRelayContext {
++  dataDir: string;
++  /** The deployment's secrets (`.env`). */
++  secret(name: string): string;
++  /** The World's live config section. */
++  cfg: DesktopPetConfigSection;
+ }
+ 
+ /** The definition, with what an embedding app lends the World. */
+@@ -65,6 +80,7 @@ export function desktopPetDefinition(assembly: DesktopPetAssembly = {}): WorldDe
+         replyLanguage: () => assembly.replyLanguage?.() ?? null,
+         language: () => assembly.language?.() ?? 'zh',
+         onCuaAnswer: (answer) => assembly.onCuaAnswer?.(answer),
++        relay: assembly.relay?.({ dataDir: join(ctx.dataDir, DESKTOP_PET_ID), secret: (name) => ctx.secret(name), cfg: ctx.cfg }) ?? undefined,
+       });
+       assembly.onCreate?.(world);
+       return world;
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/de.ts b/packages/cortico-world-desktop-pet/src/i18n/de.ts
+index 8c5a7a8..7a76a51 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/de.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/de.ts
+@@ -171,6 +171,7 @@ const de: Translation<PetText> = {
+       'pet.chat': 'Ein Hinweis zur Chat-Seite, wenn die App eine hat; sonst leer',
+       'pet.reply': 'Eine Zeile, die dem Bot die Sprache zum Reden vorgibt, wenn die App-Sprache weder vereinfachtes Chinesisch noch Englisch ist; sonst leer',
+       'pet.cua': 'Der Teil zur Computersteuerung: Screenshot-Koordinaten, wann zuerst gefragt wird und die Regeln, der Person nicht in die Quere zu kommen; leer, solange die Computersteuerung aus ist',
++      'pet.relay': 'Der Teil zur Körperübergabe: was gilt, während der Körper auf einem anderen Gerät ist; leer, wenn die App keine Übergabe anbietet',
+     },
+     noGuide: 'Diese App hat keine Einführung',
+     unknownMethod: (name: string) => `Unbekannte Methode ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/en.ts b/packages/cortico-world-desktop-pet/src/i18n/en.ts
+index f45e464..4f46fa8 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/en.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/en.ts
+@@ -197,6 +197,7 @@ const en: PetText = {
+       'pet.chat': 'A note on the chat page when the app has one; empty otherwise',
+       'pet.reply': 'A line telling the bot which language to talk in when the app language is neither Simplified Chinese nor English; empty otherwise',
+       'pet.cua': 'The computer use part: screenshot coordinates, when the person is asked first, and staying out of their way; empty while computer use is off',
++      'pet.relay': 'The body relay part: what holds while the body is on another device; empty when the app lends no relay',
+     },
+     noGuide: 'This app has no introduction',
+     unknownMethod: (name: string) => `Unknown method ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/es-419.ts b/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
+index 4d81e4a..e25553b 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
+@@ -171,6 +171,7 @@ const es419: Translation<PetText> = {
+       'pet.chat': 'Una nota sobre la página de chat cuando la app tiene una; vacío en otro caso',
+       'pet.reply': 'Una línea que le dice al bot en qué idioma hablar cuando el idioma de la app no es chino simplificado ni inglés; vacío en otro caso',
+       'pet.cua': 'La parte de uso de la computadora: coordenadas de las capturas, cuándo se pregunta primero a la persona y las reglas para no estorbarle; vacía mientras el uso de la computadora está desactivado',
++      'pet.relay': 'La parte del relevo del cuerpo: lo que rige mientras el cuerpo está en otro dispositivo; vacía si la app no ofrece relevo',
+     },
+     noGuide: 'Esta app no tiene introducción',
+     unknownMethod: (name: string) => `Método desconocido ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/fr.ts b/packages/cortico-world-desktop-pet/src/i18n/fr.ts
+index 8b04f06..bee8bbb 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/fr.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/fr.ts
+@@ -171,6 +171,7 @@ const fr: Translation<PetText> = {
+       'pet.chat': "Une note sur la page de discussion quand l'application en a une ; vide sinon",
+       'pet.reply': "Une ligne qui indique au bot dans quelle langue parler quand la langue de l'application n'est ni le chinois simplifié ni l'anglais ; vide sinon",
+       'pet.cua': "La partie contrôle de l'ordinateur : coordonnées des captures d'écran, quand demander d'abord à la personne, règles pour ne pas la gêner ; vide quand le contrôle de l'ordinateur est désactivé",
++      'pet.relay': "La partie relais du corps : ce qui vaut quand le corps est sur un autre appareil ; vide si l'application n'en fournit pas",
+     },
+     noGuide: "Cette application n'a pas d'introduction",
+     unknownMethod: (name: string) => `Méthode inconnue ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/it.ts b/packages/cortico-world-desktop-pet/src/i18n/it.ts
+index 39d293e..ae11b26 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/it.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/it.ts
+@@ -171,6 +171,7 @@ const it: Translation<PetText> = {
+       'pet.chat': "Una nota sulla pagina chat quando l'app ne ha una; altrimenti vuoto",
+       'pet.reply': "Una riga che dice al bot in che lingua parlare quando la lingua dell'app non è né il cinese semplificato né l'inglese; altrimenti vuoto",
+       'pet.cua': 'La parte sul controllo del computer: coordinate degli screenshot, quando chiedere prima alla persona e le regole per non intralciarla; vuota quando il controllo del computer è spento',
++      'pet.relay': "La parte sul passaggio del corpo: cosa vale mentre il corpo è su un altro dispositivo; vuota se l'app non ne offre",
+     },
+     noGuide: "Quest'app non ha un'introduzione",
+     unknownMethod: (name: string) => `Metodo sconosciuto ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/ja.ts b/packages/cortico-world-desktop-pet/src/i18n/ja.ts
+index 26e15ac..dbd601d 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/ja.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/ja.ts
+@@ -171,6 +171,7 @@ const ja: Translation<PetText> = {
+       'pet.chat': 'アプリにチャットページがある場合はその説明、ない場合は空',
+       'pet.reply': 'アプリの言語が簡体字中国語でも英語でもないとき、その言語で話すようボットに伝える一文。それ以外は空',
+       'pet.cua': 'コンピューター操作の節：スクリーンショットの座標、先にユーザーに確認するタイミング、ユーザーに譲るルール。コンピューター操作がオフのときは空',
++      'pet.relay': '体の中継の節：体が別のデバイスにある間の約束。アプリが中継を提供しないときは空',
+     },
+     noGuide: 'このアプリにはガイドがありません',
+     unknownMethod: (name: string) => `不明なメソッド ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/ko.ts b/packages/cortico-world-desktop-pet/src/i18n/ko.ts
+index de80c19..34151e5 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/ko.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/ko.ts
+@@ -171,6 +171,7 @@ const ko: Translation<PetText> = {
+       'pet.chat': '앱에 대화 페이지가 있으면 그에 대한 설명, 없으면 빈 값',
+       'pet.reply': '앱 언어가 중국어 간체도 영어도 아닐 때 봇에게 그 언어로 말하라고 알리는 한 줄, 그 외에는 빈 값',
+       'pet.cua': '컴퓨터 사용 부분: 스크린샷 좌표, 사용자에게 먼저 묻는 때, 사용자에게 양보하는 규칙. 컴퓨터 사용이 꺼져 있으면 비어 있음',
++      'pet.relay': '몸 중계 부분: 몸이 다른 기기에 있는 동안의 규칙. 앱이 중계를 제공하지 않으면 비어 있음',
+     },
+     noGuide: '이 앱에는 시작 안내가 없습니다',
+     unknownMethod: (name: string) => `알 수 없는 메서드 ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts b/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
+index f2e3738..c2bf35c 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
+@@ -171,6 +171,7 @@ const ptBR: Translation<PetText> = {
+       'pet.chat': 'Uma nota sobre a página de chat quando o app tem uma; vazio caso contrário',
+       'pet.reply': 'Uma linha que diz ao bot em que idioma falar quando o idioma do app não é chinês simplificado nem inglês; vazio caso contrário',
+       'pet.cua': 'A parte de uso do computador: coordenadas das capturas, quando a pessoa é consultada antes e as regras para não atrapalhá-la; vazia enquanto o uso do computador está desligado',
++      'pet.relay': 'A parte do repasse do corpo: o que vale enquanto o corpo está em outro dispositivo; vazia se o app não oferece repasse',
+     },
+     noGuide: 'Este app não tem introdução',
+     unknownMethod: (name: string) => `Método desconhecido ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/ru.ts b/packages/cortico-world-desktop-pet/src/i18n/ru.ts
+index e75884c..708cd6d 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/ru.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/ru.ts
+@@ -177,6 +177,7 @@ const ru: Translation<PetText> = {
+       'pet.chat': 'Пояснение о странице чата, если она есть в приложении; иначе пусто',
+       'pet.reply': 'Строка, которая говорит боту, на каком языке говорить, если язык приложения не упрощённый китайский и не английский; иначе пусто',
+       'pet.cua': 'Раздел об управлении компьютером: координаты скриншотов, когда сначала спрашивать человека, правила не мешать ему; пусто, пока управление компьютером выключено',
++      'pet.relay': 'Раздел о передаче тела: что действует, пока тело на другом устройстве; пусто, если приложение её не даёт',
+     },
+     noGuide: 'В этом приложении нет обучения',
+     unknownMethod: (name: string) => `Неизвестный метод ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts b/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
+index 28e04e2..cb1f99a 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
+@@ -171,6 +171,7 @@ const zhHant: Translation<PetText> = {
+       'pet.chat': '應用程式提供對話頁時，對它的說明；沒有時為空',
+       'pet.reply': '應用程式語言既不是簡體中文也不是英文時，讓 bot 用那種語言說話的一句；否則為空',
+       'pet.cua': '電腦操作一節：截圖座標、何時先詢問使用者、讓位規則；電腦操作關閉時為空',
++      'pet.relay': '身體轉接一節：身體在別的裝置上時的約束；應用沒有接入轉接時為空',
+     },
+     noGuide: '這個應用程式沒有引導',
+     unknownMethod: (name: string) => `未知的方法 ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/i18n/zh.ts b/packages/cortico-world-desktop-pet/src/i18n/zh.ts
+index 2c152d8..4cf8f92 100644
+--- a/packages/cortico-world-desktop-pet/src/i18n/zh.ts
++++ b/packages/cortico-world-desktop-pet/src/i18n/zh.ts
+@@ -194,6 +194,7 @@ export default {
+       'pet.chat': '应用提供对话页时，对它的说明；没有时为空',
+       'pet.reply': '应用语言既不是简体中文也不是英文时，让 bot 用那种语言说话的一句；否则为空',
+       'pet.cua': '电脑操作一节：截图坐标、何时先询问使用者、让位规则；电脑操作关闭时为空',
++      'pet.relay': '身体转接一节：身体在别的设备上时的约束；应用没有接入转接时为空',
+     } as Record<string, string>,
+     noGuide: '这个应用没有引导',
+     unknownMethod: (name: string) => `未知方法 ${name}`,
+diff --git a/packages/cortico-world-desktop-pet/src/index.ts b/packages/cortico-world-desktop-pet/src/index.ts
+index 1252f2a..ca1c7e2 100644
+--- a/packages/cortico-world-desktop-pet/src/index.ts
++++ b/packages/cortico-world-desktop-pet/src/index.ts
+@@ -4,7 +4,9 @@ import { DESKTOP_PET } from './definition.ts';
+ export default DESKTOP_PET;
+ 
+ export { DESKTOP_PET };
+-export { desktopPetDefinition, type DesktopPetAssembly } from './definition.ts';
++export { desktopPetDefinition, type DesktopPetAssembly, type PetRelayContext } from './definition.ts';
++export type { PetBodyPort, PetBodyRelay, PetRelayPanel } from './relay.ts';
++export type { PageMessage } from './server.ts';
+ export { DESKTOP_PET_DEFAULTS, SELF_KEYS, TOUCH_KINDS, USER_MAX, desktopPetConfigGroups, selfAdjustMode } from './config.ts';
+ export { capFor, charCount, cutChars, petText, type PetText } from './i18n/index.ts';
+ export type { DesktopPetConfigSection, PetSkin } from './config.ts';
+diff --git a/packages/cortico-world-desktop-pet/src/relay.ts b/packages/cortico-world-desktop-pet/src/relay.ts
+new file mode 100644
+index 0000000..39cdcda
+--- /dev/null
++++ b/packages/cortico-world-desktop-pet/src/relay.ts
+@@ -0,0 +1,83 @@
++/**
++ * A second place the pet's body can be: a board on the desk, a phone, another screen. An embedding app
++ * lends one through `DesktopPetAssembly.relay`; the World then asks the relay first with every order
++ * for the body, and the relay decides whether the pet page or its own device carries it.
++ *
++ * The World stays the one World the bot sees: same tools, same events, same Memory. The relay only
++ * moves the body. It hears what the pet page reports before the World does (a transfer's own
++ * handshake), and feeds back what its device heard and felt as if the pet page had sent it.
++ *
++ * Nothing here is required beyond `start`, `stop`, `send` and `here`; a relay that leaves out the
++ * rest gets the World's own behaviour for them.
++ */
++import type { Logger, ToolDef, TriggerMode } from 'cortico/core/types.ts';
++import type { PetSkin } from './config.ts';
++import type { PageMessage } from './server.ts';
++
++/** What the World lends a relay at start. */
++export interface PetBodyPort {
++  /** Sends to the pet page as the World itself does; false when no page is connected. */
++  sendPage(msg: PageMessage): boolean;
++  /** Input from the relay's device, taken as if the pet page sent it (touch, answer, confirmed, text, arrived, interrupted). */
++  input(msg: PageMessage): void;
++  /** Speech the relay's device heard and had transcribed, delivered like the computer's microphone (an open question takes it as the answer). */
++  heard(text: string): void;
++  /** Transcribes 16 kHz mono PCM16 with the voice engine in force, starting it when it is not running. */
++  transcribe(pcm: Int16Array): Promise<{ text: string; error?: string | null }>;
++  /** Voice input is switched on. */
++  voiceEnabled(): boolean;
++  /** The look in force, as saved. */
++  skin(): PetSkin;
++  /** The words of the body's vocabulary in force: expressions and motions, by id. */
++  words(): readonly { id: string; kind: string }[];
++  /** An event for the bot, from the World (`source` desktop-pet). */
++  push(type: string, text: string, trigger: TriggerMode): void;
++  /** The World's log. */
++  log: Logger;
++}
++
++/** A console panel the relay adds to `world:desktop-pet`: its declaration and its methods. */
++export interface PetRelayPanel {
++  id: string;
++  title: string;
++  description: string;
++  /** Methods the console may call with GET; the rest are POST. */
++  getMethods?: string[];
++  invoke(method: string, args: unknown[]): Promise<unknown>;
++}
++
++export interface PetBodyRelay {
++  /** Called at World start, before the pet page server opens: a relay that knows the body is away can say so to the first page. */
++  start(port: PetBodyPort): Promise<void>;
++  stop(): Promise<void>;
++  /**
++   * An order for the body (say, ask, confirm, act, walk, walk-stop, listen, status, dialog…). `true` or `false`: the
++   * relay delivered it or could not; `undefined`: the pet page takes it as usual.
++   */
++  send(msg: PageMessage): boolean | undefined;
++  /** False while the body is elsewhere: the computer's microphone and talk key stay off and its audio is dropped. */
++  here(): boolean;
++  /** True while the body elsewhere can show what the bot does, though no pet page is connected (the World keeps its output tap). */
++  reachable?(): boolean;
++  /** A pet page message before the World reads it; true when it was the relay's own. */
++  fromPage?(msg: PageMessage): boolean;
++  pageConnected?(): void;
++  pageDisconnected?(): void;
++  /** What the pet page is told at connect (`init.relay`): `module`, the URL of a page module under `/relay/`, and whatever it needs. */
++  page?(): Record<string, unknown> | null;
++  /** Directory served at `/relay/`, for the page module. */
++  pageDir?: string;
++  /** Why `tool` could not run, when the relay knows better than "no pet window"; null for the World's own text. */
++  unavailable?(tool: string): string | null;
++  /** Before computer use acts on this screen: resolves once the body is back on it. */
++  beforeComputer?(): Promise<void>;
++  /** The turn computer use acted in ended. */
++  computerDone?(): void;
++  /** Tools the relay adds to the World (prefix them `pet_`). */
++  tools?(): ToolDef[];
++  /** Text for `{{pet.relay}}` in the environment prompt; empty to leave it out. */
++  envPrompt?(): string;
++  /** A touch kind the pet page does not know (a board's own: hug, tickle): the event's text for `user`, or null to drop it. */
++  touchText?(kind: string, count: number, user: string): string | null;
++  panel?: PetRelayPanel;
++}
+diff --git a/packages/cortico-world-desktop-pet/src/server.ts b/packages/cortico-world-desktop-pet/src/server.ts
+index 866d7b7..b9ad035 100644
+--- a/packages/cortico-world-desktop-pet/src/server.ts
++++ b/packages/cortico-world-desktop-pet/src/server.ts
+@@ -81,6 +81,8 @@ export interface PetServerOptions {
+   text?(): PetText;
+   /** Whether the OBS overlay is served; off when absent. */
+   overlay?(): boolean;
++  /** Served at `/relay/`: the page module of an app's body relay (src/relay.ts); nothing is served there when absent. */
++  relayDir?: string;
+ }
+ 
+ export class PetServer {
+@@ -326,6 +328,13 @@ export class PetServer {
+       if (!this.overlayEnabled) { res.writeHead(404).end(); return; }
+       return this.sendPage(res, join(this.opts.webDir, 'overlay.html'));
+     }
++    if (path.startsWith('/relay/')) {
++      if (!this.opts.relayDir) { res.writeHead(404).end(); return; }
++      const root = normalize(this.opts.relayDir).replace(/[\\/]+$/, '') + sep;
++      const full = normalize(join(root, decodeURIComponent(path.slice(7))));
++      if (!full.startsWith(root)) { res.writeHead(403).end(); return; }
++      return this.sendFile(res, full, null, false);
++    }
+     const file = PAGES[path] ?? (path.startsWith('/web/') ? path.slice(5) : null);
+     if (!file) { res.writeHead(404).end(); return; }
+     const root = normalize(this.opts.webDir).replace(/[\\/]+$/, '') + sep;
+diff --git a/packages/cortico-world-desktop-pet/src/world.ts b/packages/cortico-world-desktop-pet/src/world.ts
+index b143181..7c26569 100644
+--- a/packages/cortico-world-desktop-pet/src/world.ts
++++ b/packages/cortico-world-desktop-pet/src/world.ts
+@@ -49,6 +49,7 @@ import { ActivityGroup, ChatSockets, SELF_TYPE, chatHistory, chatItem, chatRefs,
+ import { ASK_OPTION_MAX, petToolDecls } from './tools.ts';
+ import { COO, figurePacks, lookOf, modelName, nameIn, packFor, type FigurePack, type PackScan } from './packs.ts';
+ import { Cua } from './cua/cua.ts';
++import type { PetBodyPort, PetBodyRelay } from './relay.ts';
+ import type { Answer } from './cua/engine-ipc.ts';
+ import { PackImporter } from './pack-import.ts';
+ import { dressTable, planSettings, type SettingChange } from './self.ts';
+@@ -220,6 +221,8 @@ export interface DesktopPetWorldOptions {
+   replyLanguage?: () => string | null;
+   /** Called with each answer to computer use's question, asked in the pet's bubble. */
+   onCuaAnswer?: (answer: Answer) => void;
++  /** Another place the body can be (src/relay.ts): orders go to it first. */
++  relay?: PetBodyRelay;
+ }
+ 
+ type SherpaEngine = Exclude<AsrEngine, 'system'>;
+@@ -361,6 +364,7 @@ export class DesktopPetWorld implements World {
+     this.cfg = opts.cfg;
+     this.cua = new Cua({
+       cfg: () => this.cfg.cua,
++      beforeAct: () => this.relay?.beforeComputer?.() ?? Promise.resolve(),
+       botName: opts.botName,
+       modelLanguage: () => this.language,
+       language: () => this.appLanguage,
+@@ -373,7 +377,7 @@ export class DesktopPetWorld implements World {
+       },
+     });
+     this.importer = opts.packDir ? new PackImporter({ packDir: opts.packDir, packs: () => this.packs(), text: () => this.ui }) : null;
+-    this.status = new StatusTracker((status) => this.server.sendPet({ t: 'status', status }), opts.describeTool, () => this.ui.busy);
++    this.status = new StatusTracker((status) => this.sendBody({ t: 'status', status }), opts.describeTool, () => this.ui.busy);
+     this.segmenter = new Segmenter(this.segmentConfig(), FRAME_MS);
+     this.segmenter.setSink(this.sink);
+     this.store = new RuntimeStore({ runtimesRoot: opts.runtimesRoot, modelsDir: opts.modelsDir, fetchImpl: opts.fetchImpl, funasrModel: opts.funasrModel, whisperModel: opts.whisperModel, text: () => this.ui });
+@@ -383,8 +387,8 @@ export class DesktopPetWorld implements World {
+       snapshot: () => this.snapshot(),
+       onPetMessage: (msg) => this.onPage(msg),
+       onAudio: (frame) => this.onAudio(frame),
+-      onPetConnect: () => { this.petHidden = false; this.log?.info('桌宠页面已连接'); },
+-      onPetDisconnect: () => this.onPageGone(),
++      onPetConnect: () => { this.petHidden = false; this.log?.info('桌宠页面已连接'); this.relay?.pageConnected?.(); },
++      onPetDisconnect: () => { this.relay?.pageDisconnected?.(); this.onPageGone(); },
+       onSkin: (skin) => this.saveSkin(skin),
+       onPrefs: (prefs) => this.savePrefs(prefs),
+       avatarFile: opts.avatarFile,
+@@ -394,9 +398,50 @@ export class DesktopPetWorld implements World {
+       language: () => this.appLanguage,
+       text: () => this.ui,
+       overlay: () => this.cfg.window.exportOverlay,
++      relayDir: opts.relay?.pageDir,
+     });
+   }
+ 
++  /* ---------- relay: another place the body can be (src/relay.ts) ---------- */
++
++  private get relay(): PetBodyRelay | undefined {
++    return this.opts.relay;
++  }
++
++  /** An order for the body: the relay's when it takes it, else the pet page's. */
++  private sendBody(msg: PageMessage): boolean {
++    return this.relay?.send(msg) ?? this.server.sendPet(msg);
++  }
++
++  private relayPort(host: WorldHost): PetBodyPort {
++    return {
++      sendPage: (msg) => this.server.sendPet(msg),
++      input: (msg) => this.onInput(msg),
++      heard: (text) => this.relayHeard(text),
++      transcribe: async (pcm) => {
++        const recognizer = this.recognizer();
++        if (!recognizer) return { text: '', error: this.ui.voice.notRunning };
++        if (this.backendState()?.phase !== 'running') await this.startVoiceBackend();
++        const res = await recognizer.transcribe(pcm);
++        return { text: this.simplifies ? toSimplified(res.text) : res.text, error: res.error ?? null };
++      },
++      voiceEnabled: () => this.cfg.asr.enabled,
++      skin: () => this.cfg.skin,
++      words: () => this.vocab().map((w) => ({ id: w.id, kind: w.kind })),
++      push: (type, text, trigger) => { void this.push(type, `${DESKTOP_PET_ID}.relay`, text, trigger); },
++      log: host.log,
++    };
++  }
++
++  /** Speech the relay's device heard: an open question takes it as the answer, else it is said to the bot. */
++  private relayHeard(raw: string): void {
++    const text = raw.trim();
++    if (!text || looksHallucinated(text)) return;
++    if (this.ask) { this.onAnswer({ askId: this.ask.id, text }, 'pet'); return; }
++    this.counts.delivered++;
++    void this.push('desktop-pet.speech', 'desktop-pet.voice', this.t.heard(this.userName, text), 'flush', { meta: { text, via: 'relay' } });
++  }
++
+   /* ---------- figures ---------- */
+ 
+   /** Pack problems already logged, so a broken pack is reported once, not on every scan. */
+@@ -558,6 +603,8 @@ export class DesktopPetWorld implements World {
+     this.cua.start(host);
+     // the words the prompt is rendered with, until the bot is told otherwise
+     this.toldVocab = this.vocab();
++    // before the page server opens: a relay that holds the body tells the first page so
++    if (this.relay) await this.relay.start(this.relayPort(host)).catch((e: Error) => host.log.warn(`身体转接没有启动:${e.message}`));
+     await this.server.start();
+     this.windowHost = new WindowHost(host.log, () => this.t.window);
+     if (this.cfg.window.enabled) this.openWindow();
+@@ -587,6 +634,7 @@ export class DesktopPetWorld implements World {
+   }
+ 
+   async stop(): Promise<void> {
++    await this.relay?.stop().catch((e: Error) => this.log?.warn(`身体转接停止出错:${e.message}`));
+     this.status.clear();
+     if (this.quiet) clearTimeout(this.quiet.timer);
+     this.quiet = null;
+@@ -622,6 +670,7 @@ export class DesktopPetWorld implements World {
+   onTurnEnded(): void {
+     this.touchWoke = false;
+     this.cua.onTurnEnded();
++    this.relay?.computerDone?.();
+   }
+ 
+   /** Computer use is on and this system runs it. */
+@@ -630,7 +679,7 @@ export class DesktopPetWorld implements World {
+   }
+ 
+   outputTap(): OutputTap | undefined {
+-    if (!this.server.petConnected) return undefined;
++    if (!this.server.petConnected && !this.relay?.reachable?.()) return undefined;
+     return {
+       // the pet shows nothing of the stream itself; its tools act when they run
+       externalizes: () => false,
+@@ -800,6 +849,7 @@ export class DesktopPetWorld implements World {
+       status: this.status.status,
+       statusBubble: this.cfg.statusBubble,
+       bot: this.botInfo(),
++      relay: this.relay?.page?.() ?? null,
+     };
+   }
+ 
+@@ -848,6 +898,8 @@ export class DesktopPetWorld implements World {
+   }
+ 
+   private micWanted(): boolean {
++    // the body is elsewhere: this computer's microphone is not what it hears with
++    if (this.relay && !this.relay.here()) return false;
+     const phase = this.backendState()?.phase;
+     return this.cfg.asr.enabled && (phase === 'running');
+   }
+@@ -914,6 +966,12 @@ export class DesktopPetWorld implements World {
+   }
+ 
+   private onPage(msg: PageMessage): void {
++    if (this.relay?.fromPage?.(msg)) return;
++    this.onInput(msg);
++  }
++
++  /** What the pet page, or the relay's device for it, reports. */
++  private onInput(msg: PageMessage): void {
+     switch (msg.t) {
+       case 'figure': return this.onFigure(msg);
+       case 'hello': {
+@@ -1003,7 +1061,7 @@ export class DesktopPetWorld implements World {
+    */
+   confirm(question: string, choices: [yes: string, no: string] | [yes: string, always: string, no: string]): Promise<ConfirmResult> {
+     const id = nextId('k');
+-    if (!this.server.sendPet({ t: 'confirm', id, question, options: choices })) return Promise.resolve('unavailable');
++    if (!this.sendBody({ t: 'confirm', id, question, options: choices })) return Promise.resolve('unavailable');
+     return new Promise((resolve) => {
+       const timer = setTimeout(() => { this.confirms.delete(id); resolve('timeout'); }, CONFIRM_TIMEOUT_MS);
+       this.confirms.set(id, { resolve, timer, choices: choices.length });
+@@ -1020,7 +1078,7 @@ export class DesktopPetWorld implements World {
+     const { actions } = parseActions(d.actions ?? [], this.vocab());
+     let settle: (a: PetDialogAnswer) => void = () => {};
+     const answer = new Promise<PetDialogAnswer>((resolve) => { settle = resolve; });
+-    if (!this.server.sendPet({ t: 'dialog', id, ...d, actions })) settle({ unavailable: true });
++    if (!this.sendBody({ t: 'dialog', id, ...d, actions })) settle({ unavailable: true });
+     else this.dialogs.set(id, settle);
+     // a page that never reports back (a tab put to sleep) does not hold a line with nothing to answer forever
+     if (!d.input && this.dialogs.has(id)) {
+@@ -1029,11 +1087,11 @@ export class DesktopPetWorld implements World {
+     }
+     return {
+       answer,
+-      update: (patch) => { if (this.dialogs.has(id)) this.server.sendPet({ t: 'dialog-update', id, ...patch }); },
++      update: (patch) => { if (this.dialogs.has(id)) this.sendBody({ t: 'dialog-update', id, ...patch }); },
+       close: () => {
+         const s = this.dialogs.get(id);
+         this.dialogs.delete(id);
+-        this.server.sendPet({ t: 'dialog-close', id });
++        this.sendBody({ t: 'dialog-close', id });
+         s?.({ done: true });
+       },
+     };
+@@ -1062,7 +1120,7 @@ export class DesktopPetWorld implements World {
+     const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, 500) : '';
+     if (index === null && !text) return;
+     this.setAsk(null);
+-    if (from === 'chat') this.server.sendPet({ t: 'ask-close', id: ask.id });
++    if (from === 'chat') this.sendBody({ t: 'ask-close', id: ask.id });
+     const line = index !== null
+       ? t.answerPicked(this.userName, ask.question, index + 1, ask.options[index]!)
+       : t.answerWrote(this.userName, ask.question, text);
+@@ -1107,7 +1165,11 @@ export class DesktopPetWorld implements World {
+       case 'throw': text = m.thrown(u, t.crashed); break;
+       case 'drop': text = m.dropped(u, t.x !== null && this.screen ? pct(t.x / this.screen.w) : null, t.crashed); break;
+       case 'crash': text = m.crashed; break;
+-      default: return;
++      default: {
++        const own = this.relay?.touchText?.(t.kind, t.count, u);
++        if (!own) return;
++        text = own;
++      }
+     }
+     const wakes = !this.touchWoke && touchWakes(this.cfg.touch, t.kind);
+     if (wakes) this.touchWoke = true;
+@@ -1282,7 +1344,7 @@ export class DesktopPetWorld implements World {
+   /** A quick tap before the held press: the pet perks up, so the hold that follows feels answered at once. */
+   private onTalkTap(): void {
+     if (this.talking || !this.cfg.asr.enabled || !this.micWanted()) return;
+-    this.server.sendPet({ t: 'listen', phase: 'ready' });
++    this.sendBody({ t: 'listen', phase: 'ready' });
+   }
+ 
+   private onTalkKey(down: boolean): void {
+@@ -1297,7 +1359,7 @@ export class DesktopPetWorld implements World {
+     if (!this.cfg.asr.enabled || !this.micWanted()) return;
+     if (on) {
+       this.listenOpen = true;
+-      this.server.sendPet({ t: 'listen', phase: 'start' });
++      this.sendBody({ t: 'listen', phase: 'start' });
+       return;
+     }
+     const tail = this.segmenter.flush();
+@@ -1326,7 +1388,7 @@ export class DesktopPetWorld implements World {
+   private enqueue(u: Utterance): void {
+     this.counts.utterances++;
+     this.queue.push(u);
+-    this.server.sendPet({ t: 'listen', phase: 'transcribing' });
++    this.sendBody({ t: 'listen', phase: 'transcribing' });
+     void this.drain();
+   }
+ 
+@@ -1336,7 +1398,7 @@ export class DesktopPetWorld implements World {
+     if (open) for (const u of this.segmenter.push(frame)) this.enqueue(u);
+     this.level = open ? this.segmenter.level : rmsDb(frame);
+     const speaking = open && this.segmenter.active;
+-    if (speaking && !this.wasSpeaking) this.server.sendPet({ t: 'listen', phase: 'start' });
++    if (speaking && !this.wasSpeaking) this.sendBody({ t: 'listen', phase: 'start' });
+     this.wasSpeaking = speaking;
+     const now = Date.now();
+     if (now - this.lastLevelAt >= 100) {
+@@ -1421,7 +1483,7 @@ export class DesktopPetWorld implements World {
+ 
+   /** The listening bubble: sentences already transcribed, then the one being heard, greyed. */
+   private showHeard(): void {
+-    this.server.sendPet({ t: 'listen', phase: 'partial', text: this.partial, interim: this.interim });
++    this.sendBody({ t: 'listen', phase: 'partial', text: this.partial, interim: this.interim });
+   }
+ 
+   /** Delivers the packed text once nothing upstream is still open. */
+@@ -1436,7 +1498,7 @@ export class DesktopPetWorld implements World {
+       if (this.listenOpen && !this.talking && !this.segmenter.active) {
+         this.listenOpen = false;
+         this.partial = '';
+-        this.server.sendPet({ t: 'listen', phase: 'none' });
++        this.sendBody({ t: 'listen', phase: 'none' });
+       }
+     }
+     if (text) {
+@@ -1444,7 +1506,7 @@ export class DesktopPetWorld implements World {
+       this.partial = '';
+       this.listenOpen = false;
+       this.counts.delivered++;
+-      this.server.sendPet({ t: 'listen', phase: 'heard', text });
++      this.sendBody({ t: 'listen', phase: 'heard', text });
+       void this.push('desktop-pet.speech', 'desktop-pet.voice', this.t.heard(this.userName, text), 'flush', { meta: { text } });
+       return;
+     }
+@@ -1453,7 +1515,7 @@ export class DesktopPetWorld implements World {
+       // the episode ended with nothing worth delivering; an open talk key keeps it going
+       this.listenOpen = false;
+       this.partial = '';
+-      this.server.sendPet({ t: 'listen', phase: 'none' });
++      this.sendBody({ t: 'listen', phase: 'none' });
+     }
+     if (this.packer.pending && !this.packTimer) {
+       this.packTimer = setTimeout(() => { this.packTimer = null; this.schedulePack(); }, Math.max(50, this.segmenter.settleRemainingMs || 100));
+@@ -1485,10 +1547,13 @@ export class DesktopPetWorld implements World {
+       pet_quiet: (args) => this.setQuiet(args),
+     };
+     const own = petToolDecls(this.appLanguage).map((decl) => ({ ...decl, handler: handlers[decl.name], ...(decl.name === 'pet_walk_to' ? { interruptible: true } : {}) }));
+-    return this.cuaOn ? [...own, ...this.cua.tools()] : own;
++    const relayed = this.relay?.tools?.() ?? [];
++    return this.cuaOn ? [...own, ...relayed, ...this.cua.tools()] : [...own, ...relayed];
+   }
+ 
+   private notConnected(tool: string): ToolOutcome {
++    const away = this.relay?.unavailable?.(tool);
++    if (away) return { text: away, failed: true };
+     const w = this.windowHost?.state();
+     const detail = w && w.phase !== 'running' && w.detail ? w.detail : null;
+     return { text: this.t.notConnected(tool, detail, this.userName), failed: true };
+@@ -1501,7 +1566,7 @@ export class DesktopPetWorld implements World {
+     const { beats, dropped } = parseScript(script, this.vocab());
+     const spoken = beats.some((b) => b.text || b.actions.length || b.anchors.length);
+     if (!spoken && shown.blobs.length === 0) return { text: this.t.sayEmpty, failed: true };
+-    if (spoken && !this.server.sendPet({ t: 'say', id: nextId('s'), beats })) return this.notConnected('pet_say');
++    if (spoken && !this.sendBody({ t: 'say', id: nextId('s'), beats })) return this.notConnected('pet_say');
+     void this.closeActivity();
+     void this.record({ kind: 'say', beats: beats.map((b) => ({ text: b.text, ...moodOf(b.actions, this.vocab()) })) }, beats.map((b) => b.text).join(''), shown.blobs);
+     if (!spoken) return { text: this.t.imagesShown(shown.blobs.length, this.chat.size > 0) };
+@@ -1541,7 +1606,7 @@ export class DesktopPetWorld implements World {
+     if (!question) return { text: this.t.askEmpty, failed: true };
+     if (options.length === 0 && !allowOwn) return { text: this.t.askNoWay, failed: true };
+     const id = nextId('a');
+-    if (!this.server.sendPet({ t: 'ask', id, question, options, own: allowOwn })) return this.notConnected('pet_ask');
++    if (!this.sendBody({ t: 'ask', id, question, options, own: allowOwn })) return this.notConnected('pet_ask');
+     const replaced = this.ask?.question ?? null;
+     this.setAsk({ id, question, options });
+     void this.closeActivity();
+@@ -1565,12 +1630,12 @@ export class DesktopPetWorld implements World {
+     const pack = this.currentPack();
+     if (pack?.manifest.can.walk === false) return { text: this.t.walkCannot(modelName(pack.manifest.name, pack.id, this.language)), failed: true };
+     const walkId = nextId('w');
+-    if (!this.server.sendPet({ t: 'walk', id: walkId, to: target, run })) return this.notConnected('pet_walk_to');
++    if (!this.sendBody({ t: 'walk', id: walkId, to: target, run })) return this.notConnected('pet_walk_to');
+     const text = await new Promise<string>((resolve) => {
+       const onAbort = (): void => {
+         if (!this.walks.has(walkId)) return;
+         walk.stopping = true;
+-        this.server.sendPet({ t: 'walk-stop', id: walkId });
++        this.sendBody({ t: 'walk-stop', id: walkId });
+       };
+       const done = (s: string): void => {
+         ctx?.signal?.removeEventListener('abort', onAbort);
+@@ -1658,7 +1723,7 @@ export class DesktopPetWorld implements World {
+     const vocab = this.vocab();
+     const { actions, dropped } = parseActions(list, vocab);
+     if (!actions.length) return { text: this.t.actNone(dropped), failed: true };
+-    if (!this.server.sendPet({ t: 'act', id: nextId('c'), actions })) return this.notConnected('pet_act');
++    if (!this.sendBody({ t: 'act', id: nextId('c'), actions })) return this.notConnected('pet_act');
+     const lasting = actions.filter((a) => vocab.find((v) => v.id === a)?.lasting);
+     return { text: this.t.actReceipt(actions, lasting, dropped) };
+   }
+@@ -1671,6 +1736,7 @@ export class DesktopPetWorld implements World {
+     const reply = this.opts.replyLanguage?.() ?? null;
+     return {
+       'pet.cua': this.cuaOn ? await this.cua.envPrompt() : '',
++      'pet.relay': this.relay?.envPrompt?.() ?? '',
+       'pet.user': user,
+       'pet.vocab': vocabTable(this.vocab(), language),
+       'pet.voice': this.cfg.asr.enabled ? t.on : t.off,
+@@ -1718,7 +1784,7 @@ export class DesktopPetWorld implements World {
+     return {
+       label: c.label,
+       lamps,
+-      panels: desktopPetPanelDecls(language),
++      panels: [...desktopPetPanelDecls(language), ...(this.relay?.panel ? [relayPanelDecl(this.relay.panel)] : [])],
+       invoke: (panel, method, args) => this.invoke(panel, method, args),
+       stream: (panel, socket) => {
+         // `chat` has no panel: the embedding app draws its chat page from this stream
+@@ -1734,13 +1800,14 @@ export class DesktopPetWorld implements World {
+         ...c.envPrompt,
+         path: this.envPromptFile(),
+         role: 'envPrompt',
+-        vars: ['pet.user', 'pet.vocab', 'pet.voice', 'pet.body', 'pet.dress', 'pet.self', 'pet.chat', 'pet.reply', 'pet.cua']
+-          .map((name) => ({ name, description: c.vars[name] ?? name, ...(name === 'pet.vocab' || name === 'pet.dress' || name === 'pet.cua' ? { multiline: true } : {}) })),
++        vars: ['pet.user', 'pet.vocab', 'pet.voice', 'pet.body', 'pet.dress', 'pet.self', 'pet.chat', 'pet.reply', 'pet.cua', 'pet.relay']
++          .map((name) => ({ name, description: c.vars[name] ?? name, ...(name === 'pet.vocab' || name === 'pet.dress' || name === 'pet.cua' || name === 'pet.relay' ? { multiline: true } : {}) })),
+       }],
+     };
+   }
+ 
+   private async invoke(panel: string, method: string, args: unknown[]): Promise<unknown> {
++    if (this.relay?.panel && panel === this.relay.panel.id) return this.relay.panel.invoke(method, args);
+     if (panel === 'pet') {
+       switch (method) {
+         case 'state': return this.petState();
+@@ -1862,3 +1929,8 @@ export class DesktopPetWorld implements World {
+ }
+ 
+ export const modelsDirFor = (root: string) => join(root, DESKTOP_PET_ID);
++
++/** The console's declaration of a relay's panel. */
++function relayPanelDecl(panel: NonNullable<PetBodyRelay['panel']>): WorldPanelDecl {
++  return { id: panel.id, title: panel.title, description: panel.description, getMethods: panel.getMethods ?? [] };
++}
+diff --git a/packages/cortico-world-desktop-pet/tests/relay.test.ts b/packages/cortico-world-desktop-pet/tests/relay.test.ts
+new file mode 100644
+index 0000000..629b223
+--- /dev/null
++++ b/packages/cortico-world-desktop-pet/tests/relay.test.ts
+@@ -0,0 +1,192 @@
++import { afterEach, describe, expect, it } from 'vitest';
++import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { DESKTOP_PET_DEFAULTS, type DesktopPetConfigSection } from '../src/config.ts';
++import { desktopPetDefinition } from '../src/definition.ts';
++import { DesktopPetWorld } from '../src/world.ts';
++import type { PetBodyPort, PetBodyRelay } from '../src/relay.ts';
++import type { PageMessage } from '../src/server.ts';
++import type { ToolDef } from 'cortico/core/types.ts';
++import { FakeHost } from './helpers/fake-host.ts';
++import { FakePage } from './helpers/page.ts';
++
++const ctx = { role: 'main', log: new FakeHost().log };
++
++/** A relay whose body is on a board while `away`: it records what it carries and what it was asked. */
++class BoardRelay implements PetBodyRelay {
++  away = false;
++  carried: PageMessage[] = [];
++  fromPageSeen: PageMessage[] = [];
++  port: PetBodyPort | null = null;
++  connects = 0;
++  computer = 0;
++  done = 0;
++  pageDir?: string;
++  async start(port: PetBodyPort): Promise<void> { this.port = port; }
++  async stop(): Promise<void> { this.port = null; }
++  send(msg: PageMessage): boolean | undefined {
++    if (!this.away) return undefined;
++    this.carried.push(msg);
++    return true;
++  }
++  here(): boolean { return !this.away; }
++  reachable(): boolean { return this.away; }
++  fromPage(msg: PageMessage): boolean {
++    if (!msg.t.startsWith('board_')) return false;
++    this.fromPageSeen.push(msg);
++    return true;
++  }
++  pageConnected(): void { this.connects++; }
++  page(): Record<string, unknown> { return { module: '/relay/page.js', held: this.away, hidden: this.away }; }
++  unavailable(tool: string): string | null { return this.away ? `[${tool}] on the board, offline` : null; }
++  async beforeComputer(): Promise<void> { this.computer++; this.away = false; }
++  computerDone(): void { this.done++; }
++  tools(): ToolDef[] {
++    return [{ name: 'pet_location', tags: ['read'], description: 'where', parameters: { type: 'object', properties: {} }, handler: async () => ({ text: this.away ? 'board' : 'desktop' }) }];
++  }
++  envPrompt(): string { return 'BODY CAN TRAVEL'; }
++  touchText(kind: string, count: number, user: string): string | null { return kind === 'hug' ? `${user} hugged you ${count}x` : null; }
++  panel = { id: 'board', title: 'Board', description: 'the board', getMethods: ['state'], invoke: async (method: string) => ({ method, away: this.away }) };
++}
++
++function makeWorld(relay: PetBodyRelay, patch: (c: DesktopPetConfigSection) => void = () => {}) {
++  const cfg = structuredClone(DESKTOP_PET_DEFAULTS);
++  cfg.enabled = true;
++  cfg.port = 0;
++  cfg.window.enabled = false;
++  cfg.asr.enabled = false;
++  patch(cfg);
++  const dir = mkdtempSync(join(tmpdir(), 'pet-relay-'));
++  const world = new DesktopPetWorld({
++    cfg, timezone: 'Asia/Shanghai', persist: (p) => { Object.assign(cfg, p); },
++    runtimesRoot: () => join(dir, 'runtimes'), modelsDir: () => join(dir, 'models'), relay,
++  });
++  return { world, cfg };
++}
++
++const origin = (w: DesktopPetWorld) => w.petUrl.replace(/\/pet$/, '');
++const tool = (w: DesktopPetWorld, name: string) => w.tools().find((t) => t.name === name)!;
++/** A tool's receipt as an outcome (handlers may also answer with plain text). */
++const outcome = (r: string | { text: string; failed?: boolean }) => (typeof r === 'string' ? { text: r } : r);
++
++let cleanup: Array<() => Promise<void>> = [];
++afterEach(async () => {
++  for (const fn of cleanup.reverse()) await fn();
++  cleanup = [];
++});
++
++async function mounted(relay: BoardRelay, patch?: (c: DesktopPetConfigSection) => void) {
++  const made = makeWorld(relay, patch);
++  const host = new FakeHost();
++  await made.world.start(host);
++  cleanup.push(() => made.world.stop());
++  return { ...made, host };
++}
++
++describe('body relay', () => {
++  it('lets the pet page carry the body while the relay leaves it here', async () => {
++    const relay = new BoardRelay();
++    const { world } = await mounted(relay);
++    expect(relay.port).not.toBeNull();
++    const page = await FakePage.open(origin(world));
++    cleanup.push(() => page.close());
++    expect(page.init.relay).toEqual({ module: '/relay/page.js', held: false, hidden: false });
++    await expect.poll(() => relay.connects).toBe(1);
++    const said = outcome(await tool(world, 'pet_say').handler({ script: 'hello' }, ctx));
++    expect(said.failed).toBeFalsy();
++    expect((await page.next((m) => m.t === 'say')).beats).toBeTruthy();
++    expect(relay.carried).toEqual([]);
++  });
++
++  it('routes orders to the relay while the body is away, and says why a tool cannot run', async () => {
++    const relay = new BoardRelay();
++    relay.away = true;
++    const { world } = await mounted(relay);
++    expect(world.outputTap()).toBeTruthy();
++    const said = outcome(await tool(world, 'pet_say').handler({ script: 'hello' }, ctx));
++    expect(said.failed).toBeFalsy();
++    expect(relay.carried.map((m) => m.t)).toContain('say');
++    relay.send = () => false;
++    const failed = await tool(world, 'pet_act').handler({ actions: ['jump'] }, ctx);
++    expect(failed).toEqual({ text: '[pet_act] on the board, offline', failed: true });
++  });
++
++  it('takes the relay page messages before the World and feeds device input as page input', async () => {
++    const relay = new BoardRelay();
++    const { world, host } = await mounted(relay);
++    const page = await FakePage.open(origin(world));
++    cleanup.push(() => page.close());
++    page.send({ t: 'board_ready', id: 'x' });
++    await expect.poll(() => relay.fromPageSeen.length).toBe(1);
++    relay.port!.input({ t: 'text', text: 'typed on the board' });
++    await expect.poll(() => host.events.length).toBe(1);
++    expect(host.events[0]!.text).toContain('typed on the board');
++  });
++
++  it('delivers heard speech, as the answer to an open question first', async () => {
++    const relay = new BoardRelay();
++    const { world, host } = await mounted(relay);
++    const page = await FakePage.open(origin(world));
++    cleanup.push(() => page.close());
++    relay.port!.heard('good morning');
++    await expect.poll(() => host.events.length).toBe(1);
++    expect(host.events[0]!.type).toBe('desktop-pet.speech');
++    await tool(world, 'pet_ask').handler({ question: 'Tea?', options: ['yes', 'no'] }, ctx);
++    relay.port!.heard('green tea please');
++    await expect.poll(() => host.events.length).toBe(2);
++    expect(host.events[1]!.type).toBe('desktop-pet.answer');
++    expect(host.events[1]!.text).toContain('green tea please');
++  });
++
++  it('adds its touch kinds, tools, prompt and panel', async () => {
++    const relay = new BoardRelay();
++    const { world, host } = await mounted(relay, (c) => { c.user = 'Sam'; });
++    expect(world.tools().map((t) => t.name)).toContain('pet_location');
++    expect((await world.envPromptVars())['pet.relay']).toBe('BODY CAN TRAVEL');
++    const decl = world.console();
++    expect(decl.panels!.map((p) => p.id)).toContain('board');
++    expect(await decl.invoke!('board', 'state', [])).toEqual({ method: 'state', away: false });
++    relay.port!.input({ t: 'touch', kind: 'hug' });
++    await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
++    expect(host.events[0]!.text).toContain('Sam hugged you 1x');
++  });
++
++  it('keeps the computer microphone closed while the body is away', async () => {
++    const relay = new BoardRelay();
++    relay.away = true;
++    const { world } = await mounted(relay);
++    const page = await FakePage.open(origin(world));
++    cleanup.push(() => page.close());
++    expect(page.init.mic).toBe(false);
++    expect(page.init.relay).toEqual({ module: '/relay/page.js', held: true, hidden: true });
++  });
++
++  it('serves the relay page module, and nothing outside its directory', async () => {
++    const relay = new BoardRelay();
++    const dir = mkdtempSync(join(tmpdir(), 'pet-relay-page-'));
++    mkdirSync(join(dir, 'sub'));
++    writeFileSync(join(dir, 'page.js'), 'export function install() {}');
++    relay.pageDir = dir;
++    const { world } = await mounted(relay);
++    const ok = await fetch(`${origin(world)}/relay/page.js`);
++    expect(ok.status).toBe(200);
++    expect(ok.headers.get('content-type')).toContain('javascript');
++    expect(await ok.text()).toContain('install');
++    expect((await fetch(`${origin(world)}/relay/..%2F..%2Fetc%2Fpasswd`)).status).toBe(403);
++    expect((await fetch(`${origin(world)}/relay/missing.js`)).status).toBe(404);
++  });
++
++  it('is made for each World instance from the assembly', () => {
++    const made: string[] = [];
++    const def = desktopPetDefinition({ relay: ({ dataDir }) => { made.push(dataDir); return null; } });
++    const cfg = structuredClone(DESKTOP_PET_DEFAULTS);
++    const ctxFor = (dataDir: string) => ({
++      cfg, timezone: 'Asia/Shanghai', botName: 'Coo', botDir: dataDir, packageDir: dataDir, dataDir, repoRoot: dataDir,
++      secret: () => '', storeSecret: () => {}, persist: () => {}, restart: async () => {},
++    });
++    const dir = mkdtempSync(join(tmpdir(), 'pet-relay-def-'));
++    def.create(ctxFor(dir) as never);
++    expect(made).toEqual([join(dir, 'desktop-pet')]);
++  });
++});
+diff --git a/packages/cortico-world-desktop-pet/web/pet-app.js b/packages/cortico-world-desktop-pet/web/pet-app.js
+index 32ea2c3..072bf79 100644
+--- a/packages/cortico-world-desktop-pet/web/pet-app.js
++++ b/packages/cortico-world-desktop-pet/web/pet-app.js
+@@ -70,6 +70,8 @@ const bounds = () => ({ W: innerWidth, H: innerHeight, floorY: innerHeight - flo
+  * vocab, by id). `T` is the page's clock, in seconds of frames drawn.
+  */
+ let body = null, words = new Map(), T = 0;
++/** The relay's page side (see `useRelay` below). */
++const relay = { module: null, held: false, orders: [], frames: [] };
+ /** Where the body last said it is (body-host.js `layout`), or null. */
+ const at = () => body?.layout ?? null;
+ /** What the body is told of the page: talking orders hold its roaming off, and these states. */
+@@ -228,7 +230,7 @@ function applyPrefs(p) {
+   if (typeof p.rememberPosition === 'boolean') { prefs.rememberPosition = p.rememberPosition; reportPosition(); }
+   if (typeof p.user === 'string') prefs.user = p.user;
+   if (typeof p.micDevice === 'string' && p.micDevice !== prefs.micDevice) { prefs.micDevice = p.micDevice; stopMic(); }
+-  if (typeof p.mic === 'boolean') { prefs.mic = p.mic; p.mic && !watching ? startMic() : stopMic(); }
++  if (typeof p.mic === 'boolean') { prefs.mic = p.mic; p.mic && !watching && !relay.held ? startMic() : stopMic(); }
+   if (p.voice && typeof p.voice === 'object') prefs.voice = { ...prefs.voice, ...p.voice };
+   if (typeof p.doubleClickChat === 'boolean') prefs.doubleClickChat = p.doubleClickChat;
+   if (typeof p.statusBubble === 'boolean') { prefs.statusBubble = p.statusBubble; setBody({ thoughtShown: p.statusBubble }); }
+@@ -253,9 +255,10 @@ async function switchLanguage(code) {
+ }
+ 
+ function onOrder(m) {
++  if (relay.orders.some((take) => take(m))) return;
+   switch (m.t) {
+-    case 'init': restorePosition(m.startX); applyPrefs(m); if (!host) announcePainted(); break;
+-    case 'prefs': applyPrefs(m); break;
++    case 'init': useRelay(m.relay); restorePosition(m.startX); applyPrefs(m); if (!host) announcePainted(); break;
++    case 'prefs': useRelay(m.relay); applyPrefs(m); break;
+     case 'watching': watching = true; stopMic(); break;
+     // the settings window's 「在桌面上隐藏」: the same as the menu's 「隐藏」
+     case 'hide': host?.hide?.(); break;
+@@ -274,6 +277,32 @@ function onOrder(m) {
+   }
+ }
+ 
++/* ---------- relay: another place the body can be (src/relay.ts) ---------- */
++/**
++ * An app's relay may load a page module (`init.relay.module`, under `/relay/`) that animates the body's way out
++ * and back in. While `held` the body is elsewhere or on its way: it is not stepped, takes no pointer and the
++ * microphone stays off; `hidden` hides it and the bubbles from the first frame, before the module is loaded.
++ */
++function useRelay(r) {
++  if (!r || typeof r !== 'object') return;
++  if (typeof r.held === 'boolean') holdForRelay(r.held);
++  if (r.hidden === true && !relay.module) $('#figureLayer').style.visibility = 'hidden';
++  if (relay.module || typeof r.module !== 'string' || !r.module.startsWith('/relay/')) return;
++  relay.module = r.module;
++  import(r.module).then((mod) => mod.install?.({
++    state: r, send, stage, layer: $('#figureLayer'), ui: [bubble, heardEl, trail, menu, tools],
++    body: () => body, bounds, hold: holdForRelay,
++    onOrder: (take) => { relay.orders.push(take); },
++    onFrame: (draw) => { relay.frames.push(draw); },
++  })).catch((err) => console.error(err));
++}
++function holdForRelay(on) {
++  if (relay.held === on) return;
++  relay.held = on;
++  if (on) { stopMic(); closeMenu(); setInteractive(false, 'relay'); }
++  else if (prefs.mic && !watching) startMic();
++}
++
+ /** Tells the body of a change in the page's states (listening, thinking, a bubble that wants it to stay put). */
+ function setBody(change) {
+   if (Object.entries(change).every(([k, v]) => bodyState[k] === v)) return;
+@@ -1167,6 +1196,7 @@ let interactive = null, renewedAt = -Infinity;
+  */
+ function setInteractive(on, by) {
+   if (!host) return;
++  if (relay.held) on = false;
+   const now = performance.now();
+   const changed = interactive !== on;
+   if (!changed && !(on && now - renewedAt >= MOUSE_RENEW_MS)) return;
+@@ -1260,7 +1290,7 @@ host?.onCursor?.((p) => {
+ /** A press that began on the body and has not been let go of: the window keeps the mouse meanwhile. */
+ let pressing = false;
+ stage.addEventListener('pointerdown', (e) => {
+-  if (e.button !== 0) return;
++  if (e.button !== 0 || relay.held) return;
+   closeMenu();
+   const p = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+   body?.pointer('down', p);
+@@ -1533,10 +1563,11 @@ function frame(now) {
+     stepListen();
+     stepStatus();
+     setBody({ dialogOpen: !!item || !!listen.phase });
+-    body?.tick(dt);
++    if (!relay.held) body?.tick(dt);
+     stepBackdrop(dt);
+     stepTools();
+     layout();
++    for (const draw of relay.frames) draw(now);
+     // the frame's own time, so the layer shows frames as far apart as they were drawn
+     if (overlayOn) host.overlayFrame(overlayRect(), performance.timeOrigin + now);
+   } catch (err) {
+diff --git a/tests/pet-relay.test.js b/tests/pet-relay.test.js
+new file mode 100644
+index 0000000..05d205a
+--- /dev/null
++++ b/tests/pet-relay.test.js
+@@ -0,0 +1,64 @@
++import { readFileSync } from 'node:fs';
++import { afterEach, describe, expect, it } from 'vitest';
++import { JSDOM } from 'jsdom';
++import { clamp, f, ICONS } from '../packages/cortico-world-desktop-pet/web/ui.js';
++import { COO_CSS, mini, normalizeSkin, skinCss } from '../packages/cortico-world-desktop-pet/web/coo/coo.js';
++import { t } from '../packages/cortico-world-desktop-pet/web/i18n.js';
++
++const WEB = new URL('../packages/cortico-world-desktop-pet/web/', import.meta.url);
++const source = readFileSync(new URL('pet-app.js', WEB), 'utf8').replace(/^import .*;$/gm, '');
++const html = readFileSync(new URL('pet.html', WEB), 'utf8');
++const pages = [];
++afterEach(() => { for (const p of pages.splice(0)) p.close(); });
++
++/** Run the actual page with a quiet socket and body; the test advances the page's frame clock. */
++function page() {
++  const dom = new JSDOM(html, { url: 'http://127.0.0.1/pet', runScripts: 'outside-only' });
++  const win = dom.window;
++  pages.push(win);
++  const bodyChanges = [];
++  const body = {
++    layout: { busy: false, facing: 1, cursor: '', bubble: { x: 500, y: 400 } },
++    set: (change) => bodyChanges.push(change), cue() {}, talk() {},
++  };
++  win.requestAnimationFrame = () => 0;
++  win.WebSocket = class { readyState = 1; send() {} };
++  win.deps = {
++    applyTheme: (theme) => { win.document.documentElement.dataset.theme = theme; }, clamp, f, ICONS,
++    COO_CSS, mini, normalizeSkin, skinCss,
++    createSfx: () => ({ pop() {}, babble() {}, blub() {}, configure() {}, set() {}, listenStart() {}, listenEnd() {}, select() {}, tick() {} }),
++    loadBody: async () => body, body,
++    t, language: () => 'zh', useLanguage: async () => {},
++    // the tab's stage (stage.js) is decoration the activity bubble does not depend on
++    lightWall() {}, dressFloor() {}, modeButton: () => ({ show() {} }), glowColor: () => null, setGlow() {}, bindAppearance() {}, announcePainted() {},
++  };
++  win.eval(`const { applyTheme, clamp, f, ICONS, COO_CSS, mini, normalizeSkin, skinCss, createSfx, loadBody, t, language, useLanguage, lightWall, dressFloor, modeButton, glowColor, setGlow, bindAppearance, announcePainted } = window.deps;\n${source}\nbody = window.deps.body; window.page = { onOrder, openInput, closeBubble, relay, setInteractive, startMic, stopMic, step: (dt) => { T += dt; stepDialog(dt); stepListen(); stepStatus(); layout(); }, interactive: () => bubble.matches(UI_SELECTOR) };`);
++  return { ...win.page, bubble: win.document.querySelector('#bubble'), bodyChanges, doc: win.document };
++}
++
++describe('the page side of a body relay', () => {
++  it('hides the body from the first frame when init says the relay holds it away', () => {
++    const p = page();
++    p.onOrder({ t: 'init', relay: { held: true, hidden: true } });
++    expect(p.doc.querySelector('#figureLayer').style.visibility).toBe('hidden');
++    expect(p.relay.held).toBe(true);
++  });
++
++  it('leaves the page as it is without a relay', () => {
++    const p = page();
++    p.onOrder({ t: 'init', relay: null });
++    expect(p.doc.querySelector('#figureLayer').style.visibility).toBe('');
++    expect(p.relay.held).toBe(false);
++  });
++
++  it("lets the relay's page module take orders before the page does", () => {
++    const p = page();
++    const taken = [];
++    p.relay.orders.push((m) => { if (m.t !== 'transfer_depart') return false; taken.push(m); return true; });
++    p.onOrder({ t: 'transfer_depart', id: 'x' });
++    p.onOrder({ t: 'say', id: 's', beats: [{ text: '你好', actions: [], anchors: [] }] });
++    p.step(.01);
++    expect(taken).toEqual([{ t: 'transfer_depart', id: 'x' }]);
++    expect(p.bubble.classList.contains('say')).toBe(true);
++  });
++});
+-- 
+2.50.1 (Apple Git-155)
+

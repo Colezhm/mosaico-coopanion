@@ -2,7 +2,7 @@
 """Record the real GSP native backend, inputs, snapshots and events. No device access.
 
 Start the official simulator + coop_backend with COOP_SIM_ASSET_PATH pointing at
-web/whale/mosaico-deepseek.bin and COOP_SIM_PORT matching --input-port first.
+packages/coopanion-mosaico/web/whale-deepseek.bin and COOP_SIM_PORT matching --input-port first.
 """
 import argparse
 import json

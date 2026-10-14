@@ -3,51 +3,81 @@
  *
  * Output goes through four tools that drive the pet page (bubble, options, walking,
  * expressions and motions). Input arrives as events: speech heard through the pet window's
- * microphone (transcribed by FunASR's SenseVoice in this process, or Windows' own recognizer), typed text, answers to `pet_ask`, and touches
+ * microphone (transcribed in this process by FunASR's SenseVoice or by Whisper, or by Windows' own recognizer), typed text, answers to `pet_ask`, and touches
  * (poke, petting, being thrown). The page reports what actually happened; receipts and
  * events state only that.
  *
  * Processes owned here: the page server (always, while mounted), the pet window (when
- * `window.enabled`) and the system recognizer's helper (voice input on, engine `system`). FunASR runs
- * in this process once its model is downloaded.
+ * `window.enabled`) and the system recognizer's helper (voice input on, engine `system`). FunASR and
+ * Whisper run in this process once their model is downloaded.
+ *
+ * Two languages are read at each use: the model-text language for what the bot reads, and the app
+ * language (`DesktopPetWorldOptions.language`) for what the person reads: the pages' text (the
+ * snapshot carries it, so the pages follow a change within PREFS_SYNC_MS), status lines, voice
+ * hints, the default name for the person, and which recognizer and recognition language voice
+ * input uses by default. The console's text follows the console request's language.
  */
 import type { spawn } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import type {
-  Logger, OutputTap, ToolDef, ToolOutcome, World, WorldConsoleDecl, WorldHost, WorldLamp, WorldPanelDecl, WorldStreamSocket,
+  BlobInput, EventEnvelope, Logger, OutputTap, RunPhase, ToolCallContext, ToolDef, ToolOutcome, TriggerMode, World, WorldConsoleDecl,
+  WorldHost, WorldLamp, WorldPanelDecl, WorldStreamSocket,
 } from 'cortico/core/types.ts';
-import { nowIso } from 'cortico/core/util.ts';
+import { nowIso, shortTime } from 'cortico/core/util.ts';
 import type { Language } from 'cortico/core/language.ts';
 import type { DeepPartial } from 'cortico/world.ts';
 import {
-  DESKTOP_PET_ASR_CONFIG_GROUP, DESKTOP_PET_CONFIG_GROUP, DESKTOP_PET_ID, MAX_HOVER_BUTTONS, PET_ACTIONS, hoverButtonList,
-  type AsrEngine, type DesktopPetConfigSection, type MicMode, type PetSkin, type PetTheme, type RoamMode,
+  DESKTOP_PET_ID, MAX_HOVER_BUTTONS, PET_ACTIONS, SELF_KEYS, TOUCH_KINDS, USER_MAX, asrEngineFor, desktopPetConfigGroups, directSettings,
+  hoverButtonList, selfAdjustMode, touchWakes,
+  type AsrEngine, type DesktopPetConfigSection, type MicMode, type PetSkin, type PetTheme, type RoamMode, type SelfKey,
 } from './config.ts';
+import { capFor, cutChars, petText, type PetText } from './i18n/index.ts';
 import { PetServer, type PageMessage } from './server.ts';
+import { StatusTracker, type DescribeTool } from './status.ts';
 import { WindowHost, resolveHostCommand } from './window-host.ts';
 import { RuntimeStore, type ModelSpec } from './runtime/store.ts';
-import { FunAsrRecognizer, type FunAsrState, type SherpaModule } from './asr/funasr.ts';
+import { SENSEVOICE, SherpaAsr, WHISPER, type SherpaModelKind, type SherpaModule, type SherpaState } from './asr/sherpa.ts';
 import { SystemRecognizer, systemRecognizerSupported, type SystemRecognizerState, type SystemSentence } from './asr/system-recognizer.ts';
 import { Packer, Segmenter, rmsDb, type SegmentConfig, type SegmentSink, type Utterance } from './asr/segmenter.ts';
-import { comboLabel, hotkeyLabel, parseHotkey, splitTaps, watchHotkey, type KeyWatcher } from './asr/hotkey.ts';
+import { comboLabel, hotkeyBadge, hotkeyLabel, parseHotkey, splitTaps, watchHotkey, type KeyWatcher } from './asr/hotkey.ts';
 import { joinSpeech, looksHallucinated } from './asr/result.ts';
 import { toSimplified } from './asr/simplify.ts';
-import { estimateSeconds, parseActions, parseScript, vocabTable } from './script.ts';
-import { DESKTOP_PET_TOOL_DECLS } from './tools.ts';
-import { MosaicoBridge } from './mosaico/bridge.ts';
-import { MOSAICO_PROMPT, invokeMosaicoPanel, mosaicoTools } from './mosaico/world-tools.ts';
-import { FIGURE_BODIES, FIGURE_NAMES, activatePersona, figureOf } from './persona.ts';
+import { estimateSeconds, parseActions, parseScript, vocabChange, vocabTable, type VocabWord } from './script.ts';
+import { ActivityGroup, ChatSockets, SELF_TYPE, chatHistory, chatItem, chatRefs, type ChatFigure } from './chat.ts';
+import { ASK_OPTION_MAX, petToolDecls } from './tools.ts';
+import { COO, figurePacks, lookOf, modelName, nameIn, packFor, type FigurePack, type PackScan } from './packs.ts';
+import { Cua } from './cua/cua.ts';
+import type { PetBodyPort, PetBodyRelay } from './relay.ts';
+import type { Answer } from './cua/engine-ipc.ts';
+import { PackImporter } from './pack-import.ts';
+import { dressTable, planSettings, type SettingChange } from './self.ts';
+import { MODEL_TEXT, type ModelLanguage, type ModelText } from './model-text.ts';
 
-export const DESKTOP_PET_PANEL_DECLS: readonly WorldPanelDecl[] = [
-  { id: 'mosaico', title: 'Mosaico', description: '连接状态与跨屏传送。', getMethods: ['state'] },
-  { id: 'pet', title: '桌宠', description: '窗口、装扮与窗口运行时。', getMethods: ['state'] },
-  { id: 'voice', title: '语音输入', description: '识别引擎、电平与识别结果。', getMethods: ['state'] },
-];
+/** The console panels, titled in `language`. */
+export function desktopPetPanelDecls(language: Language = 'zh'): WorldPanelDecl[] {
+  const p = petText(language).console.panels;
+  return [
+    { id: 'pet', ...p.pet, getMethods: ['state'] },
+    { id: 'voice', ...p.voice, getMethods: ['state'] },
+  ];
+}
+
+/** The culture of Windows' speech recognizer preferred for each app language, where its language has more than one. */
+const SYSTEM_CULTURES: Readonly<Record<string, string>> = {
+  zh: 'zh-CN', 'zh-Hant': 'zh-TW', en: 'en-US', fr: 'fr-FR', de: 'de-DE', 'es-419': 'es-MX', 'pt-BR': 'pt-BR', it: 'it-IT', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR',
+};
 
 const WEB_DIR = fileURLToPath(new URL('../web/', import.meta.url));
-const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url));
+/** The environment prompt template of each model-text language; English falls back to Chinese while its file is missing. */
+const ENV_PROMPT_FILES: Record<ModelLanguage, string> = {
+  zh: fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url)),
+  en: fileURLToPath(new URL('./ENV_PROMPT.en.md', import.meta.url)),
+};
+
+/** Longest `pet_quiet`: a quiet that outlasts a day is a setting, which `pet_set` changes. */
+const QUIET_MAX_MIN = 24 * 60;
 const FRAME_MS = 20;
 const SAMPLE_RATE = 16_000;
 const WALK_TIMEOUT_MS = 30_000;
@@ -55,6 +85,13 @@ const WALK_TIMEOUT_MS = 30_000;
 const TOUCH_MERGE_MS = 2500;
 /** How long a confirmation bubble waits for an answer. */
 const CONFIRM_TIMEOUT_MS = 60_000;
+/** History events read per chat page load; the page asks for the ones before by cursor. */
+const CHAT_PAGE_EVENTS = 300;
+/** A message from the chat page: text cut to this, up to IMAGES_MAX images of at most IMAGE_MAX_BYTES each, as the terminal World takes them. */
+const CHAT_TEXT_MAX = 4000;
+const IMAGES_MAX = 8;
+const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 /** How often config edits from the console reach the pages: short enough that the size slider moves the pet with it. */
 const PREFS_SYNC_MS = 150;
 /** Talk-key polling interval: well under the shortest key tap. */
@@ -69,11 +106,13 @@ export interface PetBotControls {
   isPaused?(): boolean;
   setPaused?(paused: boolean): void;
   openSettings?(): void;
+  /** Shows the chat page; the bubble's expand button carries its draft there. */
+  openChat?(): void;
   /** Shows the embedding app's own dress page; the menu's 「装扮」 then opens it instead of the pet's dress window. */
   openDress?(): void;
   quit?(): void;
-  /** The power button's label, e.g. "退出 Coopanion". */
-  quitLabel?: string;
+  /** The power button's label, e.g. "Quit Coopanion", read when the menu opens. */
+  quitLabel?: string | (() => string);
   /** Runs the embedding app's introduction again (the console's `pet.guide` panel method). */
   guide?(): void;
 }
@@ -97,18 +136,21 @@ export interface PetDialog {
 /**
  * - `buttons`: a row of buttons, answered with the index; `keys` shows a key cap above them, pressed
  *   `taps` times over and over, the last press held (a talk key tapped, then held).
- * - `choices`: cards to try out before `confirm`, each with an optional level tag and icon (a pet-core
+ * - `choices`: cards to try out before `confirm`, each with an optional level tag, a small `note` under its label, and icon (a web/ui.js
  *   `ICONS` name, or `image`, a `data:image/…` URL such as a service's logo); a card's `line` is typed when it is picked and
- *   its `motion` played (standing still, strolling, running about) until another is picked.
+ *   its `motion` played (standing still, strolling, running about) until another is picked. `more` is a last card that,
+ *   clicked, unfolds its `options` after the others in place; the answer's index counts on through them, and a `value`
+ *   among them shows them from the start.
  * - `text`: a text box answered with the text; `secret` hides what is typed, `suggestions` are offered
  *   as the person types, `link` opens a page in the browser, `alt` is a second way out, answered as `{ alt: true }`.
  * - `progress`: a bar the app moves with `update({ progress })`; it ends when the app closes it.
  */
 export type PetDialogInput =
   | { kind: 'buttons'; options: Array<{ label: string; primary?: boolean }>; keys?: string; taps?: number }
-  | { kind: 'choices'; options: Array<{ label: string; level?: string; icon?: string; image?: string; line?: string; motion?: 'still' | 'walk' | 'run' }>; value?: number; confirm: string }
+  | { kind: 'choices'; options: PetDialogChoice[]; more?: { label: string; icon?: string; image?: string; options: PetDialogChoice[] }; value?: number; confirm: string }
   | { kind: 'text'; submit: string; placeholder?: string; value?: string; secret?: boolean; maxLength?: number; suggestions?: string[]; link?: { label: string; url: string }; alt?: string }
   | { kind: 'progress'; label?: string };
+export type PetDialogChoice = { label: string; level?: string; note?: string; icon?: string; image?: string; line?: string; motion?: 'still' | 'walk' | 'run' };
 
 /**
  * How a step ended: a button or card (`index`), typed text, the text box's `alt`, the close
@@ -131,8 +173,11 @@ export interface PetDialogHandle {
   close(): void;
 }
 
-/** How a confirmation ended: one of the two choices, closed, no answer in time, or no pet page to ask on. */
-export type ConfirmResult = 'yes' | 'no' | 'dismissed' | 'timeout' | 'unavailable';
+/**
+ * How a confirmation ended: one of the choices (`always` only when three were offered), closed, no answer in time,
+ * or no pet page to ask on.
+ */
+export type ConfirmResult = 'yes' | 'always' | 'no' | 'dismissed' | 'timeout' | 'unavailable';
 
 export interface DesktopPetWorldOptions {
   cfg: DesktopPetConfigSection;
@@ -140,17 +185,13 @@ export interface DesktopPetWorldOptions {
   persist: (patch: DeepPartial<DesktopPetConfigSection>) => void;
   runtimesRoot: () => string;
   modelsDir: () => string;
-  /** Deployment-owned mechanical state, separate from shared runtimes and Memory. */
-  dataDir?: string;
-  /** The bot's workspace, whose CONSTITUTION.md is swapped per figure; omitted in tests. */
-  workspaceDir?: string;
-  secret?: (name: string) => string;
   /** Downloads; tests pass a local stand-in. */
   fetchImpl?: typeof fetch;
   /** Loads sherpa-onnx; tests pass a fake recognizer. */
   loadSherpa?: () => SherpaModule;
-  /** The speech model to download; tests pass a small one. */
+  /** The speech models to download; tests pass small ones. */
   funasrModel?: ModelSpec;
+  whisperModel?: ModelSpec;
   /** Shown in the menu header. */
   botName?: string;
   /** PNG shown as the avatar in the menu header, when it exists. */
@@ -160,11 +201,37 @@ export interface DesktopPetWorldOptions {
   watchHotkey?: typeof watchHotkey;
   /** Starts the system recognizer's helper; tests pass a fake. */
   spawnSystemRecognizer?: typeof spawn;
+  /** Directories whose subdirectories are installed figure packs (src/packs.ts). */
+  packRoots?: () => string[];
+  /** The one of them the dressing page installs packs into (src/pack-import.ts); without it the page offers no import. */
+  packDir?: () => string;
+  /** Called after the bot changed settings itself (`pet_set`), so an app watching the config knows it was not the person. */
+  onBotChange?: () => void;
+  /** What the status bubble shows for a tool call. */
+  describeTool?: DescribeTool;
+  /** The language of what the bot reads from this World (`model-text.ts`), read at each use; Chinese when absent. */
+  modelLanguage?: () => ModelLanguage;
+  /** The app language: what the person reads (see the module header). Read at each use; `zh` when absent. */
+  language?: () => Language;
+  /**
+   * The language the bot is to talk to the person in, named in the model-text language, when it is
+   * not that language itself; it becomes one line of the environment prompt (`{{pet.reply}}`). Null
+   * or absent: no such line.
+   */
+  replyLanguage?: () => string | null;
+  /** Called with each answer to computer use's question, asked in the pet's bubble. */
+  onCuaAnswer?: (answer: Answer) => void;
+  /** Another place the body can be (src/relay.ts): orders go to it first. */
+  relay?: PetBodyRelay;
 }
+
+type SherpaEngine = Exclude<AsrEngine, 'system'>;
 
 interface PendingWalk {
   resolve: (text: string) => void;
   timer: NodeJS.Timeout;
+  /** The call's interrupt asked the page to stop the walk. */
+  stopping?: boolean;
 }
 
 interface PendingAsk {
@@ -187,6 +254,8 @@ interface HeardLine { text: string; at: number; ms: number; dropped?: boolean }
 
 interface PendingConfirm {
   resolve: (result: ConfirmResult) => void;
+  /** How many choices the bubble shows: the last one is no. */
+  choices: number;
   timer: NodeJS.Timeout;
 }
 
@@ -197,14 +266,32 @@ let seq = 0;
 const nextId = (p: string) => `${p}${Date.now().toString(36)}${(seq++).toString(36)}`;
 const pct = (fraction: number) => `${Math.round(fraction * 100)}%`;
 
-export class DesktopPetWorld implements World {
-  private mosaico: MosaicoBridge | null = null;
+/** The first expression among a beat's words for the chat page's tag: its id, and its first name in each language of the body's vocabulary. */
+function moodOf(actions: readonly string[], vocab: readonly VocabWord[]): { mood?: Record<string, string> } {
+  const v = actions.map((a) => vocab.find((e) => e.id === a)).find((e) => e?.kind === 'expression' && e.id !== 'neutral');
+  if (!v) return {};
+  return { mood: { id: v.id, ...Object.fromEntries(Object.entries(v.names).flatMap(([lang, names]) => (names[0] ? [[lang, names[0]]] : []))) } };
+}
 
-  private sendBody(msg: PageMessage): boolean {
-    return this.mosaico ? this.mosaico.send(msg) : this.server.sendPet(msg);
+/** Images of a chat page message: the whole batch is taken, or the reason it is not. */
+function parseChatImages(raw: unknown, user: string, s: PetText['chat'], m: ModelText): { ok: true; blobs: BlobInput[] } | { ok: false; reason: string } {
+  if (raw === undefined) return { ok: true, blobs: [] };
+  if (!Array.isArray(raw)) return { ok: false, reason: s.badImages };
+  if (raw.length > IMAGES_MAX) return { ok: false, reason: s.tooManyImages(IMAGES_MAX) };
+  const blobs: BlobInput[] = [];
+  for (const [i, item] of raw.entries()) {
+    const img = (item ?? {}) as { mime?: unknown; base64?: unknown; name?: unknown };
+    if (typeof img.mime !== 'string' || !IMAGE_MIMES.has(img.mime)) return { ok: false, reason: s.badMime(String(img.mime)) };
+    const bytes = typeof img.base64 === 'string' ? Buffer.from(img.base64, 'base64') : Buffer.alloc(0);
+    if (bytes.length === 0) return { ok: false, reason: s.emptyImage };
+    if (bytes.length > IMAGE_MAX_BYTES) return { ok: false, reason: s.bigImage(IMAGE_MAX_BYTES / 1048576) };
+    const name = typeof img.name === 'string' && img.name.trim() ? img.name.trim().slice(0, 120) : undefined;
+    blobs.push({ bytes, mime: img.mime, ...(name ? { name } : {}), fallbackText: m.image(user, i + 1, raw.length) });
   }
-  async beforeComputer(): Promise<void> { await this.mosaico?.beforeComputer(); }
-  computerFinished(): void { this.mosaico?.computerFinished(); }
+  return { ok: true, blobs };
+}
+
+export class DesktopPetWorld implements World {
   readonly id = DESKTOP_PET_ID;
   private host: WorldHost | null = null;
   private log: Logger | null = null;
@@ -212,7 +299,8 @@ export class DesktopPetWorld implements World {
   private readonly server: PetServer;
   private windowHost: WindowHost | null = null;
   private readonly store: RuntimeStore;
-  private funasr: FunAsrRecognizer | null = null;
+  private funasr: SherpaAsr | null = null;
+  private whisper: SherpaAsr | null = null;
   private system: SystemRecognizer | null = null;
   /** The engine the running backend belongs to; a config change starts the other one. */
   private runningEngine: AsrEngine | null = null;
@@ -225,13 +313,20 @@ export class DesktopPetWorld implements World {
   private packTimer: NodeJS.Timeout | null = null;
   private wasSpeaking = false;
   private screen: { w: number; h: number } | null = null;
+  /** The pet window said it is hidden (its menu's or the tray's 「隐藏」); reset when a page connects. */
+  private petHidden = false;
   private busyUntil = 0;
   private readonly walks = new Map<string, PendingWalk>();
   private ask: PendingAsk | null = null;
   private touch: TouchBatch | null = null;
+  /** A touch has woken the bot and no turn has ended since; touches until then wait for the next wake. */
+  private touchWoke = false;
+  /** The local date of the last event's time stamp; the next event on another date names its date again. */
+  private stampDay = '';
   private prefsKey = '';
   private prefsTimer: NodeJS.Timeout | null = null;
-  private thinking = false;
+  /** Where the pet window last said the pet stands, measured as `petX` is; written by `savePosition` on stop. */
+  private standX: number | null = null;
   private readonly voiceSockets = new Set<WorldStreamSocket>();
   private lastLevelAt = 0;
   private readonly heard: HeardLine[] = [];
@@ -243,124 +338,476 @@ export class DesktopPetWorld implements World {
   /** The talk key is down (hold) or was switched on (toggle). */
   private talking = false;
   private keyWatcher: KeyWatcher | null = null;
-  /** Why the talk key cannot be read; the gate then stays open as in `always`. */
+  /** Why the talk key cannot be read; the gate then stays closed. */
   private hotkeyProblem: string | null = null;
   private hotkeyKey = '';
   private level = -100;
+  private readonly chat = new ChatSockets();
+  private readonly activity = new ActivityGroup();
+  /** What the status bubble shows. */
+  private readonly status: StatusTracker;
+  /** Computer use; its tools and its part of the environment prompt are there while `cua.enabled` is on. */
+  private readonly cua: Cua;
+  private phase: RunPhase | null = null;
+  /** The person's messages (typed, spoken) not yet delivered to the bot, by cursor. */
+  private readonly pendingChat = new Set<number>();
+  /** The first cursor of this run: Core queues this World's undelivered events from before it again at start. */
+  private startCursor = 0;
+  /** Text the bubble's expand button carried, until a chat page takes it. */
+  private draft: string | null = null;
+  private pausedShown: boolean | null = null;
+
+  /** Installs packs the dressing page sends, when the app named a directory for them. */
+  private readonly importer: PackImporter | null;
 
   constructor(private readonly opts: DesktopPetWorldOptions) {
     this.cfg = opts.cfg;
+    this.cua = new Cua({
+      cfg: () => this.cfg.cua,
+      beforeAct: () => this.relay?.beforeComputer?.() ?? Promise.resolve(),
+      botName: opts.botName,
+      modelLanguage: () => this.language,
+      language: () => this.appLanguage,
+      askPermission: async (question, choices) => {
+        const answer = await this.confirm(question, choices);
+        if (answer === 'unavailable') return null;
+        const said: Answer = answer === 'yes' || answer === 'timeout' ? answer : 'no';
+        opts.onCuaAnswer?.(said);
+        return said;
+      },
+    });
+    this.importer = opts.packDir ? new PackImporter({ packDir: opts.packDir, packs: () => this.packs(), text: () => this.ui }) : null;
+    this.status = new StatusTracker((status) => this.sendBody({ t: 'status', status }), opts.describeTool, () => this.ui.busy);
     this.segmenter = new Segmenter(this.segmentConfig(), FRAME_MS);
     this.segmenter.setSink(this.sink);
-    this.store = new RuntimeStore({ runtimesRoot: opts.runtimesRoot, modelsDir: opts.modelsDir, fetchImpl: opts.fetchImpl, funasrModel: opts.funasrModel });
+    this.store = new RuntimeStore({ runtimesRoot: opts.runtimesRoot, modelsDir: opts.modelsDir, fetchImpl: opts.fetchImpl, funasrModel: opts.funasrModel, whisperModel: opts.whisperModel, text: () => this.ui });
     this.server = new PetServer({
       port: () => this.cfg.port,
       webDir: WEB_DIR,
       snapshot: () => this.snapshot(),
       onPetMessage: (msg) => this.onPage(msg),
-      onAudio: (frame) => { if (!this.mosaico || this.mosaico.settledOn('desktop')) this.onAudio(frame); },
-      onPetConnect: () => { this.log?.info('桌宠页面已连接'); this.mosaico?.desktopConnected(); },
-      onPetDisconnect: () => { this.mosaico?.desktopDisconnected(); this.onPageGone(); },
+      onAudio: (frame) => this.onAudio(frame),
+      onPetConnect: () => { this.petHidden = false; this.log?.info('桌宠页面已连接'); this.relay?.pageConnected?.(); },
+      onPetDisconnect: () => { this.relay?.pageDisconnected?.(); this.onPageGone(); },
       onSkin: (skin) => this.saveSkin(skin),
       onPrefs: (prefs) => this.savePrefs(prefs),
       avatarFile: opts.avatarFile,
+      packs: () => this.packs(),
+      packProblems: () => this.packScan().problems,
+      importer: this.importer ?? undefined,
+      language: () => this.appLanguage,
+      text: () => this.ui,
+      overlay: () => this.cfg.window.exportOverlay,
+      relayDir: opts.relay?.pageDir,
     });
+  }
+
+  /* ---------- relay: another place the body can be (src/relay.ts) ---------- */
+
+  private get relay(): PetBodyRelay | undefined {
+    return this.opts.relay;
+  }
+
+  /** An order for the body: the relay's when it takes it, else the pet page's. */
+  private sendBody(msg: PageMessage): boolean {
+    return this.relay?.send(msg) ?? this.server.sendPet(msg);
+  }
+
+  private relayPort(host: WorldHost): PetBodyPort {
+    return {
+      sendPage: (msg) => this.server.sendPet(msg),
+      input: (msg) => this.onInput(msg),
+      heard: (text) => this.relayHeard(text),
+      transcribe: async (pcm) => {
+        const recognizer = this.recognizer();
+        if (!recognizer) return { text: '', error: this.ui.voice.notRunning };
+        if (this.backendState()?.phase !== 'running') await this.startVoiceBackend();
+        const res = await recognizer.transcribe(pcm);
+        return { text: this.simplifies ? toSimplified(res.text) : res.text, error: res.error ?? null };
+      },
+      voiceEnabled: () => this.cfg.asr.enabled,
+      skin: () => this.cfg.skin,
+      words: () => this.vocab().map((w) => ({ id: w.id, kind: w.kind })),
+      push: (type, text, trigger) => { void this.push(type, `${DESKTOP_PET_ID}.relay`, text, trigger); },
+      log: host.log,
+    };
+  }
+
+  /** Speech the relay's device heard: an open question takes it as the answer, else it is said to the bot. */
+  private relayHeard(raw: string): void {
+    const text = raw.trim();
+    if (!text || looksHallucinated(text)) return;
+    if (this.ask) { this.onAnswer({ askId: this.ask.id, text }, 'pet'); return; }
+    this.counts.delivered++;
+    void this.push('desktop-pet.speech', 'desktop-pet.voice', this.t.heard(this.userName, text), 'flush', { meta: { text, via: 'relay' } });
+  }
+
+  /* ---------- figures ---------- */
+
+  /** Pack problems already logged, so a broken pack is reported once, not on every scan. */
+  private readonly packProblems = new Set<string>();
+  /** The figure (and a pack's pick, `id:scheme`) the pet page last said it shows, null before it said. */
+  private figureShown: string | null = null;
+  /** The figure the page said would not run, while the skin still names it: the page shows Coo meanwhile. */
+  private figureFailed: string | null = null;
+  /** The words each pack's body said it knows when the page last loaded it; a body that did not say is taken at its manifest's word. */
+  private readonly bodyWords = new Map<string, ReadonlySet<string>>();
+  /** The words the bot was last told it may use: its prompt's at start, then a `[形象]` event's or a `pet_set` receipt's. */
+  private toldVocab: readonly VocabWord[] = [];
+  /** A look the bot put on itself: the pet page's report of it is not told back (the receipt said it). */
+  private botLook: string | null = null;
+  /** `pet_quiet` in force: what it overrides, until when, and the settings it found (a change to them ends it). */
+  private quiet: { sound: boolean; roam: RoamMode; until: number; base: { sound: boolean; roam: RoamMode }; timer: NodeJS.Timeout } | null = null;
+
+  /** The built-in packs, then the installed ones; scanned on each call (a few small files). */
+  packs(): FigurePack[] {
+    return this.packScan().packs;
+  }
+
+  /** `packs()` with what was wrong in the pack directories, each problem logged once. */
+  private packScan(): PackScan {
+    const scan = figurePacks(this.opts.packRoots?.() ?? [], this.appLanguage);
+    for (const { dir, reason, loaded } of scan.problems) {
+      const line = `${loaded ? '形象包有一部分没用上' : '形象包没加载'}:${dir}:${reason}`;
+      if (!this.packProblems.has(line)) { this.packProblems.add(line); this.log?.warn(line); }
+    }
+    return scan;
+  }
+
+  /** The pack of the figure the skin asks for (Coo for one that is not installed); null only when even Coo's would not load. */
+  private currentPack(): FigurePack | null {
+    const figure = this.cfg.skin.figure ?? COO;
+    return packFor(this.packs(), figure === this.figureFailed ? COO : figure);
+  }
+  /** The words the body on screen does: its pack's vocabulary, less the words its body said it does not know. */
+  private vocab(): VocabWord[] {
+    const pack = this.currentPack();
+    if (!pack) return [];
+    const known = this.bodyWords.get(pack.id);
+    return known ? pack.manifest.vocab.filter((w) => known.has(w.id)) : pack.manifest.vocab;
+  }
+
+  /** The language of what the bot reads from this World. */
+  private get language(): ModelLanguage {
+    return this.opts.modelLanguage?.() ?? 'zh';
+  }
+
+  /** The text table of that language. */
+  private get t(): ModelText {
+    return MODEL_TEXT[this.language];
+  }
+
+  /** The app language: what the person reads. */
+  private get appLanguage(): Language {
+    return this.opts.language?.() ?? 'zh';
+  }
+
+  /** The text table of the app language. */
+  private get ui(): PetText {
+    return petText(this.appLanguage);
+  }
+
+  /** What events and bubbles call the person: the set name, else the app language's default. */
+  get userName(): string {
+    return this.cfg.user || this.ui.defaultUser;
+  }
+
+  /** Traditional characters heard become Simplified: the setting is on and the app language is Simplified Chinese. */
+  private get simplifies(): boolean {
+    return this.cfg.asr.simplified && this.appLanguage === 'zh';
+  }
+
+  /** Sends the pages what changed in the config now, without waiting for the next look; an app calls it after it changes the app language. */
+  refresh(): void {
+    this.syncPrefs();
+  }
+
+  /** How the words the bot may use changed since it was last told, or ''. From here the bot counts as told the words of now. */
+  private vocabNote(): string {
+    const now = this.vocab();
+    const note = vocabChange(this.toldVocab, now, this.language);
+    this.toldVocab = now;
+    return note;
+  }
+
+  /** What the body looks like now, with its picked options. */
+  private bodyText(pack: FigurePack | null): string {
+    if (!pack) return '';
+    const { language, t } = this;
+    const m = pack.manifest;
+    const scheme = lookOf(pack, this.cfg.skin);
+    const picks = scheme.split('-');
+    const preset = m.presets.find((p) => p.id === scheme);
+    const chosen = m.axes.map((a, i) => {
+      const o = a.options.find((x) => x.id === (preset?.pick[a.id] ?? picks[i])) ?? a.options[0]!;
+      return t.pick(modelName(a.name, a.id, language), modelName(o.name, o.id, language));
+    });
+    return t.body(modelName(m.name, pack.id, language), nameIn(m.about, language), chosen);
+  }
+
+  /**
+   * The pet page's report of the figure it shows: a switch the bot did not see in its prompt is told
+   * after the debounce (changes in a row come as one batch); a pack that would not load (the page then
+   * shows Coo) is told at once. Either way the bot hears how the words it may use changed, the words
+   * a newly loaded body says it does not know among them (`words`, the kit's bodies send it).
+   */
+  private onFigure(msg: PageMessage): void {
+    const id = typeof msg.id === 'string' ? msg.id : COO;
+    const before = this.figureShown;
+    const packs = this.packs();
+    const pack = packs.find((p) => p.id === id) ?? null;
+    if (msg.ok !== true) {
+      this.figureShown = COO;
+      this.figureFailed = id;
+      const reason = typeof msg.reason === 'string' ? msg.reason.slice(0, 200) : this.t.reasonUnknown;
+      // the page shows Coo instead, whose words then hold too
+      const coo = packs.find((p) => p.id === COO) ?? null;
+      const note = this.vocabNote();
+      const name = modelName(pack?.manifest.name, id, this.language);
+      void this.push('desktop-pet.figure', 'desktop-pet.figure', this.t.figureFailed(name, reason, this.bodyText(coo), note), 'flush',
+        { meta: { figure: { kind: 'failed', name: { ...pack?.manifest.name, id } } } });
+      return;
+    }
+    if ('words' in msg) {
+      if (Array.isArray(msg.words)) this.bodyWords.set(id, new Set(msg.words.filter((w): w is string => typeof w === 'string')));
+      else this.bodyWords.delete(id);
+    }
+    const known = this.bodyWords.get(id);
+    const unknown = pack && known ? pack.manifest.vocab.filter((w) => !known.has(w.id)).map((w) => w.id) : [];
+    const problem = `形象包 ${id} 的词表里有身体不认得的词,没给 bot 用:${unknown.join('、')}`;
+    if (unknown.length && !this.packProblems.has(problem)) { this.packProblems.add(problem); this.log?.warn(problem); }
+    if (id === this.cfg.skin.figure) this.figureFailed = null;
+    const shown = id === COO ? COO : `${id}:${typeof msg.scheme === 'string' ? msg.scheme : ''}`;
+    this.figureShown = shown;
+    let look: string | null = null;
+    // what the chat page says of a switch the person made: another figure, or another dress of the same one
+    let change: ChatFigure | null = null;
+    if (before !== null && before !== shown) {
+      if (shown === this.botLook) this.botLook = null;
+      else {
+        look = this.t.figureNow(this.bodyText(pack));
+        change = { kind: before.split(':')[0] === id ? 'dress' : 'figure', name: { ...pack?.manifest.name, id } };
+      }
+    }
+    const note = this.vocabNote();
+    const text = look && note ? `${look}\n${note}` : look ?? (note ? this.t.figureNote(note) : null);
+    if (text) void this.push('desktop-pet.figure', 'desktop-pet.figure', text, 'debounce', change ? { meta: { figure: change } } : {});
   }
 
   /* ---------- lifecycle ---------- */
 
   async start(host: WorldHost): Promise<void> {
     this.host = host;
+    this.startCursor = host.store.latestCursor() + 1;
     this.log = host.log;
-    this.funasr = new FunAsrRecognizer({
-      model: () => this.funasrModel(),
-      language: () => this.cfg.asr.language,
+    this.cua.start(host);
+    // the words the prompt is rendered with, until the bot is told otherwise
+    this.toldVocab = this.vocab();
+    // before the page server opens: a relay that holds the body tells the first page so
+    if (this.relay) await this.relay.start(this.relayPort(host)).catch((e: Error) => host.log.warn(`身体转接没有启动:${e.message}`));
+    await this.server.start();
+    this.windowHost = new WindowHost(host.log, () => this.t.window);
+    if (this.cfg.window.enabled) this.openWindow();
+    const sherpa = (engine: SherpaEngine, kind: SherpaModelKind) => new SherpaAsr({
+      kind,
+      model: () => this.sherpaModel(engine),
+      language: () => this.asrLanguage(),
+      text: () => this.ui,
       threads: () => this.cfg.asr.threads,
       log: host.log,
       load: this.opts.loadSherpa,
     });
+    this.funasr = sherpa('funasr', SENSEVOICE);
+    this.whisper = sherpa('whisper', WHISPER);
     this.system = new SystemRecognizer({
-      language: () => this.cfg.asr.language,
+      language: () => this.asrLanguage(),
+      culture: () => SYSTEM_CULTURES[this.appLanguage] ?? '',
+      text: () => this.ui,
       timeoutMs: () => this.cfg.asr.timeoutMs,
       log: host.log,
       spawnImpl: this.opts.spawnSystemRecognizer,
     });
     if (this.cfg.asr.enabled) void this.startVoiceBackend();
     await this.syncHotkey();
-    this.syncPersona(true);
     this.prefsKey = this.prefsSignature();
     this.prefsTimer = setInterval(() => this.syncPrefs(), PREFS_SYNC_MS);
-    if (this.cfg.mosaico?.enabled) {
-      if (!this.opts.dataDir) throw new Error('Mosaico 需要部署独立的 dataDir');
-      this.mosaico = new MosaicoBridge(join(this.opts.dataDir, 'mosaico'), {
-        sendDesktop: msg => this.server.sendPet(msg),
-        input: msg => this.onPage(msg),
-        speech: text => {
-          const clean = toSimplified(text);
-          if (!looksHallucinated(clean)) {
-            if(this.ask)this.onAnswer({t:'answer',askId:this.ask.id,text:clean});
-            else void this.push('desktop-pet.speech', 'desktop-pet.voice', `[语音] ${this.cfg.user}:${clean}`, 'flush');
-          }
-        },
-        transcribe: async pcm => { await this.funasr!.start(); return this.funasr!.transcribe(pcm); },
-        voiceEnabled: () => this.cfg.asr.enabled,
-        skin: () => this.cfg.skin,
-        error: detail => this.log?.warn(`Mosaico: ${detail}`),
-        status: state => { void this.push('desktop-pet.presence', 'desktop-pet.device', `[身体状态] ${JSON.stringify(state)}`, 'piggyback'); },
-      }, () => this.cfg.mosaico?.autonomous !== false);
-      try { await this.mosaico.start(this.cfg.mosaico.pairingFile, this.opts.secret?.('CORTICO_MOSAICO_TOKEN') ?? ''); }
-      catch (e) { this.log?.warn(`Mosaico 未启动: ${(e as Error).message}`); }
-      if (this.server.petConnected) this.mosaico.desktopConnected();
-    }
-    // Read the durable ownership journal before creating a visible pet window.
-    await this.server.start();
-    this.windowHost = new WindowHost(host.log);
-    if (this.cfg.window.enabled) this.openWindow();
   }
 
   async stop(): Promise<void> {
-    await this.mosaico?.stop();
+    await this.relay?.stop().catch((e: Error) => this.log?.warn(`身体转接停止出错:${e.message}`));
+    this.status.clear();
+    if (this.quiet) clearTimeout(this.quiet.timer);
+    this.quiet = null;
     if (this.prefsTimer) clearInterval(this.prefsTimer);
     this.prefsTimer = null;
+    this.savePosition();
+    await this.importer?.cancel();
     if (this.packTimer) clearTimeout(this.packTimer);
     this.packTimer = null;
     if (this.touch) clearTimeout(this.touch.timer);
     this.touch = null;
+    this.touchWoke = false;
     this.keyWatcher?.stop();
     this.keyWatcher = null;
     for (const c of this.confirms.values()) { clearTimeout(c.timer); c.resolve('unavailable'); }
     this.confirms.clear();
     for (const d of this.dialogs.values()) d({ unavailable: true });
     this.dialogs.clear();
-    for (const w of this.walks.values()) { clearTimeout(w.timer); w.resolve('World 已停止,没走到。'); }
+    for (const w of this.walks.values()) { clearTimeout(w.timer); w.resolve(this.t.walkWorldStopped); }
     this.walks.clear();
     for (const s of this.voiceSockets) s.close('stopped');
     this.voiceSockets.clear();
+    this.chat.closeAll('stopped');
     await this.windowHost?.stop();
     await this.funasr?.stop();
+    await this.whisper?.stop();
     await this.system?.stop();
     await this.server.stop();
+    await this.cua.stop();
     this.host = null;
   }
 
   onTurnEnded(): void {
-    this.setThinking(false);
+    this.touchWoke = false;
+    this.cua.onTurnEnded();
+    this.relay?.computerDone?.();
+  }
+
+  /** Computer use is on and this system runs it. */
+  private get cuaOn(): boolean {
+    return this.cfg.cua.enabled && this.cua.unsupported() === null;
   }
 
   outputTap(): OutputTap | undefined {
-    if (!this.server.petConnected && !this.mosaico?.presence.deviceOnline) return undefined;
+    if (!this.server.petConnected && !this.relay?.reachable?.()) return undefined;
     return {
-      onEvent: () => this.setThinking(true),
-      onRoundEnd: () => this.setThinking(false),
-      onAbort: () => this.setThinking(false),
+      // the pet shows nothing of the stream itself; its tools act when they run
+      externalizes: () => false,
+      onEvent: (event) => this.status.onEvent(event),
     };
   }
 
-  private setThinking(on: boolean): void {
-    this.mosaico?.setBusy(on);
-    if (this.thinking === on) return;
-    this.thinking = on;
-    this.sendBody({ t: 'thinking', on });
+  onRunPhase(phase: RunPhase): void {
+    this.phase = phase;
+    this.status.onPhase(phase);
+    if (this.activity.observe(phase, Date.now())) this.chat.broadcast({ t: 'activity', steps: this.activity.steps, startedAt: this.activity.startedAt });
+    if (phase.state === 'idle') void this.closeActivity();
+    this.chat.broadcast({ t: 'phase', phase });
+  }
+
+  /**
+   * A message that waited shows where the bot took it in: the steps done before that are recorded
+   * first, then a `delivered` record the history places the message at.
+   */
+  onEventsSettled(events: readonly EventEnvelope[], outcome: 'delivered' | 'discarded'): void {
+    const cursors = events
+      .filter((e) => this.pendingChat.delete(e.cursor) || (e.cursor < this.startCursor && chatItem(e)?.kind === 'user'))
+      .map((e) => e.cursor);
+    if (!cursors.length) return;
+    void (async () => {
+      await this.closeActivity();
+      const later = (this.host?.store.latestCursor() ?? 0) > Math.max(...cursors);
+      const at = outcome === 'delivered' && later
+        ? await this.record({ kind: 'delivered', cursors }, `送达了 ${cursors.map((c) => `#${c}`).join('、')}`)
+        : null;
+      this.chat.broadcast({ t: 'settled', cursors, outcome, ...(at !== null ? { at } : {}) });
+    })();
+  }
+
+  /** The steps since the pet's last line become one record: before each line, when the loop goes idle, before a waiting message is placed. */
+  private async closeActivity(): Promise<void> {
+    const group = this.activity.take(Date.now());
+    if (!group) return;
+    this.chat.broadcast({ t: 'activity', steps: null });
+    await this.record({ kind: 'activity', ...group }, `做了:${group.steps.join('、')}`);
+  }
+
+  /**
+   * One frame from a chat page:
+   * - `hello`: the history, the messages still pending, the loop's phase and the pause, and a draft the bubble carried
+   * - `more { before }`: the history before that cursor
+   * - `send { id, text, images }`: a message typed on the page, delivered with `preempt`; answered with `sent { id, cursor }` or `rejected { id, reason }`
+   * - `now { cursor }`: a pending message delivered at once, stopping what the bot is doing (`interrupt`)
+   * - `withdraw { cursor }`: a pending message taken back; answered with `withdrawn { cursor }` to every page, or `notice` when it was already delivered
+   * - `answer { askId, index | text }`: the open `pet_ask` answered on the page
+   *
+   * `init` and `ask` frames carry the id of the question that can still be answered (`askId`, null
+   * when none). `init` and `older` carry `refs`: the `withdrawn` and `delivered` records in that
+   * stretch of history about messages before it, which the page applies to the pages it loads later.
+   */
+  private async onChat(msg: Record<string, unknown>, socket: WorldStreamSocket, language: Language): Promise<void> {
+    const host = this.host;
+    const s = petText(language).chat;
+    switch (msg.t) {
+      case 'hello': {
+        const page = host ? this.chatPage() : { items: [], more: false };
+        this.chat.send(socket, {
+          t: 'init', ...page, pending: [...this.pendingChat], askId: this.ask?.id ?? null, phase: this.phase,
+          activity: this.activity.steps.length ? { steps: this.activity.steps, startedAt: this.activity.startedAt } : null,
+          paused: this.opts.controls?.isPaused?.() ?? false, user: this.userName, bot: this.opts.botName ?? '',
+          imagesSeen: host?.modelFacts.accepts('image/jpeg') ?? false,
+        });
+        if (this.draft !== null) { this.chat.send(socket, { t: 'draft', text: this.draft }); this.draft = null; }
+        return;
+      }
+      case 'more': {
+        if (!host || typeof msg.before !== 'number') return;
+        this.chat.send(socket, { t: 'older', ...this.chatPage(msg.before) });
+        return;
+      }
+      case 'send': {
+        const id = msg.id;
+        const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, CHAT_TEXT_MAX) : '';
+        const images = parseChatImages(msg.images, this.userName, s, this.t);
+        if (!images.ok) { this.chat.send(socket, { t: 'rejected', id, reason: images.reason }); return; }
+        if (!text && images.blobs.length === 0) return;
+        if (!host) { this.chat.send(socket, { t: 'rejected', id, reason: s.offline }); return; }
+        const e = await this.push('desktop-pet.message', 'desktop-pet.chat', this.t.typed(this.userName, text), 'preempt',
+          { meta: { via: 'chat', text }, ...(images.blobs.length ? { blobs: images.blobs } : {}) });
+        this.chat.send(socket, e ? { t: 'sent', id, cursor: e.cursor } : { t: 'rejected', id, reason: s.notSent });
+        return;
+      }
+      case 'now': {
+        if (!host?.promotePending || typeof msg.cursor !== 'number') return;
+        await host.promotePending(msg.cursor, 'interrupt');
+        return;
+      }
+      case 'withdraw': {
+        const cursor = msg.cursor;
+        if (!host?.withdrawPending || typeof cursor !== 'number') return;
+        if (!await host.withdrawPending(cursor)) {
+          this.chat.send(socket, { t: 'notice', text: s.tooLate });
+          return;
+        }
+        this.pendingChat.delete(cursor);
+        void this.record({ kind: 'withdrawn', cursor }, `撤回了 #${cursor}`);
+        this.chat.broadcast({ t: 'withdrawn', cursor });
+        return;
+      }
+      case 'answer': return this.onAnswer(msg, 'chat');
+    }
+  }
+
+  /**
+   * The chat items of the last CHAT_PAGE_EVENTS events of this World, or of those before `before`,
+   * and the records among them about messages further back.
+   */
+  private chatPage(before?: number): { items: ReturnType<typeof chatHistory>; refs: ReturnType<typeof chatRefs>; more: boolean; before: number | null } {
+    const events = this.host!.store.range({ source: this.id, limit: CHAT_PAGE_EVENTS, ...(before !== undefined ? { toCursor: before - 1 } : {}) });
+    const more = events.length === CHAT_PAGE_EVENTS;
+    const first = events[0]?.cursor ?? 0;
+    const refs = chatRefs(events);
+    return {
+      items: chatHistory(events),
+      refs: { withdrawn: refs.withdrawn.filter((c) => c < first), delivered: refs.delivered.filter(([c]) => c < first) },
+      more, before: more ? first : null,
+    };
+  }
+
+  /** The open question changed: pages let only the one still open be answered. */
+  private setAsk(ask: PendingAsk | null): void {
+    this.ask = ask;
+    this.chat.broadcast({ t: 'ask', askId: ask?.id ?? null });
   }
 
   /* ---------- window ---------- */
@@ -372,7 +819,7 @@ export class DesktopPetWorld implements World {
   openWindow(): void {
     if (!this.windowHost || !this.server.port) return;
     const managed = this.store.electron.executable();
-    this.windowHost.start(resolveHostCommand(this.petUrl, this.cfg.window.electronFile, managed));
+    this.windowHost.start(resolveHostCommand(this.petUrl, this.cfg.window.electronFile, managed, this.t.window));
   }
 
   /* ---------- page protocol ---------- */
@@ -380,18 +827,29 @@ export class DesktopPetWorld implements World {
   private snapshot(): Record<string, unknown> {
     return {
       skin: this.cfg.skin,
-      roam: this.cfg.roam,
-      sound: this.cfg.sound,
+      roam: this.quiet?.roam ?? this.cfg.roam,
+      sound: this.quiet?.sound ?? this.cfg.sound,
+      sounds: this.cfg.sounds,
       theme: this.cfg.theme,
+      rememberPosition: this.cfg.rememberPosition,
+      // read by the page from `init` only
+      startX: this.cfg.rememberPosition ? this.cfg.petX : null,
       hoverButtons: hoverButtonList(this.cfg.hoverButtons),
+      doubleClickChat: this.cfg.doubleClickChat,
       scale: this.cfg.window.scale,
-      user: this.cfg.user,
+      glow: this.cfg.window.glow,
+      frameRate: this.cfg.window.frameRate,
+      lockFrameRate: this.cfg.window.lockFrameRate,
+      hideWhenFullscreen: this.cfg.window.hideWhenFullscreen,
+      language: this.appLanguage,
+      user: this.userName,
       mic: this.micWanted(),
       voice: this.voiceBrief(),
       micDevice: this.cfg.asr.mic.deviceId,
-      thinking: this.thinking,
-      mosaico: this.mosaico?.presence.snapshot(),
+      status: this.status.status,
+      statusBubble: this.cfg.statusBubble,
       bot: this.botInfo(),
+      relay: this.relay?.page?.() ?? null,
     };
   }
 
@@ -400,21 +858,22 @@ export class DesktopPetWorld implements World {
     let avatar: string | null = null;
     try { if (this.opts.avatarFile) avatar = String(statSync(this.opts.avatarFile).mtimeMs); } catch { /* no avatar yet */ }
     const pause = !!(c?.isPaused && c.setPaused);
-    const quitLabel = c?.quit ? c.quitLabel || '退出' : '';
+    const label = typeof c?.quitLabel === 'function' ? c.quitLabel() : c?.quitLabel;
+    const quitLabel = c?.quit ? label || this.ui.menu.quit : '';
     return {
       name: this.opts.botName ?? '',
       avatar,
       controls: !!c,
-      buttons: { pause, settings: !!c?.openSettings, dress: !!c?.openDress, quit: !!c?.quit },
+      buttons: { pause, settings: !!c?.openSettings, dress: !!c?.openDress, quit: !!c?.quit, chat: !!c?.openChat },
       paused: pause && c?.isPaused ? c.isPaused() : null,
       quitLabel,
-      quitPrompt: quitLabel ? `${quitLabel}?` : '',
+      quitPrompt: quitLabel ? this.ui.menu.quitPrompt(quitLabel) : '',
     };
   }
 
   private prefsSignature(): string {
     const s = this.snapshot();
-    delete s.thinking;
+    delete s.status;
     return JSON.stringify(s);
   }
 
@@ -424,9 +883,14 @@ export class DesktopPetWorld implements World {
     if (this.cfg.asr.enabled && this.runningEngine && this.runningEngine !== this.engine()) void this.startVoiceBackend();
     // the system recognizer serves one language; a new one needs a new helper
     else if (this.cfg.asr.enabled && this.runningEngine === 'system' && this.system?.languageChanged) void this.startVoiceBackend();
-    // FunASR loads the model for one language and thread count
-    else if (this.cfg.asr.enabled && this.runningEngine === 'funasr' && this.funasr?.configChanged) void this.startVoiceBackend();
+    // FunASR and Whisper load the model for one language and thread count
+    else if (this.cfg.asr.enabled && this.runningEngine && this.runningEngine !== 'system' && this.sherpa(this.runningEngine)?.configChanged) void this.startVoiceBackend();
     void this.syncHotkey();
+    // the person changed what a quiet holds back: theirs wins
+    if (this.quiet && (this.cfg.sound !== this.quiet.base.sound || this.cfg.roam !== this.quiet.base.roam)) this.endQuiet();
+    this.server.syncOverlay();
+    const paused = this.opts.controls?.isPaused?.() ?? false;
+    if (paused !== this.pausedShown) { this.pausedShown = paused; this.chat.broadcast({ t: 'paused', paused }); }
     const key = this.prefsSignature();
     if (key === this.prefsKey) return;
     this.prefsKey = key;
@@ -434,7 +898,8 @@ export class DesktopPetWorld implements World {
   }
 
   private micWanted(): boolean {
-    if (this.mosaico && !this.mosaico.settledOn('desktop')) return false;
+    // the body is elsewhere: this computer's microphone is not what it hears with
+    if (this.relay && !this.relay.here()) return false;
     const phase = this.backendState()?.phase;
     return this.cfg.asr.enabled && (phase === 'running');
   }
@@ -446,9 +911,10 @@ export class DesktopPetWorld implements World {
     return {
       enabled: this.cfg.asr.enabled,
       ready,
-      detail: ready ? null : b?.phase === 'starting' ? '识别服务启动中' : b?.detail ?? '识别服务没有运行',
+      detail: ready ? null : b?.phase === 'starting' ? this.ui.voice.starting : b?.detail ?? this.ui.voice.notRunning,
       hint: this.talkHint(),
       mode: this.micMode(),
+      key: hotkeyBadge(this.cfg.asr.mic.hotkey),
     };
   }
 
@@ -456,8 +922,6 @@ export class DesktopPetWorld implements World {
     if (!raw || typeof raw !== 'object') return;
     const skin = raw as PetSkin;
     this.opts.persist({ skin });
-    this.syncPersona(true);
-    this.mosaico?.syncSkin();
     this.syncPrefs();
   }
 
@@ -465,6 +929,8 @@ export class DesktopPetWorld implements World {
     const patch: DeepPartial<DesktopPetConfigSection> = {};
     if (prefs.roam === 'free' || prefs.roam === 'calm' || prefs.roam === 'off') patch.roam = prefs.roam as RoamMode;
     if (typeof prefs.sound === 'boolean') patch.sound = prefs.sound;
+    // the menu's sound or roam button during a quiet: the person's choice, kept, and the quiet is over
+    if (this.quiet && (patch.roam !== undefined || patch.sound !== undefined)) this.endQuiet();
     if (prefs.theme === 'dark' || prefs.theme === 'light') patch.theme = prefs.theme as PetTheme;
     if (typeof prefs.mic === 'boolean') patch.asr = { enabled: prefs.mic };
     if (Array.isArray(prefs.hoverButtons)) {
@@ -484,9 +950,30 @@ export class DesktopPetWorld implements World {
     this.syncPrefs();
   }
 
+  /**
+   * Called only from `stop`, so config.json changes at most once a run: with `rememberPosition` on it
+   * stores the last reported position, with it off it clears a stored one. A failed write leaves
+   * the stored position as it was.
+   */
+  private savePosition(): void {
+    const x = this.cfg.rememberPosition ? this.standX ?? this.cfg.petX : null;
+    if (x === this.cfg.petX) return;
+    try {
+      this.opts.persist({ petX: x });
+    } catch (err) {
+      this.log?.warn(`桌宠位置没有保存:${(err as Error).message}`);
+    }
+  }
+
   private onPage(msg: PageMessage): void {
-    if (this.mosaico?.desktopMessage(msg)) return;
+    if (this.relay?.fromPage?.(msg)) return;
+    this.onInput(msg);
+  }
+
+  /** What the pet page, or the relay's device for it, reports. */
+  private onInput(msg: PageMessage): void {
     switch (msg.t) {
+      case 'figure': return this.onFigure(msg);
       case 'hello': {
         const s = msg.screen as { w?: unknown; h?: unknown } | undefined;
         if (s && typeof s.w === 'number' && typeof s.h === 'number') this.screen = { w: s.w, h: s.h };
@@ -499,15 +986,24 @@ export class DesktopPetWorld implements World {
         this.walks.delete(String(msg.walkId));
         clearTimeout(w.timer);
         const at = typeof msg.x === 'number' ? pct(msg.x) : '?';
-        w.resolve(msg.t === 'arrived'
-          ? `走到了屏幕横向 ${at} 处。`
-          : msg.by === 'drag' ? `没走到:走到 ${at} 处时被${this.cfg.user}拎起来了。` : `没走到:走到 ${at} 处时换成了别的动作(${String(msg.by)})。`);
+        const t = this.t;
+        w.resolve(msg.t === 'arrived' ? t.walkArrived(at)
+          : w.stopping ? t.walkStopped(at)
+          : msg.by === 'drag' ? t.walkGrabbed(at, this.userName) : t.walkReplaced(at, String(msg.by)));
         return;
       }
-      case 'answer': return this.onAnswer(msg);
+      case 'answer': return this.onAnswer(msg, 'pet');
+      case 'visibility': this.petHidden = msg.hidden === true; return;
       case 'text': {
         const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, 500) : '';
-        if (text) void this.push('desktop-pet.message', `desktop-pet.text`, `[打字] ${this.cfg.user}:${text}`, 'flush');
+        if (text) void this.push('desktop-pet.message', `desktop-pet.text`, this.t.typed(this.userName, text), 'preempt', { meta: { via: 'bubble', text } });
+        return;
+      }
+      case 'expand': {
+        const text = typeof msg.text === 'string' ? msg.text.slice(0, CHAT_TEXT_MAX) : '';
+        this.draft = text;
+        if (this.chat.size) { this.chat.broadcast({ t: 'draft', text }); this.draft = null; }
+        this.opts.controls?.openChat?.();
         return;
       }
       case 'touch': return this.onTouch(msg);
@@ -516,6 +1012,10 @@ export class DesktopPetWorld implements World {
         return;
       }
       case 'prefs': return this.savePrefs(msg);
+      case 'position': {
+        if (typeof msg.x === 'number' && Number.isFinite(msg.x)) this.standX = Math.min(1, Math.max(0, msg.x));
+        return;
+      }
       case 'devices': {
         const list = Array.isArray(msg.list) ? msg.list : [];
         this.devices = list
@@ -528,7 +1028,7 @@ export class DesktopPetWorld implements World {
         if (!c) return;
         this.confirms.delete(String(msg.id));
         clearTimeout(c.timer);
-        c.resolve(msg.index === 0 ? 'yes' : msg.index === 1 ? 'no' : 'dismissed');
+        c.resolve(msg.index === 0 ? 'yes' : msg.index === c.choices - 1 ? 'no' : msg.index === 1 ? 'always' : 'dismissed');
         return;
       }
       case 'control': return this.onControl(String(msg.action));
@@ -556,15 +1056,15 @@ export class DesktopPetWorld implements World {
   }
 
   /**
-   * Asks the person in a bubble with two choices, the first one meaning yes. Answers never
-   * reach the bot as events; the caller gets them.
+   * Asks the person in a bubble with two choices, the first one meaning yes, or three, the middle one
+   * meaning yes and from now on. Answers never reach the bot as events; the caller gets them.
    */
-  confirm(question: string, choices: [yes: string, no: string]): Promise<ConfirmResult> {
+  confirm(question: string, choices: [yes: string, no: string] | [yes: string, always: string, no: string]): Promise<ConfirmResult> {
     const id = nextId('k');
     if (!this.sendBody({ t: 'confirm', id, question, options: choices })) return Promise.resolve('unavailable');
     return new Promise((resolve) => {
       const timer = setTimeout(() => { this.confirms.delete(id); resolve('timeout'); }, CONFIRM_TIMEOUT_MS);
-      this.confirms.set(id, { resolve, timer });
+      this.confirms.set(id, { resolve, timer, choices: choices.length });
     });
   }
 
@@ -575,7 +1075,7 @@ export class DesktopPetWorld implements World {
    */
   dialog(d: PetDialog): PetDialogHandle {
     const id = nextId('d');
-    const { actions } = parseActions(d.actions ?? []);
+    const { actions } = parseActions(d.actions ?? [], this.vocab());
     let settle: (a: PetDialogAnswer) => void = () => {};
     const answer = new Promise<PetDialogAnswer>((resolve) => { settle = resolve; });
     if (!this.sendBody({ t: 'dialog', id, ...d, actions })) settle({ unavailable: true });
@@ -600,27 +1100,32 @@ export class DesktopPetWorld implements World {
   private onPageGone(): void {
     this.log?.info('桌宠页面断开');
     for (const [id, d] of this.dialogs) { d({ unavailable: true }); this.dialogs.delete(id); }
-    for (const [id, w] of this.walks) { clearTimeout(w.timer); w.resolve('没走到:桌宠窗口断开了。'); this.walks.delete(id); }
+    for (const [id, w] of this.walks) { clearTimeout(w.timer); w.resolve(this.t.walkWindowGone); this.walks.delete(id); }
     for (const [id, c] of this.confirms) { clearTimeout(c.timer); c.resolve('unavailable'); this.confirms.delete(id); }
     this.segmenter.flush();
     if (this.wasSpeaking) this.wasSpeaking = false;
   }
 
-  private onAnswer(msg: PageMessage): void {
+  /** An answer from the pet's bubble or the chat page; an answer from the page closes the bubble. */
+  private onAnswer(msg: Record<string, unknown>, from: 'pet' | 'chat'): void {
     const ask = this.ask;
     if (!ask || ask.id !== msg.askId) return;
-    this.ask = null;
-    const q = `「${ask.question}」`;
+    const t = this.t;
     if (msg.dismissed) {
-      void this.push('desktop-pet.answer', 'desktop-pet.answer', `[回答] ${this.cfg.user}关掉了提问${q},没有作答。`, 'debounce');
+      this.setAsk(null);
+      void this.push('desktop-pet.answer', 'desktop-pet.answer', t.answerClosed(this.userName, ask.question), 'debounce', { meta: { askId: ask.id, dismissed: true } });
       return;
     }
-    const index = typeof msg.index === 'number' ? msg.index : null;
+    const index = typeof msg.index === 'number' && ask.options[msg.index] !== undefined ? msg.index : null;
     const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, 500) : '';
-    const body = index !== null && ask.options[index] !== undefined
-      ? `选了第 ${index + 1} 项「${ask.options[index]}」`
-      : `自己写了:「${text}」`;
-    void this.push('desktop-pet.answer', 'desktop-pet.answer', `[回答] ${this.cfg.user}回答${q}:${body}`, 'flush');
+    if (index === null && !text) return;
+    this.setAsk(null);
+    if (from === 'chat') this.sendBody({ t: 'ask-close', id: ask.id });
+    const line = index !== null
+      ? t.answerPicked(this.userName, ask.question, index + 1, ask.options[index]!)
+      : t.answerWrote(this.userName, ask.question, text);
+    void this.push('desktop-pet.answer', 'desktop-pet.answer', line, 'flush',
+      { meta: { askId: ask.id, ...(index !== null ? { index } : { text }) } });
   }
 
   private onTouch(msg: PageMessage): void {
@@ -651,97 +1156,140 @@ export class DesktopPetWorld implements World {
     this.touch = null;
     if (!t) return;
     clearTimeout(t.timer);
-    const u = this.cfg.user;
+    const u = this.userName;
+    const m = this.t;
     let text: string;
     switch (t.kind) {
-      case 'poke': text = t.woke ? `${u}把睡着的你戳醒了` : t.count > 1 ? `${u}戳了你 ${t.count} 下` : `${u}戳了你一下`; break;
-      case 'pet': text = t.asleep ? `${u}摸了摸睡着的你` : t.count > 1 ? `${u}摸了你好几下` : `${u}摸了摸你的头`; break;
-      case 'throw': text = `${u}把你拎起来甩了出去${t.crashed ? ',你重重落地,摔晕了一会儿' : ''}`; break;
-      case 'drop': text = `${u}把你拎起来,放到了屏幕横向 ${t.x !== null && this.screen ? pct(t.x / this.screen.w) : '某'} 处${t.crashed ? ',你摔晕了一会儿' : ''}`; break;
-      case 'crash': text = '你重重落地,摔晕了一会儿'; break;
-      // Mosaico board only: its touch screen, IMU and motor allow these.
-      case 'tickle': text = t.count > 1 ? `${u}在板子上挠了你好几下痒痒` : `${u}在板子上挠你痒痒`; break;
-      case 'hug': text = `${u}把板子捧在手里,安安静静地抱着你`; break;
-      case 'putdown': text = `${u}把你放回了桌上`; break;
-      case 'bubble': text = t.count > 1 ? `${u}戳破了你吐的 ${t.count} 个泡泡` : `${u}戳破了你吐的泡泡`; break;
-      default: return;
+      case 'poke': text = t.woke ? m.pokedAwake(u) : m.poked(u, t.count); break;
+      case 'pet': text = t.asleep ? m.pettedAsleep(u) : m.petted(u, t.count); break;
+      case 'throw': text = m.thrown(u, t.crashed); break;
+      case 'drop': text = m.dropped(u, t.x !== null && this.screen ? pct(t.x / this.screen.w) : null, t.crashed); break;
+      case 'crash': text = m.crashed; break;
+      default: {
+        const own = this.relay?.touchText?.(t.kind, t.count, u);
+        if (!own) return;
+        text = own;
+      }
     }
-    void this.push('desktop-pet.touch', 'desktop-pet.touch', `[互动] ${text}`, this.cfg.touch.trigger);
+    const wakes = !this.touchWoke && touchWakes(this.cfg.touch, t.kind);
+    if (wakes) this.touchWoke = true;
+    void this.push('desktop-pet.touch', 'desktop-pet.touch', m.touch(text), wakes ? 'debounce' : 'piggyback',
+      { meta: { touch: { kind: t.kind, count: t.count, woke: t.woke, crashed: t.crashed } } });
   }
 
-  private async push(type: string, senderKey: string, text: string, trigger: 'flush' | 'debounce' | 'piggyback'): Promise<void> {
+  /**
+   * The person's local time an event happened, before its text: `[HH:MM] `, and `[MM-DD <weekday> HH:MM] ` for the
+   * first event of a run and the first on a new date, so the bot knows the date without a clock in its prefix.
+   * The weekday is short, in the model-text language (周日, Sun).
+   */
+  private stamp(now = new Date()): string {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat(this.t.dateLocale, { timeZone: this.opts.timezone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })
+      .formatToParts(now).map((p) => [p.type, p.value]));
+    const day = `${parts.year}-${parts.month}-${parts.day}`;
+    const time = shortTime(this.opts.timezone, now);
+    if (day === this.stampDay) return `[${time}] `;
+    this.stampDay = day;
+    return `[${parts.month}-${parts.day} ${parts.weekday} ${time}] `;
+  }
+
+  /**
+   * Delivers an event to the bot. `meta` carries what the chat page shows of it; the person's
+   * messages stay pending on the page until Core reports them delivered.
+   */
+  private async push(
+    type: string, senderKey: string, text: string, trigger: TriggerMode,
+    extra: { meta?: Record<string, unknown>; blobs?: BlobInput[] } = {},
+  ): Promise<EventEnvelope | null> {
     const host = this.host;
-    if (!host) return;
+    if (!host) return null;
     try {
-      await host.pushEvent({ type, source: this.id, senderKey, ts: nowIso(this.opts.timezone), text }, { trigger });
+      const e = await host.pushEvent({ type, source: this.id, senderKey, ts: nowIso(this.opts.timezone), text: this.stamp() + text, ...extra }, { trigger });
+      const item = chatItem(e);
+      if (!item) return e;
+      const pending = item.kind === 'user' && e.contextDelivery === 'deliver';
+      if (pending) this.pendingChat.add(e.cursor);
+      this.chat.broadcast({ t: 'item', item, ...(pending ? { pending: true } : {}) });
+      return e;
     } catch (err) {
       this.log?.warn(`事件没能送出:${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** Stores what the pet said or did for the chat page; never delivered to the bot. Resolves to its cursor. */
+  private async record(meta: Record<string, unknown>, text: string, blobs: BlobInput[] = []): Promise<number | null> {
+    const host = this.host;
+    if (!host) return null;
+    try {
+      const e = await host.pushEvent({ type: SELF_TYPE, source: this.id, senderKey: SELF_TYPE, ts: nowIso(this.opts.timezone), text, meta, ...(blobs.length ? { blobs } : {}) }, { deliver: false });
+      const item = chatItem(e);
+      if (item) this.chat.broadcast({ t: 'item', item });
+      return e.cursor;
+    } catch (err) {
+      this.log?.warn(`对话记录没能保存:${(err as Error).message}`);
+      return null;
     }
   }
 
   /* ---------- voice ---------- */
 
-  private funasrModel(): { model: string; tokens: string } | { missing: string } {
-    if (this.store.funasr.state().phase !== 'ready') return { missing: `识别模型还没下载(约 ${Math.round(this.store.funasr.bytes / 1048576)} MB):在「语音输入」页下载` };
-    return { model: this.store.funasr.file('model.int8.onnx'), tokens: this.store.funasr.file('tokens.txt') };
+  /** The model files of a sherpa-onnx engine, or why they are not there. */
+  private sherpaModel(engine: SherpaEngine): { paths: Record<string, string> } | { missing: string } {
+    const slot = this.store[engine];
+    if (slot.state().phase !== 'ready') return { missing: this.ui.voice.modelMissing(Math.round(slot.bytes / 1048576)) };
+    return { paths: slot.paths() };
   }
 
-  /** The engine in force: Windows' own recognizer only where it exists, FunASR otherwise (and for older settings). */
+  /** The engine in force (`asrEngineFor`). */
   engine(): AsrEngine {
-    return this.cfg.asr.engine === 'system' && systemRecognizerSupported() ? 'system' : 'funasr';
+    return asrEngineFor(this.cfg.asr.engine, this.appLanguage, systemRecognizerSupported());
   }
 
-  private backendState(): FunAsrState | SystemRecognizerState | null {
-    return (this.engine() === 'system' ? this.system?.state() : this.funasr?.state()) ?? null;
-  }
-
-  /** Starts the engine in force and stops the other one. */
-  async startVoiceBackend(): Promise<FunAsrState | SystemRecognizerState | null> {
-    if (!this.funasr || !this.system) return null;
+  /** The sherpa-onnx engine whose model voice input downloads: the one in force, else the app language's. */
+  private modelEngine(): SherpaEngine {
     const engine = this.engine();
+    return engine === 'system' ? asrEngineFor('', this.appLanguage, false) as SherpaEngine : engine;
+  }
+
+  private sherpa(engine: SherpaEngine): SherpaAsr | null {
+    return engine === 'whisper' ? this.whisper : this.funasr;
+  }
+
+  private recognizer(engine = this.engine()): SherpaAsr | SystemRecognizer | null {
+    return engine === 'system' ? this.system : this.sherpa(engine);
+  }
+
+  /** The recognition language: the set one, else the app language's ISO 639-1 code; FunASR and Whisper read a code they do not take as `auto`. */
+  private asrLanguage(): string {
+    return this.cfg.asr.language || this.appLanguage.split('-')[0]!;
+  }
+
+  private backendState(): SherpaState | SystemRecognizerState | null {
+    return this.recognizer()?.state() ?? null;
+  }
+
+  /** Starts the engine in force and stops the one that ran before. */
+  async startVoiceBackend(): Promise<SherpaState | SystemRecognizerState | null> {
+    const engine = this.engine();
+    const recognizer = this.recognizer(engine);
+    if (!recognizer) return null;
     if (this.runningEngine !== engine) {
-      if (this.runningEngine === 'system') await this.system.stop();
-      else if (this.runningEngine === 'funasr') await this.funasr.stop();
+      if (this.runningEngine) await this.recognizer(this.runningEngine)?.stop();
       this.runningEngine = engine;
     }
-    if (engine === 'system') await this.system.start();
-    else await this.funasr.start();
+    await recognizer.start();
     this.syncPrefs();
     return this.backendState();
   }
 
   private async stopVoiceBackend(): Promise<void> {
-    if (this.engine() === 'system') await this.system?.stop();
-    else await this.funasr?.stop();
+    await this.recognizer()?.stop();
     this.syncPrefs();
-  }
-
-  /* ---------- persona ---------- */
-
-  /** Gives the current figure its own self-description; tells the running session when it changed. */
-  private syncPersona(announce: boolean): void {
-    if (!this.opts.workspaceDir) return;
-    const figure = figureOf(this.cfg.skin);
-    try {
-      const from = activatePersona(this.opts.workspaceDir, figure);
-      if (!from) return;
-      const name = FIGURE_NAMES[figure];
-      this.log?.info(`形象换成${name},自述已切换(${FIGURE_NAMES[from]}的自述存在 personas/${from}.md)`);
-      if (announce) void this.push('desktop-pet.figure', 'desktop-pet.figure',
-        `[形象] 身体从${FIGURE_NAMES[from]}换成了${name}。你的自述 CONSTITUTION.md 已换成${name}的版本,下一个 session 起完整生效;在那之前就以${name}的名字、性子和口癖说话。${FIGURE_NAMES[from]}的自述原样存在 personas/${from}.md,换回来时会恢复。`,
-        'flush');
-    } catch (e) {
-      this.log?.warn(`切换${FIGURE_NAMES[figure]}的自述失败:${(e as Error).message}`);
-    }
   }
 
   /* ---------- talk key ---------- */
 
-  /**
-   * The mode in force. A talk key that cannot be read leaves the microphone closed
-   * rather than open all the time: an always-open microphone turns room noise and
-   * other voices into messages the person never meant to send.
-   */
+  /** The mode in force: the configured one, also while the talk key cannot be read. */
   private micMode(): MicMode {
     return this.cfg.asr.mic.mode;
   }
@@ -773,11 +1321,11 @@ export class DesktopPetWorld implements World {
     if (!key) return;
     const parsed = parseHotkey(hotkey);
     const watch = this.opts.watchHotkey ?? watchHotkey;
-    const watcher = parsed ? await watch(parsed, (down) => this.onTalkKey(down), HOTKEY_POLL_MS, () => this.onTalkTap()) : `认不出按键「${hotkey}」`;
+    const watcher = parsed ? await watch(parsed, (down) => this.onTalkKey(down), HOTKEY_POLL_MS, () => this.onTalkTap(), this.ui.hotkey) : this.ui.voice.badKey(hotkey);
     if (key !== this.hotkeyKey) { if (typeof watcher !== 'string') watcher.stop(); return; }
     if (typeof watcher === 'string') {
       this.hotkeyProblem = watcher;
-      this.log?.warn(`说话键不可用,麦克风保持关闭:${watcher}`);
+      this.log?.warn(`说话键不可用,暂不识别说话:${watcher}`);
     } else this.keyWatcher = watcher;
     this.segmenter.configure(this.segmentConfig());
   }
@@ -785,12 +1333,13 @@ export class DesktopPetWorld implements World {
   /** One line telling the person how to be heard. */
   private talkHint(): string {
     const { hotkey } = this.cfg.asr.mic;
-    const key = comboLabel(hotkey), { taps } = splitTaps(hotkey);
+    const ui = this.ui, v = ui.voice;
+    const key = comboLabel(hotkey, process.platform, ui), { taps } = splitTaps(hotkey);
     const mode = this.micMode();
-    if (mode === 'always') return '一直在听,直接说话';
-    if (this.hotkeyProblem) return `说话键不可用,麦克风先关着:${this.hotkeyProblem}`;
-    if (mode === 'toggle') return taps > 1 ? `${hotkeyLabel(hotkey)} 开始听,再${taps === 2 ? '双击' : '三击'}停` : `按一下 ${key} 开始听,再按一下停`;
-    return taps > 1 ? `快速按${taps === 2 ? '一' : '两'}下 ${key},紧接着按住说话,松开就发出去` : `按住 ${key} 说话,松开就发出去`;
+    if (mode === 'always') return v.always;
+    if (this.hotkeyProblem) return v.fallback(this.hotkeyProblem);
+    if (mode === 'toggle') return taps > 1 ? v.toggleTaps(hotkeyLabel(hotkey, process.platform, ui), taps) : v.toggle(key);
+    return taps > 1 ? v.holdTaps(key, taps) : v.hold(key);
   }
 
   /** A quick tap before the held press: the pet perks up, so the hold that follows feels answered at once. */
@@ -800,7 +1349,6 @@ export class DesktopPetWorld implements World {
   }
 
   private onTalkKey(down: boolean): void {
-    if (this.mosaico && !this.mosaico.settledOn('desktop')) return;
     if (this.micMode() === 'hold') this.setTalking(down);
     else if (down) this.setTalking(!this.talking);
   }
@@ -867,18 +1415,17 @@ export class DesktopPetWorld implements World {
     try {
       while (this.queue.length) {
         const u = this.queue.shift()!;
+        const recognizer = this.recognizer();
         const res = u.result
           ? await u.result
-          : this.engine() === 'system' && this.system
-            ? await this.system.transcribe(u.pcm)
-            : this.funasr
-              ? await this.funasr.transcribe(u.pcm)
-              : { text: '', ms: 0, error: '识别没有启动' };
+          : recognizer
+            ? await recognizer.transcribe(u.pcm)
+            : { text: '', ms: 0, error: this.ui.voice.notRunning };
         let text = res.text;
-        if (this.cfg.asr.simplified) text = toSimplified(text);
+        if (this.simplifies) text = toSimplified(text);
         if (res.error || looksHallucinated(text)) {
           this.counts.dropped++;
-          this.remember({ text: res.error ? `[失败] ${res.error}` : text, at: Date.now(), ms: res.ms, dropped: true });
+          this.remember({ text: res.error ? this.ui.voice.failedLine(res.error) : text, at: Date.now(), ms: res.ms, dropped: true });
           this.voiceFrame({ type: 'dropped', text: res.error ?? text, ms: res.ms });
           // the page was showing this sentence as it was heard: take it back
           if (u.result) this.showHeard();
@@ -913,11 +1460,11 @@ export class DesktopPetWorld implements World {
     begin: (frames) => {
       this.sentence = null;
       this.interim = '';
-      const recognizer = this.engine() === 'system' ? this.system : this.funasr;
+      const recognizer = this.recognizer();
       if (!recognizer) return;
       const s: SystemSentence | null = recognizer.sentence((text) => {
         if (this.sentence !== s) return;
-        this.interim = this.cfg.asr.simplified ? toSimplified(text) : text;
+        this.interim = this.simplifies ? toSimplified(text) : text;
         this.showHeard();
       });
       this.sentence = s;
@@ -961,7 +1508,7 @@ export class DesktopPetWorld implements World {
       this.listenOpen = false;
       this.counts.delivered++;
       this.sendBody({ t: 'listen', phase: 'heard', text });
-      void this.push('desktop-pet.speech', 'desktop-pet.voice', `[语音] ${this.cfg.user}:${text}`, 'flush');
+      void this.push('desktop-pet.speech', 'desktop-pet.voice', this.t.heard(this.userName, text), 'flush', { meta: { text } });
       return;
     }
     if (this.segmenter.active || this.transcribing || this.queue.length > 0) this.listenOpen = true;
@@ -995,57 +1542,81 @@ export class DesktopPetWorld implements World {
     const handlers: Record<string, ToolDef['handler']> = {
       pet_say: (args) => this.say(args),
       pet_ask: (args) => this.askUser(args),
-      pet_walk_to: (args) => this.walkTo(args),
+      pet_walk_to: (args, ctx) => this.walkTo(args, ctx),
       pet_act: (args) => this.act(args),
+      pet_set: (args) => this.setSettings(args),
+      pet_quiet: (args) => this.setQuiet(args),
     };
-    const basic = DESKTOP_PET_TOOL_DECLS.map((decl) => ({ ...decl, handler: handlers[decl.name] }));
-    if (!this.cfg.mosaico?.enabled) return basic;
-    return [...basic, ...mosaicoTools(() => this.mosaico)];
+    const own = petToolDecls(this.appLanguage).map((decl) => ({ ...decl, handler: handlers[decl.name], ...(decl.name === 'pet_walk_to' ? { interruptible: true } : {}) }));
+    const relayed = this.relay?.tools?.() ?? [];
+    return this.cuaOn ? [...own, ...relayed, ...this.cua.tools()] : [...own, ...relayed];
   }
 
   private notConnected(tool: string): ToolOutcome {
-    const presence = this.mosaico?.presence;
-    if (presence?.transferring) return { text: `[${tool} 没执行] 身体正在传送,落地后再做。`, failed: true };
-    if (presence?.owner === 'device' && !presence.deviceOnline) return { text: `[${tool} 没执行] 身体在 Mosaico 上,板子当前没有连接,${this.cfg.user}看不到。`, failed: true };
+    const away = this.relay?.unavailable?.(tool);
+    if (away) return { text: away, failed: true };
     const w = this.windowHost?.state();
-    const why = w && w.phase !== 'running' && w.detail ? `(${w.detail})` : '';
-    return { text: `[${tool} 没执行] 桌宠窗口没有连接${why},${this.cfg.user}看不到。`, failed: true };
+    const detail = w && w.phase !== 'running' && w.detail ? w.detail : null;
+    return { text: this.t.notConnected(tool, detail, this.userName), failed: true };
   }
 
   private async say(args: Record<string, unknown>): Promise<ToolOutcome> {
     const script = typeof args.script === 'string' ? args.script : '';
-    const { beats, dropped } = parseScript(script);
-    if (!beats.some((b) => b.text || b.actions.length || b.anchors.length)) {
-      return { text: '[pet_say 没执行] 脚本是空的。不想说话就不调用。', failed: true };
-    }
-    const id = nextId('s');
-    if (!this.sendBody({ t: 'say', id, beats })) return this.notConnected('pet_say');
+    const shown = this.shownImages(args.images);
+    if (!shown.ok) return { text: shown.reason, failed: true };
+    const { beats, dropped } = parseScript(script, this.vocab());
+    const spoken = beats.some((b) => b.text || b.actions.length || b.anchors.length);
+    if (!spoken && shown.blobs.length === 0) return { text: this.t.sayEmpty, failed: true };
+    if (spoken && !this.sendBody({ t: 'say', id: nextId('s'), beats })) return this.notConnected('pet_say');
+    void this.closeActivity();
+    void this.record({ kind: 'say', beats: beats.map((b) => ({ text: b.text, ...moodOf(b.actions, this.vocab()) })) }, beats.map((b) => b.text).join(''), shown.blobs);
+    if (!spoken) return { text: this.t.imagesShown(shown.blobs.length, this.chat.size > 0) };
     const now = Date.now();
     const selfSec = estimateSeconds(beats);
     const waitSec = Math.max(0, (this.busyUntil - now) / 1000);
     this.busyUntil = Math.max(now, this.busyUntil) + selfSec * 1000;
-    const replaced = this.ask ? `替换了还没回答的提问「${this.ask.question}」。` : '';
-    if (this.ask) this.ask = null;
-    const note = dropped.length ? `\n[执行参数] 不认识的标记已略过:${dropped.join('、')}。` : '';
-    return { text: `${waitSec > .5 ? `已排队,前面还有约 ${Math.round(waitSec)} 秒` : '已开始显示'},这段约 ${Math.round(selfSec)} 秒。${replaced}${note}` };
+    const replaced = this.ask?.question ?? null;
+    if (this.ask) this.setAsk(null);
+    return { text: this.t.sayReceipt({ waitSec, selfSec, chatOpen: this.chat.size > 0, replaced, dropped, images: shown.blobs.length }) };
+  }
+
+  /**
+   * The images of a `pet_say`: each handle is read through the host and attached again as bytes,
+   * so the stored line keeps the picture it showed after a Memory file changes.
+   */
+  private shownImages(raw: unknown): { ok: true; blobs: BlobInput[] } | { ok: false; reason: string } {
+    if (raw === undefined) return { ok: true, blobs: [] };
+    if (!Array.isArray(raw) || raw.some((h) => typeof h !== 'string')) return { ok: false, reason: this.t.imagesNotHandles };
+    if (raw.length > IMAGES_MAX) return { ok: false, reason: this.t.tooManyImages(IMAGES_MAX) };
+    const blobs: BlobInput[] = [];
+    for (const [i, handle] of (raw as string[]).entries()) {
+      const got = this.host?.blob(handle);
+      if (!got) return { ok: false, reason: this.t.imageMissing(handle) };
+      if (!got.mime.startsWith('image/')) return { ok: false, reason: this.t.imageNotImage(handle, got.mime) };
+      blobs.push({ bytes: got.bytes, mime: got.mime, fallbackText: this.t.shownImage(i + 1, raw.length) });
+    }
+    return { ok: true, blobs };
   }
 
   private async askUser(args: Record<string, unknown>): Promise<ToolOutcome> {
     const question = typeof args.question === 'string' ? args.question.trim() : '';
     const raw = Array.isArray(args.options) ? args.options : [];
-    const options = raw.filter((o): o is string => typeof o === 'string' && o.trim() !== '').map((o) => o.trim().slice(0, 40)).slice(0, 3);
+    const optionMax = capFor(ASK_OPTION_MAX, this.appLanguage);
+    const options = raw.filter((o): o is string => typeof o === 'string' && o.trim() !== '').map((o) => cutChars(o.trim(), optionMax)).slice(0, 3);
     const allowOwn = args.allowOwnAnswer !== false;
-    if (!question) return { text: '[pet_ask 没执行] question 是空的。', failed: true };
-    if (options.length === 0 && !allowOwn) return { text: '[pet_ask 没执行] 没有选项,又不允许自己写,没法作答。', failed: true };
+    if (!question) return { text: this.t.askEmpty, failed: true };
+    if (options.length === 0 && !allowOwn) return { text: this.t.askNoWay, failed: true };
     const id = nextId('a');
     if (!this.sendBody({ t: 'ask', id, question, options, own: allowOwn })) return this.notConnected('pet_ask');
-    const replaced = this.ask ? `替换了还没回答的上一个提问「${this.ask.question}」。` : '';
-    this.ask = { id, question, options };
-    const cut = raw.length > 3 ? '只显示了前 3 个选项。' : '';
-    return { text: `已问出。${replaced}${cut}回答到了会以 [回答] 事件送达。` };
+    const replaced = this.ask?.question ?? null;
+    this.setAsk({ id, question, options });
+    void this.closeActivity();
+    void this.record({ kind: 'ask', askId: id, question, options, own: allowOwn }, question);
+    return { text: this.t.askReceipt({ replaced, cut: raw.length > 3, chatOpen: this.chat.size > 0 }) };
   }
 
-  private async walkTo(args: Record<string, unknown>): Promise<ToolOutcome> {
+  /** Interruptible: an interrupt stops the walk where the pet stands, and the receipt says where. */
+  private async walkTo(args: Record<string, unknown>, ctx?: ToolCallContext): Promise<ToolOutcome> {
     const run = args.run === true;
     const to = args.to;
     let target: number | 'cursor';
@@ -1055,40 +1626,141 @@ export class DesktopPetWorld implements World {
       const n = Number(to);
       if (to in named) target = named[to];
       else if (to.trim() !== '' && Number.isFinite(n)) target = Math.max(0, Math.min(1, n));
-      else return { text: `[pet_walk_to 没执行] to 应为 0–1 的数字或 left / center / right / cursor,收到 ${JSON.stringify(to)}。`, failed: true };
-    } else return { text: '[pet_walk_to 没执行] 缺少 to。', failed: true };
+      else return { text: this.t.walkBadTarget(JSON.stringify(to)), failed: true };
+    } else return { text: this.t.walkNoTarget, failed: true };
+    const pack = this.currentPack();
+    if (pack?.manifest.can.walk === false) return { text: this.t.walkCannot(modelName(pack.manifest.name, pack.id, this.language)), failed: true };
     const walkId = nextId('w');
     if (!this.sendBody({ t: 'walk', id: walkId, to: target, run })) return this.notConnected('pet_walk_to');
     const text = await new Promise<string>((resolve) => {
+      const onAbort = (): void => {
+        if (!this.walks.has(walkId)) return;
+        walk.stopping = true;
+        this.sendBody({ t: 'walk-stop', id: walkId });
+      };
+      const done = (s: string): void => {
+        ctx?.signal?.removeEventListener('abort', onAbort);
+        resolve(s);
+      };
       const timer = setTimeout(() => {
         this.walks.delete(walkId);
-        resolve(`${WALK_TIMEOUT_MS / 1000} 秒内没有走到。`);
+        done(this.t.walkTimeout(WALK_TIMEOUT_MS / 1000));
       }, WALK_TIMEOUT_MS);
-      this.walks.set(walkId, { resolve, timer });
+      const walk: PendingWalk = { resolve: done, timer };
+      this.walks.set(walkId, walk);
+      ctx?.signal?.addEventListener('abort', onAbort, { once: true });
     });
     return { text };
   }
 
+  private async setSettings(args: Record<string, unknown>): Promise<ToolOutcome> {
+    const t = this.t;
+    if (selfAdjustMode(this.cfg.selfAdjust) === 'off') return { text: t.selfAdjustOff('pet_set', this.userName), failed: true };
+    const packs = this.packs();
+    const { changes, errors } = planSettings(args, { ...this.cfg, user: this.userName }, packs, this.language, capFor(USER_MAX, this.appLanguage), this.appLanguage);
+    if (errors.length) return { text: t.setErrors(errors), failed: true };
+    if (!changes.length) return { text: t.setNothing };
+    const lines: string[] = [];
+    const apply = (list: SettingChange[]) => {
+      for (const c of list) this.opts.persist(c.patch);
+      const skin = this.cfg.skin;
+      if (list.some((c) => c.key === 'figure' || c.key === 'scheme')) this.botLook = (skin.figure ?? COO) === COO ? COO : `${skin.figure}:${skin.scheme ?? ''}`;
+      this.syncPrefs();
+      this.opts.onBotChange?.();
+    };
+    const says = (list: SettingChange[]) => list.map((c) => c.say);
+    const mine = changes.filter((c) => c.tier === 'self');
+    if (mine.length) { apply(mine); lines.push(t.setDone(says(mine))); }
+    const asked = changes.filter((c) => c.tier === 'ask');
+    if (asked.length) {
+      const c = this.ui.consent;
+      const answer = await this.confirm(c.question(asked.map((x) => x.show)), c.choices);
+      if (answer === 'always') {
+        // these items stop being asked: the rest stay as they were, under `custom`; told to the app with the changes as the bot's own
+        const keys = [...new Set(asked.map((x) => x.key))];
+        this.opts.persist({ selfAdjust: 'custom', selfAdjustCustom: { ...directSettings(this.cfg), ...Object.fromEntries(keys.map((k) => [k, true])) } });
+        apply(asked);
+        lines.push(t.setAlways(this.userName, says(asked), keys.map((k) => t.settingNames[k])));
+      } else if (answer === 'yes') { apply(asked); lines.push(t.setAgreed(this.userName, says(asked))); }
+      else lines.push(t.setNotChanged(answer === 'unavailable' || answer === 'timeout' ? answer : 'no', this.userName, says(asked)));
+    }
+    if (mine.some((c) => c.key === 'figure' || c.key === 'scheme')) {
+      lines.push(t.lookNow(this.bodyText(this.currentPack())));
+      const note = this.vocabNote();
+      if (note) lines.push(note);
+    }
+    return { text: lines.join('\n') };
+  }
+
+  private async setQuiet(args: Record<string, unknown>): Promise<ToolOutcome> {
+    const t = this.t;
+    const minutes = args.minutes;
+    if (typeof minutes !== 'number' || !(minutes >= 0) || minutes > QUIET_MAX_MIN) return { text: t.quietBad(QUIET_MAX_MIN), failed: true };
+    if (minutes === 0) {
+      if (!this.quiet) return { text: t.quietNone };
+      this.endQuiet();
+      return { text: t.quietEnded };
+    }
+    if (selfAdjustMode(this.cfg.selfAdjust) === 'off') return { text: t.selfAdjustOff('pet_quiet', this.userName), failed: true };
+    const sound = args.sound === true;
+    const roam = args.roam === 'calm' ? 'calm' : 'off';
+    const base = this.quiet?.base ?? { sound: this.cfg.sound, roam: this.cfg.roam };
+    if (this.quiet) clearTimeout(this.quiet.timer);
+    const until = Date.now() + minutes * 60_000;
+    this.quiet = { sound, roam, until, base, timer: setTimeout(() => this.endQuiet(), minutes * 60_000) };
+    this.syncPrefs();
+    return { text: t.quietUntil(shortTime(this.opts.timezone, new Date(until)), sound, roam) };
+  }
+
+  private endQuiet(): void {
+    if (!this.quiet) return;
+    clearTimeout(this.quiet.timer);
+    this.quiet = null;
+    this.syncPrefs();
+  }
+
   private async act(args: Record<string, unknown>): Promise<ToolOutcome> {
     const list = Array.isArray(args.actions) ? args.actions : typeof args.actions === 'string' ? [args.actions] : [];
-    const { actions, dropped } = parseActions(list);
-    if (!actions.length) return { text: `[pet_act 没执行] 没有认得的动作${dropped.length ? `(${dropped.join('、')})` : ''}。`, failed: true };
+    const vocab = this.vocab();
+    const { actions, dropped } = parseActions(list, vocab);
+    if (!actions.length) return { text: this.t.actNone(dropped), failed: true };
     if (!this.sendBody({ t: 'act', id: nextId('c'), actions })) return this.notConnected('pet_act');
-    const lasting = actions.filter((a) => a === 'sit' || a === 'sleep');
-    const note = dropped.length ? `\n[执行参数] 不认识的动作已略过:${dropped.join('、')}。` : '';
-    return { text: `开始依次做:${actions.join(' → ')}。${lasting.length ? `${lasting.join('、')} 会一直保持到下一个动作。` : ''}${note}` };
+    const lasting = actions.filter((a) => vocab.find((v) => v.id === a)?.lasting);
+    return { text: this.t.actReceipt(actions, lasting, dropped) };
   }
 
   /* ---------- prompt ---------- */
 
-  envPromptVars(): Record<string, string> {
+  async envPromptVars(): Promise<Record<string, string>> {
+    const { language, t } = this;
+    const user = this.userName;
+    const reply = this.opts.replyLanguage?.() ?? null;
     return {
-      'pet.user': this.cfg.user,
-      'pet.body': FIGURE_BODIES[figureOf(this.cfg.skin)],
-      'pet.vocab': vocabTable(),
-      'pet.voice': this.cfg.asr.enabled ? '开着' : '关着',
-      'pet.mosaico': this.cfg.mosaico?.enabled ? MOSAICO_PROMPT : '',
+      'pet.cua': this.cuaOn ? await this.cua.envPrompt() : '',
+      'pet.relay': this.relay?.envPrompt?.() ?? '',
+      'pet.user': user,
+      'pet.vocab': vocabTable(this.vocab(), language),
+      'pet.voice': this.cfg.asr.enabled ? t.on : t.off,
+      'pet.body': this.bodyText(this.currentPack()),
+      'pet.dress': dressTable(this.packs(), language),
+      'pet.self': this.selfText(),
+      'pet.chat': this.opts.controls?.openChat ? t.chatPage(user) : '',
+      'pet.reply': reply ? t.reply(user, reply) : '',
     };
+  }
+
+  /** `{{pet.self}}`: which `pet_set` items change at once and which are asked first, or that none can change. */
+  private selfText(): string {
+    const t = this.t;
+    if (selfAdjustMode(this.cfg.selfAdjust) === 'off') return t.selfNone(this.userName);
+    const direct = directSettings(this.cfg);
+    return t.selfTiers(this.userName, SELF_KEYS.filter((k) => direct[k]).map((k) => t.settingNames[k]), SELF_KEYS.filter((k) => !direct[k]).map((k) => t.settingNames[k]));
+  }
+
+  /** The environment prompt template of the model-text language. */
+  private envPromptFile(): string {
+    const file = ENV_PROMPT_FILES[this.language];
+    return existsSync(file) ? file : ENV_PROMPT_FILES.zh;
   }
 
   /* ---------- console ---------- */
@@ -1096,60 +1768,70 @@ export class DesktopPetWorld implements World {
   console(language: Language = 'zh'): WorldConsoleDecl {
     const w = this.windowHost?.state();
     const v = this.backendState();
+    const c = petText(language).console;
     const lamps: WorldLamp[] = [
       {
-        label: '桌宠窗口',
+        label: c.window,
         state: this.server.petConnected ? 'online' : w?.phase === 'running' ? 'loading' : w?.phase === 'missing' || w?.phase === 'error' ? 'error' : 'offline',
-        hint: this.server.petConnected ? '页面已连接' : w?.detail ?? '未打开',
+        hint: this.server.petConnected ? c.connected : w?.detail ?? c.notOpen,
       },
       {
-        label: '语音识别',
+        label: c.voice,
         state: !this.cfg.asr.enabled ? 'offline' : v?.phase === 'running' ? 'online' : v?.phase === 'starting' ? 'loading' : v?.phase === 'error' ? 'error' : 'offline',
-        hint: v?.detail ?? v?.phase ?? '未启动',
+        hint: v?.detail ?? v?.phase ?? c.notStarted,
       },
+      ...(this.cfg.cua.enabled ? [this.cua.lamp(language)] : []),
     ];
     return {
-      label: language === 'en' ? 'Desktop pet' : '桌宠',
+      label: c.label,
       lamps,
-      panels: [...DESKTOP_PET_PANEL_DECLS],
+      panels: [...desktopPetPanelDecls(language), ...(this.relay?.panel ? [relayPanelDecl(this.relay.panel)] : [])],
       invoke: (panel, method, args) => this.invoke(panel, method, args),
       stream: (panel, socket) => {
+        // `chat` has no panel: the embedding app draws its chat page from this stream
+        if (panel === 'chat') { this.chat.add(socket, (msg, s) => void this.onChat(msg, s, language)); return; }
         if (panel !== 'voice') { socket.close('no stream'); return; }
         this.voiceSockets.add(socket);
         socket.onClose(() => this.voiceSockets.delete(socket));
       },
-      links: this.server.port ? [{ label: '在浏览器里看桌宠', href: this.petUrl }, { label: '装扮', href: `${this.server.origin}/dress` }] : [],
-      config: [DESKTOP_PET_CONFIG_GROUP, DESKTOP_PET_ASR_CONFIG_GROUP],
+      links: this.server.port ? [{ label: c.viewInBrowser, href: this.petUrl }, { label: c.dress, href: `${this.server.origin}/dress` }] : [],
+      config: desktopPetConfigGroups(language),
       promptDocs: [{
         key: `worlds.${DESKTOP_PET_ID}.envPrompt`,
-        title: '桌宠环境',
-        description: '描述桌宠的身体、四个工具与输入事件。',
-        path: ENV_PROMPT_FILE,
+        ...c.envPrompt,
+        path: this.envPromptFile(),
         role: 'envPrompt',
-        vars: [
-          { name: 'pet.user', description: '对使用者的称呼' },
-          { name: 'pet.body', description: '当前形象的外观(Coo 或大肥鱼)' },
-          { name: 'pet.vocab', description: '表情与动作词表', multiline: true },
-          { name: 'pet.voice', description: '语音输入开着还是关着' },
-          { name: 'pet.mosaico', description: '启用跨屏身体时的交互约束', multiline: true },
-        ],
+        vars: ['pet.user', 'pet.vocab', 'pet.voice', 'pet.body', 'pet.dress', 'pet.self', 'pet.chat', 'pet.reply', 'pet.cua', 'pet.relay']
+          .map((name) => ({ name, description: c.vars[name] ?? name, ...(name === 'pet.vocab' || name === 'pet.dress' || name === 'pet.cua' || name === 'pet.relay' ? { multiline: true } : {}) })),
       }],
     };
   }
 
   private async invoke(panel: string, method: string, args: unknown[]): Promise<unknown> {
-    if (panel === 'mosaico') {
-      const result = await invokeMosaicoPanel(this.mosaico, method, args);
-      if (result !== undefined) return result;
-    }
+    if (this.relay?.panel && panel === this.relay.panel.id) return this.relay.panel.invoke(method, args);
     if (panel === 'pet') {
       switch (method) {
         case 'state': return this.petState();
         case 'openWindow': this.openWindow(); return this.petState();
         case 'closeWindow': await this.windowHost?.stop(); return this.petState();
+        // hides the window as the pet's menu does; it stays connected and comes back with openWindow
+        case 'hideWindow': this.server.sendPet({ t: 'hide' }); return this.petState();
         case 'installElectron': void this.store.electron.install(); return this.petState();
+        // the Habits page's custom picks (/api/config writes no list or map): `custom` and its picks in one write, as the person's change
+        case 'setWakeKinds': {
+          const picked = Array.isArray(args[0]) ? args[0] as unknown[] : [];
+          this.opts.persist({ touch: { wakeOn: 'custom', wakeKinds: TOUCH_KINDS.filter((k) => picked.includes(k)) } });
+          return this.petState();
+        }
+        case 'setSelfAdjustCustom': {
+          const raw = args[0] && typeof args[0] === 'object' ? args[0] as Record<string, unknown> : {};
+          const custom = this.selfCustom();
+          for (const k of SELF_KEYS) if (typeof raw[k] === 'boolean') custom[k] = raw[k] as boolean;
+          this.opts.persist({ selfAdjust: 'custom', selfAdjustCustom: custom });
+          return this.petState();
+        }
         case 'guide': {
-          if (!this.opts.controls?.guide) throw new Error('这个应用没有引导');
+          if (!this.opts.controls?.guide) throw new Error(this.ui.console.noGuide);
           this.opts.controls.guide();
           return this.petState();
         }
@@ -1163,7 +1845,7 @@ export class DesktopPetWorld implements World {
         case 'stop': await this.stopVoiceBackend(); return this.voiceState();
         case 'setEngine': {
           const engine = args[0];
-          if (engine === 'funasr' || engine === 'system') this.opts.persist({ asr: { engine } });
+          if (engine === 'funasr' || engine === 'whisper' || engine === 'system') this.opts.persist({ asr: { engine } });
           if (this.cfg.asr.enabled) await this.startVoiceBackend();
           return this.voiceState();
         }
@@ -1175,15 +1857,17 @@ export class DesktopPetWorld implements World {
         }
       }
     }
-    throw new Error(`未知方法 ${panel}.${method}`);
+    throw new Error(this.ui.console.unknownMethod(`${panel}.${method}`));
   }
 
-  /** Downloads the FunASR model, chooses FunASR, and starts it when voice input is on. */
+  /** Downloads the model of `modelEngine()`, chooses that engine, and starts it when voice input is on. */
   async installVoice(): Promise<void> {
-    if (this.store.funasr.state().phase !== 'ready') await this.store.funasr.install();
-    if (this.store.funasr.state().phase !== 'ready') { this.syncPrefs(); return; }
+    const engine = this.modelEngine();
+    const slot = this.store[engine];
+    if (slot.state().phase !== 'ready') await slot.install();
+    if (slot.state().phase !== 'ready') { this.syncPrefs(); return; }
     // downloading the model is choosing it
-    if (this.cfg.asr.engine !== 'funasr') this.opts.persist({ asr: { engine: 'funasr' } });
+    if (this.engine() !== engine) this.opts.persist({ asr: { engine } });
     if (this.cfg.asr.enabled) await this.startVoiceBackend();
     else this.syncPrefs();
   }
@@ -1191,30 +1875,46 @@ export class DesktopPetWorld implements World {
   petState(): Record<string, unknown> {
     return {
       connected: this.server.petConnected,
+      /** The pet window is connected and shown (hidden from its menu or the tray, it stays connected). */
+      onDesktop: this.server.petInWindow && !this.petHidden,
       url: this.server.port ? this.petUrl : null,
       dressUrl: this.server.port ? `${this.server.origin}/dress` : null,
+      /** The OBS overlay page while `window.exportOverlay` is on. */
+      overlayUrl: this.server.port && this.cfg.window.exportOverlay ? `${this.server.origin}/overlay` : null,
       skin: this.cfg.skin,
+      /** What the person is called while `user` is empty, in the app language. */
+      defaultUser: this.ui.defaultUser,
       window: this.windowHost?.state() ?? null,
       electron: { ...this.store.electron.state(), supported: this.store.electron.supported },
       screen: this.screen,
+      /** The Habits page's two rows, legacy values read as they now mean. */
+      wake: { wakeOn: this.cfg.touch.wakeOn, wakeKinds: this.cfg.touch.wakeKinds },
+      selfAdjust: { mode: selfAdjustMode(this.cfg.selfAdjust), custom: this.selfCustom() },
     };
   }
 
+  /** `selfAdjustCustom` with every item, the default's for one missing. */
+  private selfCustom(): Record<SelfKey, boolean> {
+    return directSettings({ selfAdjust: 'custom', selfAdjustCustom: this.cfg.selfAdjustCustom });
+  }
+
   voiceState(): Record<string, unknown> {
+    const modelEngine = this.modelEngine();
+    const model = this.store[modelEngine];
     return {
       enabled: this.cfg.asr.enabled,
       engine: this.engine(),
       engineSetting: this.cfg.asr.engine,
       systemSupported: systemRecognizerSupported(),
       server: this.backendState(),
-      model: { ...this.store.funasr.state(), bytes: this.store.funasr.bytes },
+      model: { ...model.state(), bytes: model.bytes, engine: modelEngine },
       mic: this.micState,
       input: {
         ...this.cfg.asr.mic,
         effectiveMode: this.micMode(),
-        hotkeyLabel: hotkeyLabel(this.cfg.asr.mic.hotkey),
+        hotkeyLabel: hotkeyLabel(this.cfg.asr.mic.hotkey, process.platform, this.ui),
         /** The keys alone, and how many presses (the last one held): for a key cap that shows the taps. */
-        keyLabel: comboLabel(this.cfg.asr.mic.hotkey),
+        keyLabel: comboLabel(this.cfg.asr.mic.hotkey, process.platform, this.ui),
         taps: splitTaps(this.cfg.asr.mic.hotkey).taps,
         hint: this.talkHint(),
         hotkeyProblem: this.hotkeyProblem,
@@ -1230,3 +1930,8 @@ export class DesktopPetWorld implements World {
 }
 
 export const modelsDirFor = (root: string) => join(root, DESKTOP_PET_ID);
+
+/** The console's declaration of a relay's panel. */
+function relayPanelDecl(panel: NonNullable<PetBodyRelay['panel']>): WorldPanelDecl {
+  return { id: panel.id, title: panel.title, description: panel.description, getMethods: panel.getMethods ?? [] };
+}

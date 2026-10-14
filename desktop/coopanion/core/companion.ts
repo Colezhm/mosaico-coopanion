@@ -1,37 +1,52 @@
 /**
- * The app's Core process: Cormini as the Persona, the terminal, desktop-pet and cua Worlds, Coo Pet
- * Provider (DeepSeek and the other model services Coo offers) next to Cortico's built-in providers,
- * and Worlds or providers installed from npm through the console's extension page.
+ * The app's Core process: Cormini as the Persona, the terminal, desktop-pet and coopanion Worlds, Coo Pet
+ * Provider (DeepSeek and the other model services Coo offers) and its `chatgpt` module (a ChatGPT plan,
+ * signed in) next to Cortico's built-in providers, and Worlds or providers installed from npm through
+ * the console's extension page.
  *
- * The two bundled Worlds are wired to each other and to the app: the header of the pet's right-click
- * menu pauses and resumes the run, opens the settings window and quits the app, as the console's rail
- * foot does; computer use
- * asks for permission in the pet's bubble, and falls back to its own system dialog while no
- * pet page is connected.
+ * The desktop-pet World is wired to the app: the header of the pet's right-click menu pauses and
+ * resumes the run, opens the settings window and quits the app, as the console's rail foot does.
+ *
+ * The `coopanion` World (`notice.ts`) tells Coo what the app has to say: the release notes after
+ * an update, and the settings the person changes.
+ *
+ * The app language (`config.language`, `language.ts`) picks the text people read and the language of
+ * what Coo reads: the bundled Worlds' events, receipts and environment prompts, and the seeded persona
+ * file, which is swapped for the other language's while it is still exactly as seeded. Each read takes
+ * the language as it is then; the prompt follows at the next prefix rebuild. A change, written on the
+ * 「习惯」 page through the console's config API, goes out from `watchLanguage` the moment the live
+ * config takes it: to the persona file, to Coopanion's config group titles, to the Electron main
+ * process (tray menu, settings window), to the pet's pages, and to the settings window's colour scheme names.
+ *
+ * The settings window's colours follow the pet's look (`console-theme.ts`): at start and whenever the
+ * dressing page saves one.
  *
  * First start writes the files in `seed.ts`; after that every value is the operator's, edited in
  * the console. While the active endpoint has no key, event delivery starts paused. The first start
  * runs the introduction (`guide.ts`) in the pet's bubble, the key box included; after it, the pet
- * asks for a missing key in its bubble now and then, for as long as no key is set. An introduction
- * walked through to the end tells Coo so in an internal event (`guideFinished`): the persona, the
- * names and the rest are now its to settle with the person, and the prompt page is where both of
- * them edit it.
+ * asks for a missing key in its bubble now and then, for as long as no key is set; with a key, a
+ * run of failed model requests is told in the bubble with the upstream's reason. However the
+ * introduction ends, the `coopanion` World hands Coo its record; walked through to the end, also
+ * that the persona, the names and the rest are now its to settle with the person, and the prompt
+ * page is where both of them edit it.
  *
- * The parent (Electron main) gets `{ type: 'companion:ready', port, dataDir, keyMissing }` once the
- * console listens, `{ type: 'companion:open', path }` to show the settings window at a console
- * route, `{ type: 'companion:hide' }` to put it away (the introduction runs again on the desktop)
+ * The parent (Electron main) gets `{ type: 'companion:ready', port, dataDir, keyMissing, language }` once the
+ * console listens, `{ type: 'companion:language', language }` after the app language changes, `{ type: 'companion:open', path }` to show the settings window at a console
+ * route, `{ type: 'companion:browse', url }` to open the ChatGPT sign-in page in the system browser,
+ * `{ type: 'companion:hide' }` to put it away (the introduction runs again on the desktop)
  * and `{ type: 'companion:quit' }` to quit the whole app; it asks for a clean stop with
  * `{ type: 'companion:shutdown' }`.
  */
-import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { readdirSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { BotDefinition } from 'cortico/bot.ts';
 import { createBot } from 'cortico/bot.ts';
 import { announceDataDir, consumeBootFlags } from 'cortico/boot.ts';
 import type { WakeBus } from 'cortico/core/bus.ts';
 import { getByPath, type ConfigGroup } from 'cortico/core/config-schema.ts';
+import { LANGUAGES, LANGUAGE_NAMES, isLanguage, type Language } from 'cortico/core/language.ts';
+import { GenerationError } from 'cortico/core/generation.ts';
 import { secretReader } from 'cortico/core/secrets.ts';
 import type { Core } from 'cortico/core/core.ts';
 import type { CoreConfig, UsageRecord } from 'cortico/core/types.ts';
@@ -40,23 +55,32 @@ import { loadExtensions, readInstalled, type ExtensionSet } from 'cortico/extens
 import { deploymentRoot, providersRoot, repoRoot } from 'cortico/paths.ts';
 import { providerModules, registerProviderModules } from 'cortico/providers/registry.ts';
 import { withWorlds, type WorldDefinition, type WorldSection } from 'cortico/world.ts';
+import { InstanceLockedError } from 'cortico/core/instance-lock.ts';
 import { TERMINAL } from 'cortico/worlds/terminal/definition.ts';
-import { desktopPetDefinition, type DesktopPetWorld } from 'cortico-world-desktop-pet';
-import { cuaDefinition } from 'cortico-world-cua';
-import COO, { vendorOf } from 'cortico-provider-coo';
+import { desktopPetDefinition, figurePacks, type DesktopPetWorld } from 'cortico-world-desktop-pet';
+import { createMosaicoRelay } from 'coopanion-mosaico';
+import COO, { CHATGPT, CHATGPT_PROVIDER, signedIn, usageLimited, vendorOf } from 'cortico-provider-coo';
 import { bundledConsoleAssets } from './bundled-panels.ts';
+import { followPetLook } from './console-theme.ts';
 import { askForKey, guideDone, markDone, runGuide, type GuideDeps } from './guide.ts';
-import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, SEED_DIR, seed } from './seed.ts';
-import { describeEndpoint, publicExtensionName, Telemetry, type Counter } from './telemetry.ts';
+import { noticeDefinition, type NoticeWorld } from './notice.ts';
+import { coreText } from './i18n/index.ts';
+import { petToolDescriber } from './pet-status.ts';
+import { appLanguage, modelLanguage, replyLanguage } from './language.ts';
+import { CONSOLE_PORT, CONSTITUTION_SEEDS, DEPLOYMENT, DISPLAY_NAME, SEED_DIR, followLanguage as followPersonaLanguage, isSeededConstitution, seed } from './seed.ts';
+import { crashFields, describeEndpoint, publicExtensionName, Telemetry, type Counter } from './telemetry.ts';
 
-/** The active endpoint's key is set in the process environment or the endpoint's `.env`. */
+/** The active endpoint's key is set in the process environment or the endpoint's `.env`; a ChatGPT plan's endpoint is signed in. */
 function hasKey(config: CoreConfig): boolean {
   const entry = config.providers[config.activeProvider];
   if (!entry) return false;
+  if (entry.kind === CHATGPT_PROVIDER.id) return signedIn(join(providersRoot(), config.activeProvider));
   if (!entry.secret) return true;
   return secretReader(join(providersRoot(), config.activeProvider, '.env'))(entry.secret) !== '';
 }
 
+/** The program directory; crash reports name files relative to it. */
+const APP_ROOT = fileURLToPath(new URL('../', import.meta.url));
 /** How long the pet page gets to show up on a first start before the settings window opens instead. */
 const PET_WAIT_MS = 60_000;
 /** Pet events that mean the person is talking to Coo. */
@@ -65,22 +89,10 @@ const TALK_EVENTS = new Set(['desktop-pet.message', 'desktop-pet.speech']);
 const ASK_AFTER_GUIDE_MS = 20 * 60_000;
 /** Written in the deployment directory once the introduction has run. */
 const GUIDE_FILE = 'guide.json';
+/** The last version the `coopanion` World told Coo about, in the deployment directory. */
+const NOTICE_FILE = 'notice.json';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const GUIDE_FINISHED = (name: string) => [
-  `[启动引导] ${name}刚在你的气泡里走完了启动引导:定了你怎么称呼对方(「${name}」)、你平时活泼到什么程度、用哪家模型服务,也看过了怎么语音输入、按钮和菜单在哪。`,
-  `接下来可以和${name}商量你们之间的设定:你的性格和说话方式、你怎么称呼对方、对方想怎么叫你、希望你平时做什么不做什么。`,
-  '- 你的人设是工作区里的 CONSTITUTION.md,每次开新 session 都放进你的系统前缀。商量出结果后你可以自己改它,下一次 session 生效。',
-  '- 对方的称呼是设置窗口「习惯」页的「怎么称呼你」,由对方自己改;商量好的称呼和其他偏好可以记进你的工作区。',
-  '- 设置窗口的「系统提示词」页能看到并编辑你的整份系统提示词,CONSTITUTION 也在里面。可以引导对方去那里按自己的喜好改;对方想改什么,你也可以替对方改。',
-  '不用一次说完,看对方的兴致。',
-].join('\n');
-
-/** Tells Coo the introduction was walked through; delivered with the next batch (after the key is set, while events are held without one). */
-function guideFinished(bus: WakeBus, name: string): void {
-  bus.push({ deferred: { type: 'companion.guide-finished', source: 'companion', origin: 'internal', render: () => GUIDE_FINISHED(name) } });
-}
 
 /** Notes the person talking to Coo on the bus; the returned check reports it once and resets. */
 function watchTalk(bus: WakeBus): () => boolean {
@@ -95,21 +107,51 @@ function watchTalk(bus: WakeBus): () => boolean {
 
 /** The switch for anonymous usage statistics, on the 「习惯」 page and in the advanced settings. */
 const TELEMETRY_KEY = 'companion.telemetry';
-const COMPANION_GROUP: ConfigGroup = {
-  id: 'companion',
-  owner: 'persona',
-  schema: {
-    type: 'object',
-    title: 'Coopanion',
-    properties: {
-      [TELEMETRY_KEY]: {
-        type: 'boolean',
-        title: '匿名使用统计',
-        description: '默认关闭（Mosaico 分支）。开启后发送不含对话内容的使用次数与设置给上游 Coopanion 项目。字段见 docs/TELEMETRY.md。',
+/** The `x-options` kind of the app language setting: the eleven languages, each named in itself. */
+const LANGUAGE_OPTIONS = 'coopanion.language';
+
+/**
+ * Coopanion's own settings: the app language, the statistics switch and the round caps. A Persona's config
+ * group is not asked for per request, so it is titled in the app language, which the settings window
+ * follows; `main` retitles the object in place when the language changes.
+ */
+function companionGroup(language: Language): ConfigGroup {
+  const s = coreText(language).settings;
+  return {
+    id: 'companion',
+    owner: 'persona',
+    schema: {
+      type: 'object',
+      title: 'Coopanion',
+      properties: {
+        language: { type: 'string', title: s.language.title, description: s.language.description, enum: [...LANGUAGES], 'x-options': LANGUAGE_OPTIONS, 'x-hot': true },
+        [TELEMETRY_KEY]: { type: 'boolean', title: s.telemetry.title, description: s.telemetry.description },
+        // Cormini copies `rounds` when the bot is built, so a change applies from the next start
+        'rounds.soft': { type: 'integer', title: s.roundsSoft.title, minimum: 1, 'x-suffix': s.roundsSoft.suffix, 'x-hot': false, description: s.roundsSoft.description },
+        'rounds.hard': { type: 'integer', title: s.roundsHard.title, minimum: 1, 'x-suffix': s.roundsHard.suffix, 'x-hot': false, description: s.roundsHard.description },
       },
     },
-  },
-};
+  };
+}
+
+/**
+ * Makes `config.language` an accessor on the live config object, so `onChange` runs right after any write
+ * that changes the app language: the console's config API and a World's persist both set it there.
+ * `config.json` is written by those paths from their own values, so the accessor only watches.
+ */
+function watchLanguage(config: CoreConfig, onChange: (language: Language) => void): void {
+  let value: unknown = config.language;
+  Object.defineProperty(config, 'language', {
+    enumerable: true,
+    configurable: true,
+    get: () => value,
+    set: (next: unknown) => {
+      const was = appLanguage(value);
+      value = next;
+      if (appLanguage(next) !== was) onChange(appLanguage(next));
+    },
+  });
+}
 
 /** Pet events counted for statistics, and whether they are a message to Coo. */
 const EVENT_COUNTERS: Record<string, [Counter, boolean]> = {
@@ -131,15 +173,118 @@ function countUse(core: Core<CoreConfig>, config: CoreConfig, telemetry: Telemet
   const write = toolLog.write.bind(toolLog);
   toolLog.write = (input) => {
     if (input.tool === 'pet_say') telemetry.count('petReplies');
-    else if (input.tool.startsWith('cua_')) telemetry.count('cuaActions');
+    else if (input.tool.startsWith('pet_cua_')) telemetry.count('cuaActions');
     return write(input);
   };
   const append = usageLog.append.bind(usageLog);
   usageLog.append = (rec: UsageRecord) => {
-    telemetry.usage(describeEndpoint(config.providers[config.activeProvider], rec.model, vendorOf), {
-      promptTokens: rec.promptTokens, completionTokens: rec.completionTokens, cacheHitTokens: rec.cacheHitTokens, failed: rec.outcome === 'failed',
+    // the endpoint the try went to; usage a World reports has no try and goes under the active one
+    const endpoint = config.providers[rec.attempt?.origin.instance ?? config.activeProvider];
+    telemetry.usage(describeEndpoint(endpoint, rec.model, endpointVendor(endpoint)), {
+      promptTokens: rec.promptTokens, completionTokens: rec.completionTokens, cacheHitTokens: rec.cacheHitTokens, attempt: rec.attempt,
     });
     append(rec);
+  };
+}
+
+/** Reads an endpoint's service for the statistics: a ChatGPT plan by its module, the others by base URL. */
+const endpointVendor = (entry: { kind: string } | undefined) => (url: string | undefined) => (entry?.kind === CHATGPT_PROVIDER.id ? CHATGPT : vendorOf(url));
+
+/** Model requests failed in a row before the pet says so: Cortico's own alert threshold (`STALL_ALERT_THRESHOLD` in src/core/loop.ts), where the run of failures only reaches the log. */
+const FAILURES_BEFORE_HINT = 5;
+/** The upstream's reason is cut to this many characters: a gateway's error page is a whole HTML document. */
+const REASON_MAX = 200;
+
+/**
+ * The upstream's own words: `error.message` of a JSON body, else the body; without a body (no
+ * connection, a timeout), the message of the innermost cause, such as `getaddrinfo ENOTFOUND <host>`.
+ */
+function failureOf(err: unknown): { status: number; reason: string } {
+  let root = err;
+  while (root instanceof Error && root.cause instanceof Error) root = root.cause;
+  let said = err instanceof GenerationError ? err.body.trim() : '';
+  try {
+    const body = JSON.parse(said) as { error?: { message?: unknown }; message?: unknown };
+    const message = body.error?.message ?? body.message;
+    if (typeof message === 'string') said = message;
+  } catch { /* not JSON: the body as it came */ }
+  const reason = said || (root instanceof Error ? root.message : String(root));
+  // the line it goes into ends the sentence itself
+  return { status: err instanceof GenerationError ? err.status : 0, reason: reason.slice(0, REASON_MAX).replace(/[\s.,!?;:。．，！？；：、]+$/, '') };
+}
+
+/**
+ * After `FAILURES_BEFORE_HINT` model requests in a row fail, the pet says why in its bubble, once
+ * per run of failures, with a button to the settings window's home page, where the model and key
+ * are set and tested. Any answered request ends the run; a request cut off by newer input or by
+ * shutdown neither counts nor ends it, and neither does one refused for a ChatGPT plan's usage limit,
+ * which only reaches the log.
+ */
+function hintFailures(core: Core<CoreConfig>, config: CoreConfig, pet: () => DesktopPetWorld | null): void {
+  const { llm } = core;
+  const respond = llm.respond.bind(llm);
+  let failures = 0;
+  let shown = false;
+  llm.respond = async (request, options) => {
+    try {
+      const answered = await respond(request, options);
+      failures = 0;
+      shown = false;
+      return answered;
+    } catch (err) {
+      if (!options?.signal?.aborted && !usageLimited(err) && ++failures >= FAILURES_BEFORE_HINT && !shown) {
+        const p = pet();
+        if (p?.petState().connected) {
+          const S = coreText(appLanguage(config.language)).failure;
+          const { status, reason } = failureOf(err);
+          shown = true;
+          void p.dialog({
+            text: S.text(failures, status, reason), actions: ['sad'], closable: true,
+            input: { kind: 'buttons', options: [{ label: S.open, primary: true }, { label: S.ok }] },
+          }).answer.then((a) => {
+            if ('index' in a && a.index === 0) process.send?.({ type: 'companion:open', path: '#/home' });
+            // the page went away before it showed: the next failure tries again
+            if ('unavailable' in a) shown = false;
+          });
+        }
+      }
+      throw err;
+    }
+  };
+}
+
+interface UpdateStep { phase: 'downloading' | 'ready' | 'failed'; version: string; reason?: string }
+
+/**
+ * Says the updater's steps (app/updater.cjs) in the pet's bubble: once each, when the pet page is
+ * there and the introduction is not running; a newer step replaces one not yet said.
+ */
+function sayUpdates(config: CoreConfig, pet: () => DesktopPetWorld | null, guiding: () => boolean): (step: UpdateStep) => void {
+  let pending: UpdateStep | null = null;
+  const said = new Set<string>();
+  const S = () => coreText(appLanguage(config.language)).update;
+  setInterval(() => {
+    const p = pet();
+    if (!pending || guiding() || !p?.petState().connected) return;
+    const step = pending;
+    pending = null;
+    const s = S();
+    const [text, options] = step.phase === 'downloading' ? [s.downloading(step.version), [{ label: s.ok, primary: true }, { label: s.github }]]
+      : step.phase === 'ready' ? [s.ready(step.version), [{ label: s.install, primary: true }, { label: s.later }]]
+        : [s.failed(step.version, step.reason ?? '?'), [{ label: s.github, primary: true }, { label: s.gotIt }]];
+    void p.dialog({ text, actions: [step.phase === 'failed' ? 'sad' : 'happy'], closable: true, input: { kind: 'buttons', options } }).answer.then((a) => {
+      if ('unavailable' in a) { pending ??= step; return; }
+      if (!('index' in a)) return;
+      const github = (step.phase === 'downloading' && a.index === 1) || (step.phase === 'failed' && a.index === 0);
+      if (github) process.send?.({ type: 'companion:releases' });
+      if (step.phase === 'ready' && a.index === 0) process.send?.({ type: 'companion:update-install' });
+    });
+  }, 2000).unref();
+  return (step) => {
+    const key = `${step.phase}:${step.version}`;
+    if (said.has(key)) return;
+    said.add(key);
+    pending = step;
   };
 }
 
@@ -158,13 +303,11 @@ function countFiles(dir: string, cap = 10_000): number {
   return n;
 }
 
-const sha256 = (file: string) => existsSync(file) ? createHash('sha256').update(readFileSync(file, 'utf8').replaceAll('\r\n', '\n')).digest('hex') : null;
-
 /** The settings and state sent with each day's statistics (docs/TELEMETRY.md, the day record). */
 function snapshotOf(config: CoreConfig, workspace: string): Record<string, unknown> {
   const at = (path: string) => getByPath(config as unknown as Record<string, unknown>, path) ?? null;
   const active = config.providers[config.activeProvider];
-  const endpoint = describeEndpoint(active, active?.spec?.model ?? '', vendorOf);
+  const endpoint = describeEndpoint(active, active?.spec?.model ?? '', endpointVendor(active));
   return {
     vendor: endpoint.vendor,
     model: endpoint.model,
@@ -175,9 +318,22 @@ function snapshotOf(config: CoreConfig, workspace: string): Record<string, unkno
     scheme: at('worlds.desktop-pet.skin.scheme'),
     roam: at('worlds.desktop-pet.roam'),
     voiceInput: at('worlds.desktop-pet.asr.enabled'),
-    cuaEnabled: at('worlds.cua.enabled'),
-    cuaLevel: at('worlds.cua.permission'),
-    personaChanged: sha256(join(workspace, 'CONSTITUTION.md')) !== sha256(join(SEED_DIR, 'CONSTITUTION.md')),
+    asrEngine: at('worlds.desktop-pet.asr.engine'),
+    micMode: at('worlds.desktop-pet.asr.mic.mode'),
+    talkKey: at('worlds.desktop-pet.asr.mic.hotkey'),
+    sound: at('worlds.desktop-pet.sound'),
+    sounds: at('worlds.desktop-pet.sounds'),
+    theme: at('worlds.desktop-pet.theme'),
+    scale: at('worlds.desktop-pet.window.scale'),
+    lockFrameRate: at('worlds.desktop-pet.window.lockFrameRate'),
+    hoverButtons: at('worlds.desktop-pet.hoverButtons'),
+    doubleClickChat: at('worlds.desktop-pet.doubleClickChat'),
+    rememberPosition: at('worlds.desktop-pet.rememberPosition'),
+    // empty is the app language's default; the others were the defaults of earlier versions
+    userNamed: !['', '伙伴', '主人'].includes(String(at('worlds.desktop-pet.user') ?? '')),
+    cuaEnabled: at('worlds.desktop-pet.cua.enabled'),
+    cuaLevel: at('worlds.desktop-pet.cua.permission'),
+    personaChanged: !isSeededConstitution(workspace),
     memoryFiles: countFiles(workspace),
   };
 }
@@ -198,14 +354,18 @@ function reportedExtensions(extensions: ExtensionSet): Array<{ name: string; ver
  * up on a first start, the settings window opens at the home page instead, since nothing else would
  * tell the person why Coo stays silent.
  */
-async function introduce(deps: GuideDeps, keySet: () => boolean, talked: (() => boolean) | null): Promise<void> {
+async function introduce(deps: GuideDeps, run: (deps: GuideDeps) => Promise<void>, keySet: () => boolean, talked: (() => boolean) | null): Promise<void> {
   const first = !guideDone(deps.doneFile);
   if (first && keySet()) { markDone(deps.doneFile); return; }
   if (first) {
     const deadline = Date.now() + PET_WAIT_MS;
     while (!deps.pet()?.petState().connected && Date.now() < deadline) await sleep(1000);
-    if (!deps.pet()?.petState().connected) process.send?.({ type: 'companion:open', path: '#/home' });
-    await runGuide(deps);
+    if (deps.pet()?.petState().connected) deps.track?.('pet_shown', { ms: Math.round(process.uptime() * 1000) });
+    else {
+      deps.track?.('pet_missing', {});
+      process.send?.({ type: 'companion:open', path: '#/home' });
+    }
+    await run(deps);
   }
   if (!talked) return;
   // the introduction just asked for the key and the person put it off: the next ask waits
@@ -225,62 +385,126 @@ export async function main(): Promise<void> {
   let guide: GuideDeps | null = null;
   /** Set once the deployment is loaded. */
   let telemetry: Telemetry | null = null;
+  let config: CoreConfig | null = null;
+  let notice: NoticeWorld | null = null;
+  /** The introduction is running: the settings it makes are not told as changes. */
+  let guiding = false;
+  const guideRun = async (deps: GuideDeps) => {
+    guiding = true;
+    try { await runGuide(deps); } finally { guiding = false; }
+  };
+  /** The app language as the live config has it, Chinese before the config is loaded. */
+  const language = () => appLanguage(config?.language);
+  /** Figure pack directories besides the data directory's `figures/`, from the main process (the Steam Workshop's, app/steam.cjs). */
+  const packRoots = (process.env.COOPANION_PACK_ROOTS ?? '').split(delimiter).filter(Boolean);
   const DESKTOP_PET = desktopPetDefinition({
-    // the menu's header lends pause/resume, settings and quit; its dress tile opens the settings window's dress page
+    packRoots: () => packRoots,
+    describeTool: petToolDescriber(language),
+    // the menu's header lends pause/resume, settings and quit; its dress tile opens the settings window's dress page, the typing bubble's expand button its chat page
     controls: {
       isPaused: () => bus?.isPaused() ?? false,
       setPaused: (paused) => bus?.setPaused(paused),
       openSettings: () => process.send?.({ type: 'companion:open', path: '' }),
+      openChat: () => process.send?.({ type: 'companion:open', path: '#/chat' }),
       openDress: () => process.send?.({ type: 'companion:open', path: '#/dress' }),
       quit: () => process.send?.({ type: 'companion:quit' }),
-      quitLabel: '退出应用',
+      quitLabel: () => coreText(language()).quit,
       guide: () => {
         if (!guide) return;
         process.send?.({ type: 'companion:hide' });
-        void runGuide(guide);
+        void guideRun(guide);
       },
     },
+    modelLanguage: () => modelLanguage(config?.language),
+    replyLanguage: () => replyLanguage(config?.language),
+    language,
     onCreate: (world) => { pet = world; },
-  });
-  const CUA = cuaDefinition({
-    beforeComputer: () => pet?.beforeComputer() ?? Promise.resolve(),
-    onComputerFinished: () => pet?.computerFinished(),
-    askPermission: async (question) => {
-      const answer = await pet?.confirm(question, ['可以', '这次不行']) ?? 'unavailable';
-      if (answer !== 'unavailable') telemetry?.count('cuaAsked');
+    onCuaAnswer: (answer) => {
+      telemetry?.count('cuaAsked');
       if (answer === 'yes') telemetry?.count('cuaGranted');
-      return answer === 'unavailable' ? null : answer === 'yes' || answer === 'timeout' ? answer : 'no';
     },
+    onBotChange: () => (notice as NoticeWorld | null)?.acceptCurrent(),
+    // Mosaico: the paired board is a second place for the body; the workspace keeps one persona per figure
+    relay: (ctx) => createMosaicoRelay(ctx, {
+      workspaceDir: join(deploymentRoot(), DEPLOYMENT, 'workspace'),
+      cooSeed: () => join(SEED_DIR, CONSTITUTION_SEEDS[modelLanguage(config?.language)]),
+    }),
+    onSkin: (skin) => followPetLook(join(deploymentRoot(), DEPLOYMENT), skin, (pet as DesktopPetWorld | null)?.packs() ?? [], language()),
   });
   const home = deploymentRoot();
-  seed(home);
+  // the system's language, as the Electron main process read it; Chinese when the Core runs without it
+  const system = process.env.COOPANION_SYSTEM_LANGUAGE;
+  seed(home, isLanguage(system) ? system : 'zh');
+  const deployDir = join(home, DEPLOYMENT);
+  const NOTICE = noticeDefinition({
+    version: process.env.COOPANION_VERSION ?? 'dev',
+    notesDir: join(APP_ROOT, 'docs', 'releases'),
+    stateFile: join(deployDir, NOTICE_FILE),
+    alarmsFile: join(deployDir, 'alarms.json'),
+    newInstall: () => !guideDone(join(deployDir, GUIDE_FILE)) && (config === null || !hasKey(config)),
+    read: (path) => (config ? getByPath(config as unknown as Record<string, unknown>, path) : undefined),
+    petConnected: () => (pet as DesktopPetWorld | null)?.petState().connected === true,
+    guiding: () => guiding,
+    onCreate: (world) => { notice = world; },
+    label: () => coreText(language()).noticeLabel,
+  });
+  /** Coopanion's config group; the console reads this object, retitled in place when the app language changes. */
+  const settingsGroup = companionGroup('zh');
   const cormini = await corminiDefinition();
   const base: BotDefinition<CoreConfig> = {
     ...cormini,
-    declares: [TERMINAL.id, DESKTOP_PET.id, CUA.id],
-    defaults: () => ({ ...cormini.defaults(), displayName: DISPLAY_NAME, web: { port: CONSOLE_PORT, theme: 'mint' }, companion: { telemetry: false } }),
+    declares: [TERMINAL.id, DESKTOP_PET.id, NOTICE.id],
+    defaults: () => ({
+      ...cormini.defaults(),
+      displayName: DISPLAY_NAME,
+      web: { port: CONSOLE_PORT, theme: 'mint' },
+      // Cormini's 6/12 end a computer-use task partway through; 20/40 are the caps the desktop-pet
+      // e2e harnesses give their persona
+      rounds: { soft: 20, hard: 40 },
+      // the Mosaico build reports nothing unless the person switches statistics on
+      companion: { telemetry: false },
+    }),
     build: (loaded, worlds) => {
       const parts = cormini.build(loaded, worlds);
-      return { ...parts, console: { ...parts.console, configGroups: [...parts.console?.configGroups ?? [], COMPANION_GROUP] } };
+      return {
+        ...parts,
+        console: {
+          ...parts.console,
+          configGroups: [...parts.console?.configGroups ?? [], settingsGroup],
+          configOptions: (kind, consoleLanguage) => (kind === LANGUAGE_OPTIONS
+            ? LANGUAGES.map((value) => ({ value, label: LANGUAGE_NAMES[value] }))
+            : parts.console?.configOptions?.(kind, consoleLanguage) ?? []),
+        },
+      };
     },
   };
-  const bundled = [TERMINAL, DESKTOP_PET, CUA] as WorldDefinition<WorldSection>[];
+  const bundled = [TERMINAL, DESKTOP_PET, NOTICE] as WorldDefinition<WorldSection>[];
 
   // extension providers must be registered before endpoints are resolved
   const extensions = await loadExtensions(repoRoot(), {
     reserved: bundled.map((w) => w.id),
-    reservedProviders: [...providerModules.map((m) => m.id), COO.id],
+    reservedProviders: [...providerModules.map((m) => m.id), COO.id, CHATGPT_PROVIDER.id],
   });
-  registerProviderModules([COO, ...extensions.providers]);
+  registerProviderModules([COO, CHATGPT_PROVIDER, ...extensions.providers]);
   extensions.consoleAssets.push(...bundledConsoleAssets([
     { id: DESKTOP_PET.id, packageName: 'cortico-world-desktop-pet' },
-    { id: CUA.id, packageName: 'cortico-world-cua' },
   ]));
   const definition = withWorlds(base, [...bundled, ...extensions.worlds]);
 
-  const deployDir = join(home, DEPLOYMENT);
   const loaded = loadDeployment(definition, deployDir, repoRoot(), join(repoRoot(), 'bots', 'cormini'), providersRoot());
+  config = loaded.config;
+  Object.assign(settingsGroup, companionGroup(language()));
+  watchLanguage(loaded.config, (next) => {
+    Object.assign(settingsGroup, companionGroup(next));
+    followPersonaLanguage(loaded.memoryDir, modelLanguage(next));
+    process.send?.({ type: 'companion:language', language: next });
+    (pet as DesktopPetWorld | null)?.refresh();
+    followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined,
+      (pet as DesktopPetWorld | null)?.packs() ?? [], next);
+  });
   announceDataDir(loaded.dataDir);
+  followPetLook(deployDir, getByPath(loaded.config as unknown as Record<string, unknown>, 'worlds.desktop-pet.skin') as { figure?: string; scheme?: string } | undefined,
+    figurePacks([join(loaded.dataDir, 'figures'), ...packRoots]).packs, language());
   consumeBootFlags(loaded.dataDir);
 
   const bot = createBot(loaded, definition, { extensions });
@@ -290,29 +514,42 @@ export async function main(): Promise<void> {
     version: process.env.COOPANION_VERSION ?? 'dev',
     // development runs point it at a local telemetry-server
     url: process.env.COOPANION_TELEMETRY_URL || undefined,
-    // The Mosaico fork never reports unless the person opts in.
     enabled: () => getByPath(loaded.config as unknown as Record<string, unknown>, TELEMETRY_KEY) === true,
     snapshot: () => snapshotOf(loaded.config, loaded.memoryDir),
     extensions: () => reportedExtensions(extensions),
   });
   telemetry = stats;
   countUse(bot.core, loaded.config, stats);
+  hintFailures(bot.core, loaded.config, () => pet);
+  // set by app/core-host.cjs when this Core replaces one that exited unasked
+  const exited = process.env.COOPANION_CORE_EXIT;
+  delete process.env.COOPANION_CORE_EXIT;
+  if (exited) {
+    const code = Number(exited);
+    stats.event('crash', { where: 'core-exit', exitCode: Number.isInteger(code) ? code : null, signal: Number.isInteger(code) ? null : exited.slice(0, 20) });
+  }
   // without a key every model call fails: hold events until the home page saves one and resumes
   const keyMissing = !hasKey(loaded.config);
   if (keyMissing) bot.core.bus.setPaused(true);
-  const { port } = await bot.start();
+  const { port } = await bot.start().catch(async (err: unknown) => {
+    // another process holds the data directory: the app says which, rather than restarting this Core
+    if (err instanceof InstanceLockedError) await new Promise<void>((done) => { if (!process.send?.({ type: 'companion:locked', pid: err.pid, file: err.file }, () => done())) done(); });
+    throw err;
+  });
   stats.start();
-  process.send?.({ type: 'companion:ready', port, dataDir: loaded.dataDir, keyMissing });
+  process.send?.({ type: 'companion:ready', port, dataDir: loaded.dataDir, keyMissing, language: language() });
   const guideDeps: GuideDeps = {
     pet: () => pet,
     console: `http://127.0.0.1:${port}`,
     doneFile: join(deployDir, GUIDE_FILE),
     openDress: () => process.send?.({ type: 'companion:open', path: '#/dress' }),
-    onFinish: (name) => guideFinished(bot.core.bus, name),
+    onEnd: (end) => (notice as NoticeWorld | null)?.guideEnded(end),
     track: (type, fields) => stats.event(type, fields),
+    language,
+    modelLanguage: () => modelLanguage(loaded.config.language),
   };
   guide = guideDeps;
-  void introduce(guideDeps, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
+  void introduce(guideDeps, guideRun, () => hasKey(loaded.config), keyMissing ? watchTalk(bot.core.bus) : null).catch((err) => {
     bot.core.runlog.logger('process').emit('error', '引导出错', { event: 'guide-error', err });
   });
 
@@ -326,17 +563,33 @@ export async function main(): Promise<void> {
     ]);
     process.exit(done ? 0 : 1);
   };
-  process.on('message', (msg: { type?: string }) => { if (msg?.type === 'companion:shutdown') void shutdown('应用退出'); });
+  const update = sayUpdates(loaded.config, () => pet, () => guiding);
+  process.on('message', (msg: { type?: string } & Partial<UpdateStep>) => {
+    if (msg?.type === 'companion:shutdown') void shutdown('应用退出');
+    else if (msg?.type === 'companion:update' && typeof msg.version === 'string' && (msg.phase === 'downloading' || msg.phase === 'ready' || msg.phase === 'failed')) {
+      update({ phase: msg.phase, version: msg.version, reason: typeof msg.reason === 'string' ? msg.reason : undefined });
+    }
+  });
   process.on('disconnect', () => void shutdown('应用进程已退出'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   const log = bot.core.runlog.logger('process');
+  // a rejection that repeats on a timer would fill the event queue and push the other events out: each distinct one is reported once a run
+  const reported = new Set<string>();
+  const crash = (where: string, err: unknown) => {
+    const fields = { where, ...crashFields(err, APP_ROOT, [extensions.dir]) };
+    const key = JSON.stringify(fields);
+    if (reported.has(key)) return;
+    reported.add(key);
+    stats.event('crash', fields);
+  };
   process.on('uncaughtException', (err) => {
     log.emit('error', '未捕获异常,正在关机', { event: 'uncaught-exception', err });
-    stats.event('crash', { where: 'core', error: err instanceof Error ? err.name : typeof err });
+    crash('core', err);
     void shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
     log.emit('error', '未处理的 promise 拒绝', { event: 'unhandled-rejection', err: reason });
+    crash('core-rejection', reason);
   });
 }

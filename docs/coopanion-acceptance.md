@@ -1,8 +1,20 @@
-<!-- Owner: desktop/coopanion/packages/*/tests/, projects/coopanion/tools/test_native.py, projects/coopanion/tools/export_browser_image.py -->
+<!-- Owner: desktop/coopanion/packages/*/tests/, desktop/upstream/, projects/coopanion/tools/test_native.py, projects/coopanion/tools/export_browser_image.py -->
 
 # Mosaico × Coopanion 验收记录
 
 2026-10-07，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
+
+## 桌面 0.1.26-mosaico.8（上游 Coopanion v0.1.26，已装入本机，与板子的真机联调待做）
+
+2026-10-14，Apple Silicon Mac。固件未变，仍为 1.5.1。
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 结构 | `desktop/coopanion` = 上游 v0.1.26（`f70613c`，Cortico `dce5c12`）+ 三个补丁；`desktop/upstream/sync.py` 重新同步后与「上游 + 补丁」逐文件一致，`--stack` 用 `git am -3` 还原出同样的三个提交 | 上游下一版的补丁冲突要到那时才知道 |
+| 自动化 | `typecheck`、`typecheck:worlds`、`typecheck:web` 通过；根目录 191 个测试、`test:worlds` 200 个（含 Mosaico 包 42 个：真实 WSS 资源同步与录音转写、指令转发与词表映射、jsdom 页面传送动画、设置迁移、人格切换）通过；桌宠 World `check:extension` 通过；转接补丁在干净的上游上另跑 158 + 191 个测试通过 | 自动化覆盖桌面一侧，板端由固件测试覆盖 |
+| 打包与安装 | `scripts/pack.ts --dir`：375 MB，`io.github.colezhm.mosaico-coopanion`，版本 0.1.26-mosaico.8；运行时依赖锁 `installer/package-lock.json` 重新生成；旧 .app 与部署数据已另存 | ad hoc 签名，首次启动 macOS 重新询问麦克风与输入监控 |
+| 运行 | 启动后 Mosaico 转接启用、旧设置自动迁到 `settings.json`、身体在电脑上、无报错；桌宠页连上、大肥鱼显示；说话键无输入监控权限时麦克风保持关闭 | 板子当时未连接：传送、板上语音、贴图同步未在真机上复测 |
+| 未移植 | `scripts/mosaico-preview.ts`（桌面网页接模拟器）；大肥鱼图集导出器；上游没有的桌面大肥鱼表情 | 见 coopanion-implementation.md、coopanion-whale.md |
 
 ## 1.5.1 / 桌面 0.1.0-mosaico.7（已装入真机，板上切换网络待人工验收）
 
