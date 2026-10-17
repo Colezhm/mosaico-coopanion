@@ -134,6 +134,86 @@
             "it": "Limone",
             "ru": "Лимонный"
           }
+        },
+        {
+          "id": "lantern",
+          "name": {
+            "zh": "性相：灯",
+            "zh-Hant": "性相：燈",
+            "en": "Principle: Lantern",
+            "ja": "原理：灯",
+            "ko": "원리: 등불",
+            "fr": "Principe : Lanterne",
+            "de": "Prinzip: Laterne",
+            "es-419": "Principio: Linterna",
+            "pt-BR": "Princípio: Lanterna",
+            "it": "Principio: Lanterna",
+            "ru": "Принцип: Фонарь"
+          }
+        },
+        {
+          "id": "grail",
+          "name": {
+            "zh": "性相：杯",
+            "zh-Hant": "性相：杯",
+            "en": "Principle: Grail",
+            "ja": "原理：杯",
+            "ko": "원리: 성배",
+            "fr": "Principe : Graal",
+            "de": "Prinzip: Gral",
+            "es-419": "Principio: Grial",
+            "pt-BR": "Princípio: Graal",
+            "it": "Principio: Graal",
+            "ru": "Принцип: Чаша"
+          }
+        },
+        {
+          "id": "forge",
+          "name": {
+            "zh": "性相：铸",
+            "zh-Hant": "性相：鑄",
+            "en": "Principle: Forge",
+            "ja": "原理：炉",
+            "ko": "원리: 대장간",
+            "fr": "Principe : Forge",
+            "de": "Prinzip: Schmiede",
+            "es-419": "Principio: Forja",
+            "pt-BR": "Princípio: Forja",
+            "it": "Principio: Forgia",
+            "ru": "Принцип: Кузня"
+          }
+        },
+        {
+          "id": "heart",
+          "name": {
+            "zh": "性相：心",
+            "zh-Hant": "性相：心",
+            "en": "Principle: Heart",
+            "ja": "原理：心",
+            "ko": "원리: 심장",
+            "fr": "Principe : Cœur",
+            "de": "Prinzip: Herz",
+            "es-419": "Principio: Corazón",
+            "pt-BR": "Princípio: Coração",
+            "it": "Principio: Cuore",
+            "ru": "Принцип: Сердце"
+          }
+        },
+        {
+          "id": "winter",
+          "name": {
+            "zh": "性相：冬",
+            "zh-Hant": "性相：冬",
+            "en": "Principle: Winter",
+            "ja": "原理：冬",
+            "ko": "원리: 겨울",
+            "fr": "Principe : Hiver",
+            "de": "Prinzip: Winter",
+            "es-419": "Principio: Invierno",
+            "pt-BR": "Princípio: Inverno",
+            "it": "Principio: Inverno",
+            "ru": "Принцип: Зима"
+          }
         }
       ]
     },

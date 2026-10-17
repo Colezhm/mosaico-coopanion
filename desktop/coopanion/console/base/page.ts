@@ -4,7 +4,7 @@
  * leaving the page aborts the signal and disposes what the lifecycle owns. A throw shows an error
  * card in place of the page.
  */
-import type { ConsoleUi, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi, Disposable } from 'cortico/web/shared/client-panel.ts';
 import type { ConsoleIconName } from './ui/icons.ts';
 
 /** What a page registers its timers, observers and cleanups with. */
@@ -21,7 +21,7 @@ export interface PageContext {
   readonly lifecycle: PageLifecycle;
   /** `lifecycle.signal`. */
   readonly signal: AbortSignal;
-  readonly ui: ConsoleUi;
+  readonly ui: WebUi;
   readonly router: {
     navigate(segments: readonly string[]): void;
     /** While `guard` returns a sentence, leaving the page asks first; disposed with the page. */

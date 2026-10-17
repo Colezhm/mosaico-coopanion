@@ -3,7 +3,7 @@
  * while connecting, and closes with the panel (its signal) without reconnecting.
  */
 
-import type { ConsoleStreamHandle, ConsoleStreamHandlers } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiStreamHandle, WebUiStreamHandlers } from 'cortico/web/shared/client-panel.ts';
 
 /** 只用到 WebSocket 的这几样；注入假件即可测。 */
 export interface SocketLike {
@@ -18,7 +18,7 @@ export interface SocketLike {
 
 export interface StreamOptions {
   url: string;
-  handlers: ConsoleStreamHandlers;
+  handlers: WebUiStreamHandlers;
   /** 面板的 signal。abort = 连同重连一起停。 */
   signal: AbortSignal;
   createSocket(url: string): SocketLike;
@@ -32,7 +32,7 @@ const OPEN = 1;
 const BACKOFF_START_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
 
-export function openStream(opts: StreamOptions): ConsoleStreamHandle {
+export function openStream(opts: StreamOptions): WebUiStreamHandle {
   /** 连上之前攒着的帧。 */
   const outbox: string[] = [];
   let socket: SocketLike | null = null;
@@ -135,7 +135,7 @@ export function openStream(opts: StreamOptions): ConsoleStreamHandle {
     connect();
   }
 
-  const handle: ConsoleStreamHandle = {
+  const handle: WebUiStreamHandle = {
     send(text: string): void {
       if (stopped) return;
       const s = socket;

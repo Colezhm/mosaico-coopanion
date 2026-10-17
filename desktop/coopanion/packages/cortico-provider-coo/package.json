@@ -1,6 +1,6 @@
 {
   "name": "cortico-provider-coo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Coo Pet Provider: DeepSeek, Qwen, Kimi, GLM, Doubao, MiniMax, StepFun, Baidu Qianfan, OpenRouter, OpenAI, Anthropic, Gemini and xAI for Cortico, over Responses, Chat Completions, the Messages API or the Gemini API; and a ChatGPT plan through Sign in with ChatGPT",
   "author": "Pal AI Lab",
@@ -30,11 +30,14 @@
   "main": "./src/index.ts",
   "cortico": {
     "kind": "provider",
-    "api": 5
+    "api": 6,
+    "describe": "describe.json"
   },
   "files": [
     "src",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "describe.json"
   ],
   "scripts": {
     "test": "vitest run",

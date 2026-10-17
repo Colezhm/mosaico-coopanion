@@ -1,5 +1,5 @@
 /** The bot's avatar at the rail's foot: GET `/api/avatar` shows it, a click picks an image, crops it to a square and POSTs it as PNG. */
-import type { ConsoleUi } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi } from 'cortico/web/shared/client-panel.ts';
 import { postBlob } from '../base/api.ts';
 import { icon } from '../base/ui/icons.ts';
 import { S } from './strings.ts';
@@ -14,7 +14,7 @@ export interface AvatarControl {
 
 export function createAvatarControl(opts: {
   doc: Document;
-  ui: ConsoleUi;
+  ui: WebUi;
   signal: AbortSignal;
   onError(err: unknown): void;
 }): AvatarControl {

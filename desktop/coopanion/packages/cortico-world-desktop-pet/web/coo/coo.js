@@ -55,6 +55,13 @@ export const PALETTES = [
   { id: 'fox',       l: ['#26140F', '#DD3526'], d: ['#FFFFFF', '#FF6655'] },
   { id: 'purple',    l: ['#1D1430', '#8B3DF0'], d: ['#FFFFFF', '#B98AFF'] },
   { id: 'lemon',     l: ['#252010', '#D9B300'], d: ['#FFFFFF', '#FFE14F'] },
+  // after principles of Cultist Simulator, offered with the personas of the same names (core/guide.ts): the dark
+  // theme's eyes take the principle's colour on the game's wiki, the light theme's a deeper shade of the same hue
+  { id: 'lantern',   l: ['#252010', '#C9A000'], d: ['#FFFFFF', '#FFE300'] },
+  { id: 'grail',     l: ['#2A120F', '#E0452F'], d: ['#FFFFFF', '#FE6150'] },
+  { id: 'forge',     l: ['#2A1A10', '#E06A12'], d: ['#FFFFFF', '#FF8E3E'] },
+  { id: 'heart',     l: ['#2A1420', '#D9506A'], d: ['#FFFFFF', '#FE7E8B'] },
+  { id: 'winter',    l: ['#12202A', '#3A9DC4'], d: ['#FFFFFF', '#BEEEFF'] },
 ];
 export const HEADS = ['none', 'cat', 'bear', 'bunny', 'antenna', 'halo', 'tophat', 'party', 'sailor'];
 export const SIDES = ['none', 'headphones', 'feather', 'earring', 'clip', 'bow'];

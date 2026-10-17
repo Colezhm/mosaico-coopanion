@@ -237,7 +237,7 @@ export function parseStoredTheme(raw: string | null | undefined): StoredTheme {
 
 /**
  * 记录里选中的那份调色板。选中的自定义方案被删掉、或 id 认不出时落到默认方案。
- * `mode` 为 `system` 时由调用方决定明暗：浏览器问系统，终端按深色。
+ * `mode` 为 `system` 时由调用方决定明暗：浏览器问系统，命令行按深色。
  */
 export function resolvePalette(state: StoredTheme, appearance: ThemeAppearance): ThemePalette {
   const custom = state.custom.find((s) => s.id === state.selectedId);

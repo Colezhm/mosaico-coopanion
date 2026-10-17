@@ -2,9 +2,9 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   protocolMismatch: (server: string, page: string) =>
-    `控制台協定版本不一致：伺服器端 ${server}，頁面 ${page}。請強制重新整理頁面。`,
+    `頁面協定版本不一致：伺服器端 ${server}，頁面 ${page}。請強制重新整理頁面。`,
   pageFailed: (pageId: string) => `頁面「${pageId}」開啟失敗`,
-  noPage: (pageId: string) => `控制台頁面不存在：「${pageId}」`,
+  noPage: (pageId: string) => `頁面不存在：「${pageId}」`,
   noPageHint: '請檢查頁面位址及模組啟用狀態。',
   noPanels: (label: string) => `「${label}」沒有宣告任何面板。`,
   noSuchPanel: (label: string, wanted: string) => `「${label}」沒有面板「${wanted}」`,

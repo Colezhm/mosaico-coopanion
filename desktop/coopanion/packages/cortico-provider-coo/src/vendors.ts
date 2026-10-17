@@ -78,6 +78,13 @@ export interface Vendor {
   /** Responses: past reasoning goes back as the signed blocks the service returned, not as text. */
   encryptedReasoning?: true;
   /**
+   * Responses with past reasoning sent back as text: whether a tool call with no reasoning recorded
+   * before it gets a placeholder reasoning item (`sendSyntheticReasoning`). Unset sends one.
+   * Chat with thinking on: a tool call after the newest user message gets placeholder
+   * `reasoning_content` only where this is true (`roundReasoning`).
+   */
+  syntheticReasoning?: boolean;
+  /**
    * Connected by signing in instead of with a key: the endpoint is the `chatgpt` module's (`chatgptEntry`);
    * `keyHint`, `secret` and the site's `keyUrl` are not used.
    */
@@ -110,6 +117,8 @@ export const VENDORS: readonly Vendor[] = [
     sites: { global: { baseUrl: 'https://api.deepseek.com', protocol: 'responses', keyUrl: 'https://platform.deepseek.com/api_keys' } },
     model: 'deepseek-flash', models: ['deepseek-v4-pro'],
     vision: ['deepseek-flash'], contextWindows: { 'deepseek-flash': 1_000_000, 'deepseek-v4-pro': 1_000_000 },
+    // the endpoint answers 400 when a tool call in the input has no reasoning before it
+    syntheticReasoning: true,
   },
   {
     // Qwen3.8 takes none / low / medium / xhigh; qwen3.7-flash is cheaper up to 32K input. Both
@@ -206,6 +215,7 @@ export const VENDORS: readonly Vendor[] = [
     vision: ['deepseek/deepseek-v4.1-flash', 'qwen/qwen3.8-flash', 'qwen/qwen3.7-flash', 'google/gemini-3.1-flash-lite', 'z-ai/glm-5.3-flash'],
     contextWindows: { 'deepseek/deepseek-v4.1-flash': 1_048_576, 'qwen/qwen3.8-flash': 1_000_000 },
     modelEffort: { 'z-ai/glm-5.3-flash': { none: 'low' } },
+    syntheticReasoning: false,
   },
   OPENAI,
   {

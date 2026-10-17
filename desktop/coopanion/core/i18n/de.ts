@@ -13,6 +13,7 @@ const de: Translation<CoreText> = {
 
   failure: {
     text: (n: number, status: number, reason: string) => `Meine letzten ${n} Anfragen an das Modell sind fehlgeschlagen. Fehler${status ? ` ${status}` : ''}: ${reason}. Prüf den Modellnamen und den API Key auf der Seite Start in den Einstellungen; dort kannst du die Verbindung testen.`,
+    reasoningReplay: (n: number) => `Meine letzten ${n} Anfragen an das Modell sind fehlgeschlagen: Dieser Dienst verlangt, dass das Nachdenken vor jedem Werkzeugaufruf zurückgeschickt wird, und Coopanion hat das für ihn ausgeschaltet. Bitte melde das den Entwicklern: https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: 'Einstellungen öffnen',
     ok: 'OK',
   },
@@ -52,6 +53,16 @@ const de: Translation<CoreText> = {
     gotName: (name: string) => `${name}, gemerkt!`,
     askSource: 'Wie hast du von mir erfahren?',
     sourceThanks: 'Ach so. Coo...',
+    askPersona: 'Was meinst du, wie soll ich sein...',
+    personas: {
+      coo: { label: 'Klein und neugierig', line: 'Was ist das? Ich schau mal nach. Coo...' },
+      grail: { label: 'Anhänglich und gierig', line: 'Was isst du da? Gib mir auch einen Bissen. Coo...' },
+      forge: { label: 'Zuverlässig und tüchtig', line: "Was gibt's zu tun? Überlass das mir, dauert nicht lange. Coo." },
+      heart: { label: 'Lebhaft und immer da', line: 'Da bin ich! Ich leiste dir den ganzen Tag Gesellschaft. Coo!' },
+      winter: { label: 'Still und wortkarg', line: '...Mm. Coo.' },
+      whale: { label: 'DeepSeek Chan', line: 'Willkommen zurück! Was ist das? Lass mal sehen. Coo...' },
+    },
+    dressHint: { text: 'Die Farben kannst du unter Outfit ändern', dress: 'Outfit' },
     askRoam: 'Soll ich meistens ruhig oder lebhaft sein? Klick eine Karte an, um zu sehen, was ich dann mache.',
     roam: {
       off: { label: 'Bleibt stehen', level: 'Niedrig', line: 'Dann bleibe ich stehen und bewege mich, wenn du mich rufst.' },

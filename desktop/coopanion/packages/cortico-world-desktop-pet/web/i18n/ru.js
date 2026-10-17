@@ -16,6 +16,7 @@ export default {
   'heard.done': 'Распознано',
   'heard.more': 'Слушаю…',
   'heard.listening': 'Слушаю…',
+  'heard.cancel': 'Отмена',
 
   // the status bubble: added when the same kind of thing was done several times
   'status.more': ' и ещё {others}',

@@ -25,8 +25,8 @@ export const S: Partial<typeof en> = {
   runtimeVersion: (version: string) => `El proceso aún usa ${version}`,
 
   providerManagement: 'Las extensiones de proveedor sirven a los Bots que usan este entorno compartido.',
-  idleManagement: 'Activa o desactiva los Worlds en la página de World. Las extensiones integradas no se pueden eliminar.',
-  createBody: 'Abre una terminal en el proyecto Cortico en su equipo anfitrión, ejecuta pnpm start --new y selecciona esta plantilla de Bot para crear una instancia nueva.',
+  idleManagement: 'Carga o desactiva los Worlds en la página Resumen de Worlds, a la izquierda. Las extensiones integradas no se pueden eliminar.',
+  createBody: 'Abre una línea de comandos en el proyecto Cortico en su equipo anfitrión, ejecuta pnpm start --new y selecciona esta plantilla de Bot para crear una instancia nueva.',
 
   restartConfirmTitle: '¿Reiniciar el proceso?',
   restartNoLoopTitle: 'Se requiere inicio manual',
@@ -38,12 +38,12 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Pasos de apagado ejecutados.',
   reloadWait: 'Esperando a que un proceso nuevo de este Bot esté listo…',
   otherBot: 'Otro Bot está usando este puerto. Se detuvo la recuperación.',
-  restartManual: 'El proceso terminó. Inícialo manualmente en la terminal; esta página esperará a que esté listo.',
+  restartManual: 'El proceso terminó. Inícialo manualmente desde la línea de comandos; esta página esperará a que esté listo.',
 
   updateVersions: (current: string, latest: string) => `${current} → ${latest}`,
   updateAction: 'Actualizar',
   updateCheckFailed: (detail: string) => `Falló la búsqueda de actualizaciones: ${detail}`,
-  noteConsoleMissing: 'Falta el paquete del navegador. Compila en el directorio de la extensión y reinicia el proceso.',
+  noteWebUiMissing: 'Falta el paquete del navegador. Compila en el directorio de la extensión y reinicia el proceso.',
   noExtensions: 'Aún no hay extensiones instaladas',
   listLoadFailed: (msg: string) => `No se pudo cargar la lista de extensiones: ${msg}`,
 
@@ -52,7 +52,7 @@ export const S: Partial<typeof en> = {
   removeInUse: 'Este Bot la está usando. Desactívala antes de eliminarla.',
   removeBody: 'Quita este paquete del directorio compartido de extensiones; surte efecto después de reiniciar el proceso. Afecta a otros Bots que lo usen. Memory, la configuración guardada y los directorios de código fuente locales se conservan.',
   builtin: 'Integrada',
-  builtinNote: 'Incluida con Cortico; no se puede eliminar por separado.',
+  builtinNote: 'Incluida con Coopanion; no se puede eliminar por separado.',
 
   installedAction: 'Instalación',
   updatedAction: 'Actualización',
@@ -65,6 +65,8 @@ export const S: Partial<typeof en> = {
   filterPlaceholder: 'Filtrar: nombre, descripción, palabras clave',
   installedFilter: 'Filtrar: nombre, tipo, descripción',
   sortLabel: {
+    certified: "Certificados primero",
+    rating: 'Valoración',
     downloads: 'Descargas (30 días)',
     date: 'Publicadas recientemente',
     name: 'Nombre',
@@ -78,7 +80,11 @@ export const S: Partial<typeof en> = {
   pageOf: (page: number, pages: number) => `${page} / ${pages}`,
   searching: 'Cargando…',
   noPackages: 'Aún no hay paquetes de este tipo en npm',
-  noPackagesAt: (registry: string) => `No hay paquetes de este tipo en el registro npm ${registry}. Para usar otro registro, agrega una línea registry=<url> al .npmrc de la ubicación de instalación y reinicia el proceso.`,
+  noPackagesAt: (registry: string) => `No hay paquetes de este tipo en el registro npm ${registry}.`,
+  registryLabel: 'Registro npm',
+  registrySave: 'Guardar',
+  registryHelp: 'Se escribe en el .npmrc de la ubicación de instalación; la búsqueda de actualizaciones, la búsqueda y la instalación lo usan de inmediato. Guardar vacío restaura el registro predeterminado.',
+  registrySaved: (url: string) => `Guardado. Registro en uso: ${url}`,
   noHits: 'No hay paquetes que coincidan',
   searchFailed: (msg: string) => `Falló la carga: ${msg}`,
   partial: 'Los resultados de npm están incompletos. Usa la instalación manual para un nombre de paquete exacto.',
@@ -135,4 +141,5 @@ export const S: Partial<typeof en> = {
   labelled: (label: string, value: string) => `${label}: ${value}`,
   metaSeparator: ' · ',
   listSeparator: ', ',
+  feedbackTags: 'Reportar etiquetas',
 };

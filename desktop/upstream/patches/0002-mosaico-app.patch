@@ -1,7 +1,7 @@
-From f46821b2aa30cf70651ccb5d26d327cdb000da01 Mon Sep 17 00:00:00 2001
+From 5f2be48df3f39145a0e3952fd906fb7c28728029 Mon Sep 17 00:00:00 2001
 From: Colezhm <jnfbr5bywg@privaterelay.appleid.com>
 Date: Wed, 14 Oct 2026 07:45:19 -0400
-Subject: [PATCH 2/3] =?UTF-8?q?mosaico:=20=E6=8A=8A=20Mosaico=20=E6=8E=A5?=
+Subject: [PATCH 2/2] =?UTF-8?q?mosaico:=20=E6=8A=8A=20Mosaico=20=E6=8E=A5?=
  =?UTF-8?q?=E8=BF=9B=E5=BA=94=E7=94=A8,=E5=B9=B6=E6=94=B9=E7=94=A8=20Mosai?=
  =?UTF-8?q?co=20=E5=88=86=E6=94=AF=E8=87=AA=E5=B7=B1=E7=9A=84=E5=90=8D?=
  =?UTF-8?q?=E5=AD=97=E4=B8=8E=E5=8F=91=E5=B8=83=E5=9C=B0=E5=9D=80?=
@@ -21,34 +21,34 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  app/updater.cjs             |  2 +-
  console/features/release.ts |  4 ++--
  console/index.ts            |  3 ++-
- core/companion.ts           | 13 ++++++++++---
+ core/companion.ts           | 14 +++++++++++---
  electron-builder.yml        | 11 +++++++----
  package.json                |  5 +++--
- scripts/pack.ts             | 16 ++++++++++++----
+ scripts/pack.ts             | 14 +++++++++++---
  tsconfig.worlds.json        |  4 +++-
  vitest.worlds.config.ts     |  2 +-
- 10 files changed, 42 insertions(+), 20 deletions(-)
+ 10 files changed, 42 insertions(+), 19 deletions(-)
 
 diff --git a/app/main.cjs b/app/main.cjs
-index 48f805d..3b125cf 100644
+index f181b79..5f51d66 100644
 --- a/app/main.cjs
 +++ b/app/main.cjs
-@@ -250,7 +250,7 @@ function forward(request, url, origin) {
+@@ -286,7 +286,7 @@ function forward(request, url, origin) {
  }
  
  /** The only remote address the settings page asks: the latest Coopanion release, for the hint under the wordmark. */
 -const RELEASE_CHECK = 'https://api.github.com/repos/Pal-AI-Lab/Coopanion/releases/latest';
 +const RELEASE_CHECK = 'https://api.github.com/repos/Colezhm/mosaico-coopanion/releases/latest';
+ /** Images of the extension market: package icons and screenshots of the official index, and GitHub avatars. */
+ const MARKET_IMAGES = ['https://raw.githubusercontent.com/Pal-AI-Lab/cortico-extensions/', 'https://avatars.githubusercontent.com/'];
  const isLocal = (url) => /^(https?|wss?):\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//.test(url);
- /** Requests of the settings session leave the machine only for the release check. */
- function keepRemoteOut(ses) {
 diff --git a/app/updater.cjs b/app/updater.cjs
-index dd4ed77..5338069 100644
+index b370167..480e8ad 100644
 --- a/app/updater.cjs
 +++ b/app/updater.cjs
 @@ -13,7 +13,7 @@ const { app } = require('electron');
  const { createWriteStream, mkdirSync } = require('node:fs');
- const { join } = require('node:path');
+ const { dirname, join } = require('node:path');
  
 -const RELEASES_URL = 'https://github.com/Pal-AI-Lab/Coopanion/releases/latest';
 +const RELEASES_URL = 'https://github.com/Colezhm/mosaico-coopanion/releases/latest';
@@ -56,7 +56,7 @@ index dd4ed77..5338069 100644
  const CHECK_EVERY_MS = 6 * 3600_000;
  
 diff --git a/console/features/release.ts b/console/features/release.ts
-index 3ab8303..87b88d8 100644
+index 74ac5a0..9da0ce0 100644
 --- a/console/features/release.ts
 +++ b/console/features/release.ts
 @@ -5,8 +5,8 @@
@@ -67,11 +67,11 @@ index 3ab8303..87b88d8 100644
 -const RELEASE_API = 'https://api.github.com/repos/Pal-AI-Lab/Coopanion/releases/latest';
 +export const REPO_URL = 'https://github.com/Colezhm/mosaico-coopanion';
 +const RELEASE_API = 'https://api.github.com/repos/Colezhm/mosaico-coopanion/releases/latest';
- /** 与 Cortico 控制台查框架 Release 同一时限。 */
+ /** 与 Cortico WebUI 查框架 Release 同一时限。 */
  const RELEASE_TIMEOUT_MS = 15_000;
  
 diff --git a/console/index.ts b/console/index.ts
-index 95ab360..570f0b2 100644
+index d11374d..75ef877 100644
 --- a/console/index.ts
 +++ b/console/index.ts
 @@ -45,6 +45,7 @@ import { homePage } from './features/home/index.ts';
@@ -88,43 +88,44 @@ index 95ab360..570f0b2 100644
  export const ENTRIES: readonly Entry[] = [
 -  fromPage(homePage), fromPage(petPage), fromPage(dressPage), fromPage(voicePage),
 +  fromPage(homePage), fromPage(petPage), fromPage(dressPage), fromPage(voicePage), fromPage(mosaicoPage),
-   fromFeature(promptsWithClearFeature, 'primary', true), fromPage(usagePage), fromPage(chatPage),
+   fromFeature(promptsFeature, 'primary', true), fromPage(usagePage), fromPage(chatPage),
    // 模型供应商 keeps the providers page's own name
    fromFeature(providersFeature, 'integrations'), fromFeature(extensionsFeature, 'integrations'),
 diff --git a/core/companion.ts b/core/companion.ts
-index ac31e8a..598e966 100644
+index d2736b9..c20bb86 100644
 --- a/core/companion.ts
 +++ b/core/companion.ts
 @@ -58,6 +58,7 @@ import { withWorlds, type WorldDefinition, type WorldSection } from 'cortico/wor
  import { InstanceLockedError } from 'cortico/core/instance-lock.ts';
- import { TERMINAL } from 'cortico/worlds/terminal/definition.ts';
+ import { CONSOLE } from 'cortico/worlds/console/definition.ts';
  import { desktopPetDefinition, figurePacks, type DesktopPetWorld } from 'cortico-world-desktop-pet';
-+import { createMosaicoRelay } from 'coopanion-mosaico';
++import { MOSAICO_DESCRIBE, createMosaicoRelay } from 'coopanion-mosaico';
  import COO, { CHATGPT, CHATGPT_PROVIDER, signedIn, usageLimited, vendorOf } from 'cortico-provider-coo';
- import { bundledConsoleAssets } from './bundled-panels.ts';
+ import { bundledWebUiAssets } from './bundled-panels.ts';
  import { followPetLook } from './console-theme.ts';
 @@ -66,7 +67,7 @@ import { noticeDefinition, type NoticeWorld } from './notice.ts';
  import { coreText } from './i18n/index.ts';
  import { petToolDescriber } from './pet-status.ts';
  import { appLanguage, modelLanguage, replyLanguage } from './language.ts';
--import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, followLanguage as followPersonaLanguage, isSeededConstitution, seed } from './seed.ts';
-+import { CONSOLE_PORT, CONSTITUTION_SEEDS, DEPLOYMENT, DISPLAY_NAME, SEED_DIR, followLanguage as followPersonaLanguage, isSeededConstitution, seed } from './seed.ts';
- import { crashFields, describeEndpoint, publicExtensionName, Telemetry, type Counter } from './telemetry.ts';
- 
- /** The active endpoint's key is set in the process environment or the endpoint's `.env`; a ChatGPT plan's endpoint is signed in. */
-@@ -423,6 +424,11 @@ export async function main(): Promise<void> {
+-import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, followLanguage as followPersonaLanguage, personaOf, seed } from './seed.ts';
++import { CONSOLE_PORT, DEPLOYMENT, DISPLAY_NAME, followLanguage as followPersonaLanguage, personaFile, personaOf, seed } from './seed.ts';
+ import { coopanionPersona, type CoopanionPersona } from './persona.ts';
+ import type { Cormini } from '../vendor/cortico/bots/cormini/persona/persona.ts';
+ import type { contextStageConfigGroup } from '../vendor/cortico/bots/cormini/persona/config.ts';
+@@ -441,6 +442,12 @@ export async function main(): Promise<void> {
        if (answer === 'yes') telemetry?.count('cuaGranted');
      },
      onBotChange: () => (notice as NoticeWorld | null)?.acceptCurrent(),
 +    // Mosaico: the paired board is a second place for the body; the workspace keeps one persona per figure
 +    relay: (ctx) => createMosaicoRelay(ctx, {
 +      workspaceDir: join(deploymentRoot(), DEPLOYMENT, 'workspace'),
-+      cooSeed: () => join(SEED_DIR, CONSTITUTION_SEEDS[modelLanguage(config?.language)]),
++      cooSeed: () => personaFile('coo', language()),
 +    }),
++    relayDescribe: MOSAICO_DESCRIBE,
      onSkin: (skin) => followPetLook(join(deploymentRoot(), DEPLOYMENT), skin, (pet as DesktopPetWorld | null)?.packs() ?? [], language()),
    });
    const home = deploymentRoot();
-@@ -455,7 +461,8 @@ export async function main(): Promise<void> {
+@@ -485,7 +492,8 @@ export async function main(): Promise<void> {
        // Cormini's 6/12 end a computer-use task partway through; 20/40 are the caps the desktop-pet
        // e2e harnesses give their persona
        rounds: { soft: 20, hard: 40 },
@@ -132,15 +133,15 @@ index ac31e8a..598e966 100644
 +      // the Mosaico build reports nothing unless the person switches statistics on
 +      companion: { telemetry: false },
      }),
+     // Cormini's own build with Coo's Persona class; the workspace is snapshotted before Coo can write to it
      build: (loaded, worlds) => {
-       const parts = cormini.build(loaded, worlds);
-@@ -507,7 +514,7 @@ export async function main(): Promise<void> {
-     version: process.env.COOPANION_VERSION ?? 'dev',
+@@ -549,7 +557,7 @@ export async function main(): Promise<void> {
+     version: APP_VERSION,
      // development runs point it at a local telemetry-server
      url: process.env.COOPANION_TELEMETRY_URL || undefined,
 -    enabled: () => getByPath(loaded.config as unknown as Record<string, unknown>, TELEMETRY_KEY) !== false,
 +    enabled: () => getByPath(loaded.config as unknown as Record<string, unknown>, TELEMETRY_KEY) === true,
-     snapshot: () => snapshotOf(loaded.config, loaded.memoryDir),
+     snapshot: () => snapshotOf(loaded.config, loaded.memoryDir, () => coo?.gitAvailable() ?? false),
      extensions: () => reportedExtensions(extensions),
    });
 diff --git a/electron-builder.yml b/electron-builder.yml
@@ -179,16 +180,16 @@ index 9ddec73..63b2739 100644
    target:
      - target: nsis
 diff --git a/package.json b/package.json
-index 27e10f3..755f8db 100644
+index 96ca438..ae35f5d 100644
 --- a/package.json
 +++ b/package.json
 @@ -1,7 +1,7 @@
  {
    "name": "coopanion",
 -  "productName": "Coopanion",
--  "version": "0.1.26",
+-  "version": "0.2.3",
 +  "productName": "Mosaico Coopanion",
-+  "version": "0.1.26-mosaico.8",
++  "version": "0.2.3-mosaico.9",
    "private": true,
    "description": "A desktop companion built on Cortico: a pet on your screen that talks, listens and can operate the computer",
    "license": "AGPL-3.0-or-later",
@@ -201,19 +202,10 @@ index 27e10f3..755f8db 100644
      "cortico-world-desktop-pet": "workspace:*",
      "electron-updater": "^6.8.9",
 diff --git a/scripts/pack.ts b/scripts/pack.ts
-index c329f29..653c4ab 100644
+index b642b68..e233c03 100644
 --- a/scripts/pack.ts
 +++ b/scripts/pack.ts
-@@ -17,7 +17,7 @@
-  * steamworks.js for the Workshop (app/steam.cjs) and without the whale pack, which goes out through the Workshop.
-  * The channel and app id go into the app's package.json as `coopanion` (app/main.cjs).
-  */
--import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
- import { join, relative, sep } from 'node:path';
- import { spawnSync } from 'node:child_process';
- import { fileURLToPath } from 'node:url';
-@@ -41,7 +41,7 @@ if (STEAM && process.platform !== 'win32' && process.platform !== 'linux') {
+@@ -43,7 +43,7 @@ if (STEAM && process.platform !== 'win32' && process.platform !== 'linux') {
    process.exit(1);
  }
  const rootPkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as Record<string, unknown> & { version: string };
@@ -222,7 +214,7 @@ index c329f29..653c4ab 100644
  /**
   * Runtime dependencies: Core (express, ws), the TypeScript loader, pnpm for extension installs, the updater
   * (app/updater.cjs) or for Steam steamworks.js (app/steam.cjs), and the workspace packages' own.
-@@ -52,7 +52,8 @@ const DEPS: Record<string, string> = {
+@@ -54,7 +54,8 @@ const DEPS: Record<string, string> = {
  };
  for (const name of WORKSPACE) {
    const pkg = JSON.parse(readFileSync(join(ROOT, 'packages', name, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
@@ -231,8 +223,8 @@ index c329f29..653c4ab 100644
 +  for (const [dep, range] of Object.entries(pkg.dependencies ?? {})) if (!range.startsWith('workspace:')) DEPS[dep] = range;
  }
  
- const skip = (base: string) => (src: string) => {
-@@ -79,7 +80,14 @@ writeFileSync(join(OUT, 'package.json'), JSON.stringify({
+ /**
+@@ -114,7 +115,14 @@ writeFileSync(join(OUT, 'package.json'), JSON.stringify({
    dependencies: DEPS,
    coopanion: STEAM ? { channel: 'steam', steamAppId: STEAM_APP_ID } : { channel: 'github' },
  }, null, 2));

@@ -2,10 +2,10 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   protocolMismatch: (server: string, page: string) =>
-    `콘솔 프로토콜 버전이 일치하지 않습니다: 서버 ${server}, 이 페이지 ${page}.`
+    `페이지 프로토콜 버전이 일치하지 않습니다: 서버 ${server}, 이 페이지 ${page}.`
     + ' 페이지를 강력 새로 고침하세요.',
   pageFailed: (pageId: string) => `"${pageId}" 페이지를 열지 못했습니다`,
-  noPage: (pageId: string) => `콘솔 페이지를 찾을 수 없습니다: "${pageId}"`,
+  noPage: (pageId: string) => `페이지를 찾을 수 없습니다: "${pageId}"`,
   noPageHint: '페이지 주소와 모듈 활성화 상태를 확인하세요.',
   noPanels: (label: string) => `"${label}"은(는) 패널을 선언하지 않았습니다.`,
   noSuchPanel: (label: string, wanted: string) => `"${label}"에 "${wanted}" 패널이 없습니다`,

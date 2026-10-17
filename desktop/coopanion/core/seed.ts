@@ -1,11 +1,11 @@
 /** First-run files of the app's deployment. */
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRegion, endpointName, firstVendor, vendorEntry } from 'cortico-provider-coo/src/vendors.ts';
-import type { Language } from 'cortico/core/language.ts';
-import { modelLanguage, type ModelLanguage } from './language.ts';
+import { LANGUAGES, type Language } from 'cortico/core/language.ts';
+import { appLanguage } from './language.ts';
 
 export const DEPLOYMENT = 'companion';
 export const CONSOLE_PORT = 17788;
@@ -20,18 +20,27 @@ const OLD_CONSTITUTION = 'cfcb7527cbf3518ab9f077ee711c86661a70613b9e5caeb992b30a
 const CUA_ASK = 'ask-once';
 const OLD_CUA_ASK = 'ask-each-turn';
 export const SEED_DIR = fileURLToPath(new URL('./seed/', import.meta.url));
-/** The self-description seeded for each model-text language, in `SEED_DIR`. */
-export const CONSTITUTION_SEEDS: Record<ModelLanguage, string> = { zh: 'CONSTITUTION.md', en: 'CONSTITUTION.en.md' };
+/**
+ * The self-descriptions Coo can start from, in the order the introduction offers them: Coo as it ships, four
+ * after principles of Cultist Simulator, and the whale's (the GitHub build only). Each is in SEED_DIR/persona/
+ * as `<id>.<language>.md`, one per app language.
+ */
+export const PERSONAS = ['coo', 'grail', 'forge', 'heart', 'winter', 'whale'] as const;
+export type PersonaId = typeof PERSONAS[number];
+/** The workspace file that holds Coo's self-description (Cormini's). */
+const CONSTITUTION = 'CONSTITUTION.md';
+export const personaFile = (id: PersonaId, language: Language) => join(SEED_DIR, 'persona', `${id}.${language}.md`);
 
 /**
  * Writes the first-run files that are missing. A new deployment config gets `language` and an
  * endpoint without a key: the first model service listed for that language, on its platform for that
  * language (vendors.ts). Existing files are left as the operator made them, except a self-description
- * still exactly as a version seeded it, which becomes the current one in the model-text language of
- * the config's `language` (`followLanguage`), endpoints of the old `deepseek` module, which now belong
+ * still exactly as a version seeded it, which becomes the same persona in the config's `language`
+ * (`followLanguage`), endpoints of the old `deepseek` module, which now belong
  * to `coo`, a config of computer use as its own World (`worlds.cua`), whose section, whether it was on
- * included, moves to `worlds.desktop-pet.cua`, and a config without a computer-use `permission`, which
- * keeps the `ask-each-turn` it had before new installs got `ask-once`.
+ * included, moves to `worlds.desktop-pet.cua`, a config without a computer-use `permission`, which
+ * keeps the `ask-each-turn` it had before new installs got `ask-once`, and the keys Cortico 0.2.0 renamed
+ * (`moveTerminalToConsole`).
  */
 export function seed(home: string, language: Language): void {
   const deploy = join(home, DEPLOYMENT);
@@ -55,20 +64,46 @@ export function seed(home: string, language: Language): void {
       worlds: { 'desktop-pet': { cua: { permission: CUA_ASK } } },
     });
   }
-  const textLanguage = modelLanguage((JSON.parse(readFileSync(config, 'utf8')) as { language?: unknown }).language);
-  if (!existsSync(join(workspace, 'CONSTITUTION.md'))) copyFileSync(join(SEED_DIR, CONSTITUTION_SEEDS[textLanguage]), join(workspace, 'CONSTITUTION.md'));
+  const configured = appLanguage((JSON.parse(readFileSync(config, 'utf8')) as { language?: unknown }).language);
+  if (!existsSync(join(workspace, CONSTITUTION))) copyFileSync(personaFile('coo', configured), join(workspace, CONSTITUTION));
   // the console shows it as the bot's avatar
   if (!existsSync(join(deploy, 'avatar.png'))) copyFileSync(join(SEED_DIR, 'avatar.png'), join(deploy, 'avatar.png'));
-  followLanguage(workspace, textLanguage);
+  followLanguage(workspace, configured);
   moveEndpointsToCoo(join(home, 'providers'));
   if (upgrading) {
     moveCuaIntoPet(config);
     keepCuaAsking(config);
+    moveTerminalToConsole(deploy, config);
   }
 }
 
 type Section = Record<string, unknown>;
 type WorldSections = { worlds?: Record<string, Section | undefined> };
+
+/**
+ * Cortico 0.2.0 renamed the `terminal` World to `console` and `logging.console` to `logging.stdout`:
+ * `worlds.terminal`, `logging.console` and the deployment's `worlds/terminal/` prompt override move to
+ * the new names. A key or folder already at the new name stays as it is.
+ */
+function moveTerminalToConsole(deploy: string, file: string): void {
+  const config = JSON.parse(readFileSync(file, 'utf8')) as WorldSections & { logging?: Section };
+  let changed = false;
+  const old = config.worlds?.terminal;
+  if (config.worlds && old) {
+    config.worlds.console = { ...old, ...config.worlds.console };
+    delete config.worlds.terminal;
+    changed = true;
+  }
+  const logging = config.logging;
+  if (logging && 'console' in logging) {
+    logging.stdout ??= logging.console;
+    delete logging.console;
+    changed = true;
+  }
+  if (changed) writeFileSync(file, JSON.stringify(config, null, 2) + '\n');
+  const prompts = join(deploy, 'worlds', 'terminal');
+  if (existsSync(prompts) && !existsSync(join(deploy, 'worlds', 'console'))) renameSync(prompts, join(deploy, 'worlds', 'console'));
+}
 
 /** `worlds.cua` becomes `worlds.desktop-pet.cua`; a key already there stays as it is. */
 function moveCuaIntoPet(file: string): void {
@@ -104,21 +139,30 @@ function moveEndpointsToCoo(providers: string): void {
 /** SHA-256 of a file's text with line endings as LF; null when it is missing. */
 const hashOf = (file: string) => (existsSync(file) ? createHash('sha256').update(readFileSync(file, 'utf8').replaceAll('\r\n', '\n')).digest('hex') : null);
 
-/** The workspace's self-description is one this version seeds, in either language, as it was seeded. */
-export function isSeededConstitution(workspace: string): boolean {
-  const hash = hashOf(join(workspace, 'CONSTITUTION.md'));
-  return hash !== null && Object.values(CONSTITUTION_SEEDS).some((name) => hashOf(join(SEED_DIR, name)) === hash);
+/** Each shipped self-description by the SHA-256 of its text; computed on first use. */
+let shipped: Map<string, PersonaId> | null = null;
+
+/**
+ * The persona whose shipped self-description the workspace's is, in any language, exactly; null for one
+ * the person or Coo changed. The self-description 0.1.0 and 0.1.1 seeded counts as Coo's.
+ */
+export function personaOf(workspace: string): PersonaId | null {
+  const hash = hashOf(join(workspace, CONSTITUTION));
+  if (hash === OLD_CONSTITUTION) return 'coo';
+  shipped ??= new Map(PERSONAS.flatMap((id) => LANGUAGES.map((l) => [hashOf(personaFile(id, l))!, id] as const)));
+  return hash === null ? null : shipped.get(hash) ?? null;
+}
+
+/** Puts persona `id` in `language` in place of the workspace's self-description; the bot reads it from its next prefix on. */
+export function applyPersona(workspace: string, id: PersonaId, language: Language): void {
+  copyFileSync(personaFile(id, language), join(workspace, CONSTITUTION));
 }
 
 /**
- * Puts the seed of `language` in place of a self-description still exactly as a version seeded it
- * (this version's in the other language, or an older one); one the person or Coo changed stays.
- * The bot reads the new one from its next session on.
+ * Puts the same persona in `language` in place of a self-description still exactly as a version shipped it;
+ * one the person or Coo changed stays. The bot reads the new one from its next session on.
  */
-export function followLanguage(workspace: string, language: ModelLanguage): void {
-  const file = join(workspace, 'CONSTITUTION.md');
-  const seed = join(SEED_DIR, CONSTITUTION_SEEDS[language]);
-  const hash = hashOf(file);
-  if (hash === null || hash === hashOf(seed)) return;
-  if (hash === OLD_CONSTITUTION || isSeededConstitution(workspace)) copyFileSync(seed, file);
+export function followLanguage(workspace: string, language: Language): void {
+  const id = personaOf(workspace);
+  if (id && hashOf(join(workspace, CONSTITUTION)) !== hashOf(personaFile(id, language))) applyPersona(workspace, id, language);
 }

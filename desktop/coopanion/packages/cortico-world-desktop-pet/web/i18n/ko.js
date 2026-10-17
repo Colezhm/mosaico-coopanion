@@ -16,6 +16,7 @@ export default {
   'heard.done': '인식됨',
   'heard.more': '듣는 중…',
   'heard.listening': '듣는 중…',
+  'heard.cancel': '취소',
 
   // the status bubble: added when the same kind of thing was done several times
   'status.more': ' 외 {others}개',

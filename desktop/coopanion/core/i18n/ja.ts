@@ -13,6 +13,7 @@ const ja: Translation<CoreText> = {
 
   failure: {
     text: (n: number, status: number, reason: string) => `モデルへのリクエストが ${n} 回続けて失敗しました。エラー${status ? ` ${status}` : ''}：${reason}。設定の「スタート」ページでモデル名と API Key を確認してください。接続のテストもそこでできます。`,
+    reasoningReplay: (n: number) => `モデルへのリクエストが ${n} 回続けて失敗しました。このサービスはツールを呼び出すたびに思考内容を送り返すよう求めていますが、Coopanion ではこのサービスに対してそれがオフになっています。開発者に報告してください：https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: '設定を開く',
     ok: 'OK',
   },
@@ -52,6 +53,16 @@ const ja: Translation<CoreText> = {
     gotName: (name: string) => `${name}、覚えました！`,
     askSource: 'Coo のことはどこで知りましたか？',
     sourceThanks: 'なるほど、そうなんですね。クー…',
+    askPersona: '私、どんな子だったらいいと思いますか…',
+    personas: {
+      coo: { label: '小さくて好奇心旺盛', line: 'これは何ですか？ちょっとのぞいてみますね。クー…' },
+      grail: { label: '甘えんぼうで欲ばり', line: '何を食べているんですか？私にもひと口ください。クー…' },
+      forge: { label: '頼もしくて手際がいい', line: '何をしますか？任せてください、すぐ終わります。クー。' },
+      heart: { label: '元気でいつもそばに', line: '来ました！今日もずっとそばにいますね。クー！' },
+      winter: { label: '静かで無口', line: '……はい。クー。' },
+      whale: { label: 'DeepSeekちゃん', line: 'おかえりなさい！これは何ですか？見せてください。クー…' },
+    },
+    dressHint: { text: '配色は 着せ替え で変更できます', dress: '着せ替え' },
     askRoam: 'ふだんは静かにしているのと、元気に動き回るの、どちらがいいですか？クリックすると、どうするか見せますね。',
     roam: {
       off: { label: 'じっとする', level: '低', line: 'じゃあ、じっと立っていて、呼ばれたら動きますね。' },

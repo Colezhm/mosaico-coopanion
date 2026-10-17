@@ -16,11 +16,11 @@
 
 | 补丁 | 内容 | 是否打算提给上游 |
 |---|---|---|
-| `0001-desktop-pet-body-relay` | 桌宠 World 的身体转接接口（`src/relay.ts`）及测试、文档 | 是，草稿见 `PR-body-relay.md` |
+| `0001-desktop-pet-body-relay` | 桌宠 World 的身体转接接口（`src/relay.ts`，转接加的工具与事件经 `relayDescribe` 进 World 自描述）及测试、文档 | 是，草稿见 `PR-body-relay.md` |
 | `0002-mosaico-app` | 应用接上 Mosaico、人格按形象切换；应用名、appId、版本、发布地址改为 Mosaico 分支；遥测默认关闭；打包带上 Mosaico 包和锁定的运行时依赖 | 否，Mosaico 分支自己的 |
-| `0003-desktop-pet-talk-key-keeps-mic-closed` | 说话键读不到时不再改为一直收音，收音方式不变、不送去识别 | 已提交 [Pal-AI-Lab/Coopanion#182](https://github.com/Pal-AI-Lab/Coopanion/pull/182)（`PR-talk-key.md` 为当时的草稿） |
 
-上游合并了 0001 和 0003 之后，`patches/` 只剩 0002（约 40 行，品牌与装配）。
+原补丁 0003（说话键读不到时不再改为一直收音）已由上游合并为 [Pal-AI-Lab/Coopanion#182](https://github.com/Pal-AI-Lab/Coopanion/pull/182)，
+自 v0.2.1 起随上游发布，升级到 v0.2.3 时删除（`PR-talk-key.md` 为当时的草稿）。上游再合并 0001 之后，`patches/` 只剩 0002（品牌与装配）。
 
 ## 升级到上游新版本
 

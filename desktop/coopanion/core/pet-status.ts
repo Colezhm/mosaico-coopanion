@@ -1,6 +1,6 @@
 /**
  * What the pet's status bubble says for the tools this app's bot has: the Persona's memory tools, computer use, the alarms
- * (alarms.ts) and the terminal, in the app language (`core/i18n`). Only the arguments named here reach the page;
+ * (alarms.ts) and the console World, in the app language (`core/i18n`). Only the arguments named here reach the page;
  * typed text, notes, window titles and coordinates never do. Wording that depends on an argument waits for the call
  * to be written out, so the bubble does not say something the call turns out not to do. A detail (a file name, a
  * pattern) is cut to 20 characters as seen for Chinese, Japanese and Korean, twice that for other languages.
@@ -67,7 +67,7 @@ export function petToolDescriber(language: () => Language): DescribeTool {
       }
       case 'alarm_list': return show('alarm', s.alarmList);
       case 'alarm_cancel': return show('alarm', s.alarmCancel);
-      case 'terminal_send': case 'end_turn': return null;
+      case 'console_send': case 'end_turn': return null;
       default: return undefined;
     }
   };

@@ -13,8 +13,8 @@ import { S as ru, STEP as ruStep } from './strings.ru.ts';
 const zh = {
   nav: '对话',
   title: '对话',
-  trace: '终端',
-  traceHint: '高级模式的「终端」页：上下文、工具调用与原始事件',
+  trace: '控制台',
+  traceHint: '高级模式的「控制台」页：上下文、工具调用与原始事件',
   placeholder: (bot: string) => `给 ${bot} 发消息…`,
   connecting: '正在连接…',
   empty: (bot: string) => `还没有和 ${bot} 说过话。`,
@@ -58,8 +58,8 @@ const zh = {
 export const en: typeof zh = {
   nav: 'Chat',
   title: 'Chat',
-  trace: 'Terminal',
-  traceHint: 'The Terminal page of advanced mode: context, tool calls and raw events',
+  trace: 'Console',
+  traceHint: 'The Console page of advanced mode: context, tool calls and raw events',
   placeholder: (bot: string) => `Message ${bot}…`,
   connecting: 'Connecting…',
   empty: (bot: string) => `Nothing said to ${bot} yet.`,
@@ -115,7 +115,7 @@ export const stepEn: typeof stepZh = {
   pet_walk_to: 'Walk', pet_act: 'Move about', pet_set: 'Adjust itself', pet_quiet: 'Keep quiet',
 };
 
-/** What the person reads for a tool's name. Tools not named here (the Persona's notes and turn control, other Worlds') stay on the Terminal page of the advanced mode. */
+/** What the person reads for a tool's name. Tools not named here (the Persona's notes and turn control, other Worlds') stay on the Console page of the advanced mode. */
 export const STEP: Readonly<Record<string, string>> = pick({
   zh: stepZh, en: stepEn, 'zh-Hant': zhHantStep, ja: jaStep, ko: koStep, fr: frStep, de: deStep, 'es-419': es419Step, 'pt-BR': ptBRStep, it: itStep, ru: ruStep,
 });

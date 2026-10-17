@@ -10,7 +10,7 @@ FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸和情�
 完整初装镜像会覆盖全部 16 MiB NOR，包含旧设置、配对与缓存；保留 Vibe Mode 布局和功能，
 不代表保留原数据。实际覆盖需要针对具体镜像再次确认。
 
-- 桌面端：`desktop/coopanion`，即上游 Coopanion v0.1.26（AGPL-3.0-or-later），加上 [desktop/upstream](desktop/upstream/README.md) 说明的补丁与 Mosaico 包。
+- 桌面端：`desktop/coopanion`，即上游 Coopanion v0.2.3（AGPL-3.0-or-later），加上 [desktop/upstream](desktop/upstream/README.md) 说明的补丁与 Mosaico 包。
 - 板端和共享模拟器：`projects/coopanion`，固定 ESP-IDF、ESP32-S31、GSP 1.5.1。
 - 构建、私有配对、双端预览和整包导出：[使用说明](docs/coopanion-implementation.md)。
 - 原工作区文档：[中文](README_CN.upstream.md) / [English](README.upstream.md)。

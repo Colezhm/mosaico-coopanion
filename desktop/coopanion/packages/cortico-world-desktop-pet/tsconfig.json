@@ -1,5 +1,5 @@
 {
-  // 一份配置同时检查 Node 侧(src/、tests/、scripts/)与控制台面板(src/console/),
+  // 一份配置同时检查 Node 侧(src/、tests/、scripts/)与 WebUI 面板(src/webui/),
   // 所以 lib 里 DOM 与 ES2022 都在。web/ 是原样下发的浏览器 JS,不在这里检查。
   "compilerOptions": {
     "target": "ES2022",

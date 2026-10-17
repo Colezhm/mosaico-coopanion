@@ -34,7 +34,7 @@ describe('the status bubble for each tool', () => {
     ['alarm_list', {}, { kind: 'alarm', text: T.alarmList }],
     ['alarm_cancel', { id: 'private' }, { kind: 'alarm', text: T.alarmCancel }],
     ['private_extension', { path: 'private', text: 'private' }, undefined],
-    ['terminal_send', { text: 'private' }, null],
+    ['console_send', { text: 'private' }, null],
     ['end_turn', {}, null],
   ] as const)('%s exposes only its public activity', (name, args, expected) => {
     expect(describePetTool(name, args, true)).toEqual(expected);

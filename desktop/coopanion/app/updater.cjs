@@ -11,7 +11,7 @@
  */
 const { app } = require('electron');
 const { createWriteStream, mkdirSync } = require('node:fs');
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 
 const RELEASES_URL = 'https://github.com/Colezhm/mosaico-coopanion/releases/latest';
 /** Releases come out at most a few times a day; a run left open for days still hears of them the same day. */
@@ -37,6 +37,9 @@ function startUpdater({ logDir, tell }) {
   autoUpdater.autoDownload = true;
   // the app's own quit stops the Core first and then exits, which skips the quit event the updater waits for: installOnQuit does it
   autoUpdater.autoInstallOnAppQuit = false;
+  // the installer takes the directory registered for the app, or its default one when none is: an update goes
+  // into the directory of the program that is running, so data beside it stays with it
+  if (process.platform === 'win32') autoUpdater.installDirectory = dirname(process.execPath);
 
   let downloading = null;
   let ready = null;

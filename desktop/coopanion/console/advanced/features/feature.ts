@@ -4,7 +4,7 @@
  * 两种上下文共享挂载生命周期：mount 创建 Lifecycle，离开时 abort 并 dispose。
  */
 
-import type { ConsoleUi, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi, Disposable } from 'cortico/web/shared/client-panel.ts';
 import type { Lifecycle } from '../../base/lifecycle.ts';
 import type { Route, Router } from '../../base/router.ts';
 import type { ConsolePageHost } from '../console-pages/host.ts';
@@ -21,7 +21,7 @@ export interface FeatureContext {
   /** 等价于 `lifecycle.signal`，因为绝大多数用法只要这一个。 */
   readonly signal: AbortSignal;
   /** UI 原语，已绑本次挂载的 signal。 */
-  readonly ui: ConsoleUi;
+  readonly ui: WebUi;
   /** 路由。跳转与离开拦截都经它，feature 不碰 `location.hash`。 */
   readonly router: Router;
   /** 进入本页时的路由（子页签靠 `segments[1]` 之类区分）。 */

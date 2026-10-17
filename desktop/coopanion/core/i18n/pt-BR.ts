@@ -13,6 +13,7 @@ const ptBR: Translation<CoreText> = {
 
   failure: {
     text: (n: number, status: number, reason: string) => `Minhas últimas ${n} solicitações ao modelo falharam. Erro${status ? ` ${status}` : ''}: ${reason}. Confira o nome do modelo e a API Key na página Início das configurações, onde você pode testar a conexão.`,
+    reasoningReplay: (n: number) => `Minhas últimas ${n} solicitações ao modelo falharam: este serviço exige que o raciocínio seja reenviado antes de cada chamada de ferramenta, e o Coopanion está com isso desativado para ele. Por favor, avise os desenvolvedores: https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: 'Abrir configurações',
     ok: 'OK',
   },
@@ -52,6 +53,16 @@ const ptBR: Translation<CoreText> = {
     gotName: (name: string) => `${name}, anotado!`,
     askSource: 'Onde você ouviu falar de mim?',
     sourceThanks: 'Ah, entendi. Coo...',
+    askPersona: 'O que você acha que eu deveria ser...',
+    personas: {
+      coo: { label: 'Pequeno e curioso', line: 'O que é isso? Deixa eu dar uma espiada. Coo...' },
+      grail: { label: 'Grudento e guloso', line: 'O que você tá comendo? Me dá um pedacinho. Coo...' },
+      forge: { label: 'Confiável e eficiente', line: 'O que precisa fazer? Deixa comigo, é rapidinho. Coo.' },
+      heart: { label: 'Animado e companheiro', line: 'Cheguei! Vou te fazer companhia o dia todo. Coo!' },
+      winter: { label: 'Quieto e calado', line: '...Hm. Coo.' },
+      whale: { label: 'DeepSeek Chan', line: 'Que bom que você voltou! O que é isso? Deixa eu ver. Coo...' },
+    },
+    dressHint: { text: 'As cores podem ser trocadas no Guarda-roupa', dress: 'Guarda-roupa' },
     askRoam: 'Na maior parte do tempo eu fico na minha ou corro pra todo lado? Clique em uma opção para ver o que eu faria.',
     roam: {
       off: { label: 'Sem se mexer', level: 'Baixo', line: 'Então eu fico no meu canto e me mexo quando você me chamar.' },

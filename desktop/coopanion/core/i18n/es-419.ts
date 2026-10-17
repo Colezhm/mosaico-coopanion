@@ -13,6 +13,7 @@ const es419: Translation<CoreText> = {
 
   failure: {
     text: (n: number, status: number, reason: string) => `Mis últimas ${n} solicitudes al modelo fallaron. Error${status ? ` ${status}` : ''}: ${reason}. Revisa el nombre del modelo y la API Key en la página Inicio de la configuración, donde puedes probar la conexión.`,
+    reasoningReplay: (n: number) => `Mis últimas ${n} solicitudes al modelo fallaron: este servicio exige que el razonamiento se reenvíe antes de cada llamada a una herramienta, y Coopanion lo tiene desactivado para él. Por favor, repórtalo a los desarrolladores: https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: 'Abrir configuración',
     ok: 'De acuerdo',
   },
@@ -52,6 +53,16 @@ const es419: Translation<CoreText> = {
     gotName: (name: string) => `¡${name}, anotado!`,
     askSource: '¿Dónde supiste de mí?',
     sourceThanks: 'Ah, ya veo. Coo...',
+    askPersona: '¿Cómo crees que debería ser...?',
+    personas: {
+      coo: { label: 'Pequeño y curioso', line: '¿Qué es eso? Déjame echar un vistazo. Coo...' },
+      grail: { label: 'Mimoso y glotón', line: '¿Qué estás comiendo? Dame un bocadito. Coo...' },
+      forge: { label: 'Confiable y capaz', line: '¿Qué hay que hacer? Déjamelo a mí, no tardo. Coo.' },
+      heart: { label: 'Alegre y compañero', line: '¡Ya llegué! Hoy te acompaño todo el día. Coo!' },
+      winter: { label: 'Tranquilo y callado', line: '...Mm. Coo.' },
+      whale: { label: 'DeepSeek Chan', line: '¡Qué bueno que volviste! ¿Qué es eso? Déjame ver. Coo...' },
+    },
+    dressHint: { text: 'Los colores se cambian en Vestuario', dress: 'Vestuario' },
     askRoam: '¿La mayor parte del tiempo me quedo en calma o me muevo mucho? Haz clic en una opción para ver qué haría.',
     roam: {
       off: { label: 'Sin moverse', level: 'Bajo', line: 'Entonces me quedo en mi lugar y me muevo cuando me llames.' },

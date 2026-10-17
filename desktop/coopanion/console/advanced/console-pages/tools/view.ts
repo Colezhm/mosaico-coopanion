@@ -3,7 +3,7 @@
  * 按后端 owner 分组并保留装配顺序，前端不维护具体 World 名单；复制由 ui.copyButton 处理。
  */
 
-import type { ConsoleUi } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi } from 'cortico/web/shared/client-panel.ts';
 import type { ToolSchemaDoc } from '../../features/live/protocol.ts';
 import { S } from './strings.ts';
 
@@ -88,7 +88,7 @@ interface CardEntry {
   haystack: string;
 }
 
-function toolSchemaCard(ui: ConsoleUi, schema: ToolSchemaDoc): CardEntry {
+function toolSchemaCard(ui: WebUi, schema: ToolSchemaDoc): CardEntry {
   const card = ui.h('details', 'tool-schema-card');
   const summary = ui.h('summary', 'tool-schema-summary');
   const rows = schemaParameterRows(schema.parameters);
@@ -153,7 +153,7 @@ export interface ToolsView {
   note(text: string): void;
 }
 
-export function createToolsView(ui: ConsoleUi): ToolsView {
+export function createToolsView(ui: WebUi): ToolsView {
   const sheet = ui.sheet({
     title: S.toolsTitle,
     en: 'tool schemas',

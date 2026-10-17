@@ -3,7 +3,7 @@
  * 组合、取值、配色、格式化和桶标签均为独立导出的纯函数；renderChart 仅操作自身创建的 SVG。
  */
 
-import type { ConsoleUi } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi } from 'cortico/web/shared/client-panel.ts';
 import { consoleFormat } from '../../base/ui/format.ts';
 import { esc } from '../../base/ui/dom.ts';
 import { clampNumber, hexToHsl, hslCss } from '../../base/theme/palette.ts';
@@ -312,7 +312,7 @@ function mkSvgEl(
 
 export interface ChartDeps {
   doc: Document;
-  ui: ConsoleUi;
+  ui: WebUi;
   /** 图画在这里。宽度取它的 `clientWidth`。 */
   box: HTMLElement;
   /** 图例容器；不拆分时清空后留白。 */

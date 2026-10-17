@@ -16,6 +16,7 @@ export default {
   'heard.done': 'Reconnu',
   'heard.more': "J'écoute…",
   'heard.listening': "J'écoute…",
+  'heard.cancel': 'Annuler',
 
   // the status bubble
   'status.more': ' et {others} de plus',

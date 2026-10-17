@@ -51,7 +51,7 @@ async function mounted(patch?: (c: DesktopPetConfigSection) => void, extra?: Par
 
 describe('definition', () => {
   it('passes the extension dry mount', async () => {
-    const report = await dryMountWorld(DESKTOP_PET as never, { scratchDir: mkdtempSync(join(tmpdir(), 'pet-dry-')), packageDir: fileURLToPath(new URL('../', import.meta.url)), hasConsoleClient: true });
+    const report = await dryMountWorld(DESKTOP_PET as never, { scratchDir: mkdtempSync(join(tmpdir(), 'pet-dry-')), packageDir: fileURLToPath(new URL('../', import.meta.url)), hasWebUiClient: true });
     expect(report.failures).toEqual([]);
     expect(report.warnings).toEqual([]);
   });
@@ -62,7 +62,7 @@ describe('English model text', () => {
 
   it('gives the bot no Chinese of its own: environment prompt, tool declarations, events', async () => {
     const { world, host } = await mounted((c) => { c.user = 'Sam'; }, { modelLanguage: () => 'en', replyLanguage: () => 'Japanese', controls: { openChat: () => {} } });
-    const doc = world.console().promptDocs![0]!;
+    const doc = world.webUi().promptDocs![0]!;
     const prompt = renderTemplate(readFileSync(doc.path, 'utf8'), await world.envPromptVars());
     expect(prompt).not.toMatch(HAN);
     // every placeholder of the English template is one the World fills
@@ -134,7 +134,7 @@ describe('with a pet page', () => {
     expect(ask.options).toEqual(['茶', '咖啡', '水']);
     page.send({ t: 'answer', askId: ask.id, index: 1 });
     await expect.poll(() => host.events.length).toBe(1);
-    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.answer', source: 'desktop-pet', text: '[回答] 伙伴回答「喝什么?」:选了第 2 项「咖啡」' });
+    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.answer', source: 'desktop-pet', text: '[answer] 伙伴回答「喝什么?」:选了第 2 项「咖啡」' });
     expect(host.pushOpts[0]).toEqual({ trigger: 'flush' });
   });
 
@@ -150,7 +150,7 @@ describe('with a pet page', () => {
     const a2 = await page.next((m) => m.t === 'ask');
     page.send({ t: 'answer', askId: a2.id, dismissed: true });
     await expect.poll(() => host.events.length).toBe(2);
-    expect(host.events.map((e) => e.text)).toEqual(['[回答] 伙伴回答「A?」:自己写了:「都不要」', '[回答] 伙伴关掉了提问「B?」,没有作答。']);
+    expect(host.events.map((e) => e.text)).toEqual(['[answer] 伙伴回答「A?」:自己写了:「都不要」', '[answer] 伙伴关掉了提问「B?」,没有作答。']);
   });
 
   it('an answer to a replaced question is ignored', async () => {
@@ -237,7 +237,7 @@ describe('with a pet page', () => {
     expect(receipt).toContain('| beep | 哔哔 | 哔一声 |');
     page.send({ t: 'figure', id: 'robot', ok: true, words: ['sit'] });
     await expect.poll(() => host.events.length).toBe(1);
-    expect(host.events[0].text).toMatch(/\[形象\] 词表变了。这些词用不了了:beep\(哔哔\)。$/);
+    expect(host.events[0].text).toMatch(/\[figure\] 词表变了。这些词用不了了:beep\(哔哔\)。$/);
     expect(await tool(world, 'pet_act').handler({ actions: ['哔哔'] }, ctx)).toMatchObject({ failed: true });
   });
 
@@ -247,7 +247,7 @@ describe('with a pet page', () => {
     cleanup.push(() => page.close());
     for (let i = 0; i < 3; i++) page.send({ t: 'touch', kind: 'poke' });
     await expect.poll(() => host.events.length, { timeout: 6000 }).toBe(1);
-    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.touch', text: '[互动] 伙伴戳了你 3 下' });
+    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.touch', text: '[touch] 伙伴戳了你 3 下' });
     expect(host.pushOpts[0]).toEqual({ trigger: 'debounce' });
   });
 
@@ -276,7 +276,7 @@ describe('with a pet page', () => {
     page.send({ t: 'touch', kind: 'throw', x: 300 });
     page.send({ t: 'touch', kind: 'crash' });
     await expect.poll(() => host.events.length, { timeout: 6000 }).toBe(1);
-    expect(host.events[0].text).toBe('[互动] 伙伴把你拎起来甩了出去,你重重落地,摔晕了一会儿');
+    expect(host.events[0].text).toBe('[touch] 伙伴把你拎起来甩了出去,你重重落地,摔晕了一会儿');
   });
 
   it('sends no touch events when touch reporting is off', async () => {
@@ -365,7 +365,7 @@ describe('with a pet page', () => {
     await tab.next((m) => m.t === 'watching');
     tab.send({ t: 'text', text: 'hi' });
     await expect.poll(() => host.events.length).toBe(1);
-    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.message', text: '[打字] 伙伴:hi' });
+    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.message', text: '[typed] 伙伴:hi' });
     const theme = DESKTOP_PET_DEFAULTS.theme === 'dark' ? 'light' : 'dark';
     tab.send({ t: 'prefs', theme });
     expect((await win.next((m) => m.t === 'prefs')).theme).toBe(theme);
@@ -452,10 +452,10 @@ describe('with a pet page', () => {
   it('the pet panel runs the app\'s introduction when the app lends one', async () => {
     let runs = 0;
     const { world } = await mounted(undefined, { controls: { guide: () => { runs++; } } });
-    await world.console().invoke!('pet', 'guide', []);
+    await world.webUi().invoke!('pet', 'guide', []);
     expect(runs).toBe(1);
     const bare = await mounted();
-    await expect(bare.world.console().invoke!('pet', 'guide', [])).rejects.toThrow('没有引导');
+    await expect(bare.world.webUi().invoke!('pet', 'guide', [])).rejects.toThrow('没有引导');
   });
 
   it('the menu header carries the bot and its run controls; clicks reach them', async () => {
@@ -528,7 +528,7 @@ function chatSocket(world: DesktopPetWorld) {
     onMessage: (cb: (text: string) => void) => { receive = cb; },
     onClose: () => {},
   };
-  world.console().stream!('chat', socket);
+  world.webUi().stream!('chat', socket);
   return { frames, send: (m: Record<string, unknown>) => receive(JSON.stringify(m)), last: (t: string) => frames.filter((f) => f.t === t).at(-1) };
 }
 
@@ -542,7 +542,7 @@ describe('chat page', () => {
     chat.send({ t: 'send', id: 1, text: '帮我看看这个报错' });
     await expect.poll(() => chat.last('sent')).toMatchObject({ id: 1 });
     const sent = host.events.at(-1)!;
-    expect(sent).toMatchObject({ type: 'desktop-pet.message', text: '[打字] 伙伴:帮我看看这个报错', meta: { via: 'chat' } });
+    expect(sent).toMatchObject({ type: 'desktop-pet.message', text: '[typed] 伙伴:帮我看看这个报错', meta: { via: 'chat' } });
     expect(host.pushOpts.at(-1)).toEqual({ trigger: 'preempt' });
     expect(chat.last('item')).toMatchObject({ pending: true, item: { kind: 'user', cursor: sent.cursor } });
     world.onEventsSettled([sent], 'delivered');

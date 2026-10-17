@@ -8,7 +8,7 @@ import {
   type ConsolePageManifest,
   type ConsolePanelManifest,
 } from '../lib/web/shared/console-protocol.ts';
-import type { ConsoleMemo, ConsolePanel, ConsolePanelContext, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiMemo, WebUiPanel, WebUiPanelContext, Disposable } from 'cortico/web/shared/client-panel.ts';
 import { get, post } from '../../base/api.ts';
 import { Lifecycle } from '../../base/lifecycle.ts';
 import type { Router } from '../../base/router.ts';
@@ -56,7 +56,7 @@ export interface ConsolePageHostDeps {
   builtins: BuiltinPanels;
   router: Router;
   fetchManifest(): Promise<ConsoleManifest>;
-  memo: ConsoleMemo;
+  memo: WebUiMemo;
   createSocket(url: string): SocketLike;
   wsUrl(path: string): string;
   onError(err: unknown): void;
@@ -123,7 +123,7 @@ export class ConsolePageHost {
 
   /** Mount one of a page's panels inside the connection editor; `adapt` stages the panel's configuration edits. */
   async mountConnection(pageId: string, panelId: string, root: HTMLElement, scope: Readonly<Record<string, string>>,
-    adapt: (context: ConsolePanelContext) => ConsolePanelContext): Promise<Disposable> {
+    adapt: (context: WebUiPanelContext) => WebUiPanelContext): Promise<Disposable> {
     const lifecycle = new Lifecycle(this.deps.onError);
     const page = this.find(pageId);
     const panel = asArray(page?.panels).find(candidate => candidate.id === panelId);
@@ -376,7 +376,7 @@ export class ConsolePageHost {
    *
    * 内置面板整条路不碰 loader,所以一页的面板全是内置时,它没有浏览器产物也正常。
    */
-  private builtinPanel(name: string): ConsolePanel {
+  private builtinPanel(name: string): WebUiPanel {
     const builtins = this.deps.builtins;
     const impl = builtins[name];
     if (!impl) throw new Error(S.noBuiltinPanel(name, Object.keys(builtins).join(' / ') || S.none));

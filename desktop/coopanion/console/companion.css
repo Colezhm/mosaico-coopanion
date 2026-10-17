@@ -185,7 +185,7 @@ input, textarea, [contenteditable]:not([contenteditable="false"]), [contentedita
 .companion-voicebox .sheet:first-of-type > h3 { display: none; }
 .companion-voicebox .sheet:first-of-type { padding-top: 0; }
 
-/* 终端: the heading as on 对话; the live band and the timeline keep the content width */
+/* 控制台: the heading as on 对话; the live band and the timeline keep the content width */
 .featureslot-live { scrollbar-gutter: auto; }
 .liveview > .featureintro {
   flex: none; position: static; overflow: hidden; scrollbar-gutter: stable both-edges;

@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'Navigation de la console',
+  navAria: 'Navigation des paramètres',
   groupWorlds: 'World',
   moduleInstancesAria: 'Instances de World',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'Arrêter',
   finishing: 'Arrêt en cours…',
   shutdownTitle: 'Arrêter',
-  shutdownBody: 'Le processus va se terminer et la console sera déconnectée.',
+  shutdownBody: 'Le processus va se terminer et la connexion sera coupée.',
   confirmShutdownTitle: '⚠ Arrêter',
   confirmShutdownAgainTitle: "⚠⚠ Confirmer l'arrêt ?",
   confirmShutdownAgainBody: "Arrêter l'exécution et quitter le processus ?",
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: "Étapes d'arrêt exécutées.",
   noReceipt: (msg: string) =>
     `Aucun résultat d'arrêt reçu (${msg}) ; le processus s'est peut-être terminé.`,
-  docTitle: (name: string) => `Console · ${name}`,
+  docTitle: (name: string) => `Paramètres · ${name}`,
   renameTitle: 'Cliquer pour renommer',
   renameSaved: 'Nom affiché enregistré',
   renameFailed: (msg: string) => `Nom affiché non enregistré : ${msg}`,

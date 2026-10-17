@@ -25,8 +25,8 @@ export const S: Partial<typeof en> = {
   runtimeVersion: (version: string) => `O processo ainda usa ${version}`,
 
   providerManagement: 'As extensões de provedor atendem aos Bots que usam este ambiente compartilhado.',
-  idleManagement: 'Ative ou desative Worlds na página de World. Extensões integradas não podem ser excluídas.',
-  createBody: 'Abra um terminal no projeto Cortico no host dele, execute pnpm start --new e selecione este modelo de Bot para criar uma nova instância.',
+  idleManagement: 'Carregue ou desative Worlds na página Visão geral dos Worlds, à esquerda. Extensões integradas não podem ser excluídas.',
+  createBody: 'Abra uma linha de comando no projeto Cortico no host dele, execute pnpm start --new e selecione este modelo de Bot para criar uma nova instância.',
 
   restartConfirmTitle: 'Reiniciar o processo?',
   restartNoLoopTitle: 'Inicialização manual necessária',
@@ -38,12 +38,12 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Etapas de desligamento executadas.',
   reloadWait: 'Aguardando um novo processo deste Bot ficar pronto…',
   otherBot: 'Outro Bot está usando esta porta. A recuperação foi interrompida.',
-  restartManual: 'O processo foi encerrado. Inicie-o manualmente no terminal; esta página vai aguardar até que esteja pronto.',
+  restartManual: 'O processo foi encerrado. Inicie-o manualmente pela linha de comando; esta página vai aguardar até que esteja pronto.',
 
   updateVersions: (current: string, latest: string) => `${current} → ${latest}`,
   updateAction: 'Atualizar',
   updateCheckFailed: (detail: string) => `Falha ao verificar atualizações: ${detail}`,
-  noteConsoleMissing: 'Pacote do navegador ausente. Compile no diretório da extensão e reinicie o processo.',
+  noteWebUiMissing: 'Pacote do navegador ausente. Compile no diretório da extensão e reinicie o processo.',
   noExtensions: 'Nenhuma extensão instalada ainda',
   listLoadFailed: (msg: string) => `Falha ao carregar a lista de extensões: ${msg}`,
 
@@ -52,7 +52,7 @@ export const S: Partial<typeof en> = {
   removeInUse: 'Em uso por este Bot. Desative-a antes de excluir.',
   removeBody: 'Remove este pacote do diretório compartilhado de extensões; tem efeito após reiniciar o processo. Outros Bots que o usam são afetados. A Memory, a configuração salva e os diretórios de código-fonte locais são mantidos.',
   builtin: 'Integrada',
-  builtinNote: 'Incluída no Cortico; não pode ser excluída separadamente.',
+  builtinNote: 'Incluída no Coopanion; não pode ser excluída separadamente.',
 
   installedAction: 'Instalação',
   updatedAction: 'Atualização',
@@ -65,6 +65,8 @@ export const S: Partial<typeof en> = {
   filterPlaceholder: 'Filtrar: nome, descrição, palavras-chave',
   installedFilter: 'Filtrar: nome, tipo, descrição',
   sortLabel: {
+    certified: "Certificados primeiro",
+    rating: 'Avaliação',
     downloads: 'Downloads (30 dias)',
     date: 'Publicadas recentemente',
     name: 'Nome',
@@ -78,7 +80,11 @@ export const S: Partial<typeof en> = {
   pageOf: (page: number, pages: number) => `${page} / ${pages}`,
   searching: 'Carregando…',
   noPackages: 'Ainda não há pacotes deste tipo no npm',
-  noPackagesAt: (registry: string) => `Não há pacotes deste tipo no registro npm ${registry}. Para usar outro registro, adicione uma linha registry=<url> ao .npmrc do local de instalação e reinicie o processo.`,
+  noPackagesAt: (registry: string) => `Não há pacotes deste tipo no registro npm ${registry}.`,
+  registryLabel: 'Registro npm',
+  registrySave: 'Salvar',
+  registryHelp: 'Gravado no .npmrc do local de instalação; a verificação de atualizações, a busca e a instalação passam a usá-lo na hora. Salvar vazio restaura o registro padrão.',
+  registrySaved: (url: string) => `Salvo. Registro em uso: ${url}`,
   noHits: 'Nenhum pacote correspondente',
   searchFailed: (msg: string) => `Falha ao carregar: ${msg}`,
   partial: 'Os resultados do npm estão incompletos. Use a instalação manual para um nome de pacote exato.',
@@ -135,4 +141,5 @@ export const S: Partial<typeof en> = {
   labelled: (label: string, value: string) => `${label}: ${value}`,
   metaSeparator: ' · ',
   listSeparator: ', ',
+  feedbackTags: 'Relatar tags',
 };

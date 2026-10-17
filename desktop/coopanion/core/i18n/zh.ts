@@ -16,6 +16,8 @@ export default {
   /** 连续几次请求模型失败后,桌宠气泡里的说明 */
   failure: {
     text: (n: number, status: number, reason: string) => `我连着 ${n} 次没能从模型那里拿到回复。错误${status ? ` ${status}` : ''}：${reason}。请在设置的「开始」页检查模型名和 API Key，那里可以测试连接。`,
+    /** 服务商预设关掉了 `sendSyntheticReasoning`,端点却要它而回 400 时的说明 */
+    reasoningReplay: (n: number) => `我连着 ${n} 次没能从模型那里拿到回复：这家服务商要求每次调用工具前都回传思考内容，Coopanion 对它关掉了这一项。请把这件事反馈给开发者：https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: '打开设置',
     ok: '知道了',
   },
@@ -63,6 +65,18 @@ export default {
     gotName: (name: string) => `${name}，记住啦！`,
     askSource: '你是从哪里认识我的？',
     sourceThanks: '原来是这样，库...',
+    askPersona: '你觉得我应该是...',
+    /** 人设卡片:卡片上的字,点到时 Coo 说的话 */
+    personas: {
+      coo: { label: '小小的、好奇的', line: '这是什么？我凑过去看一眼，库...' },
+      grail: { label: '黏人的、贪心的', line: '你在吃什么呀？也分我一口嘛，库...' },
+      forge: { label: '靠谱的、干练的', line: '要做什么？交给我，一会儿就好，库。' },
+      heart: { label: '活泼的、陪伴的', line: '我来啦！今天也一直陪着你，库！' },
+      winter: { label: '安静的、沉默的', line: '……嗯，库。' },
+      whale: { label: 'DeepSeek 大肥鱼', line: '欢迎回来！这是什么？让我看看，库...' },
+    },
+    /** 确认按钮旁的一行;`dress` 是设置窗口里装扮页的名字,画在图标后 */
+    dressHint: { text: '配色可以在 装扮 中替换', dress: '装扮' },
     askRoam: '平时我该安静一点，还是活泼一点？点一下，看看我会怎样。',
     /** 三张卡片:名字、活跃程度、点到时 Coo 说的话 */
     roam: {

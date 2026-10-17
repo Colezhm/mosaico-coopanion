@@ -25,8 +25,8 @@ export const S: Partial<typeof en> = {
   runtimeVersion: (version: string) => `프로세스는 아직 ${version} 사용 중`,
 
   providerManagement: '공급자 확장은 이 공유 환경을 쓰는 봇에 제공됩니다.',
-  idleManagement: 'World는 World 페이지에서 활성화하거나 비활성화하세요. 기본 제공 확장은 삭제할 수 없습니다.',
-  createBody: 'Cortico를 실행하는 컴퓨터에서 프로젝트 터미널을 열고 pnpm start --new를 실행한 뒤, 이 봇 템플릿을 선택해 새 인스턴스를 만드세요.',
+  idleManagement: '왼쪽 World 개요 페이지에서 World를 로드하거나 비활성화하세요. 기본 제공 확장은 삭제할 수 없습니다.',
+  createBody: 'Cortico를 실행하는 컴퓨터에서 프로젝트에서 명령줄을 열고 pnpm start --new를 실행한 뒤, 이 봇 템플릿을 선택해 새 인스턴스를 만드세요.',
 
   restartConfirmTitle: '프로세스를 재시작하시겠습니까?',
   restartNoLoopTitle: '수동 시작 필요',
@@ -38,12 +38,12 @@ export const S: Partial<typeof en> = {
   resultDefault: '종료 단계를 실행했습니다.',
   reloadWait: '이 봇의 새 프로세스가 준비되기를 기다리는 중…',
   otherBot: '다른 봇이 이 포트를 사용 중이어서 복구를 중단했습니다.',
-  restartManual: '프로세스가 종료되었습니다. 터미널에서 직접 시작하세요. 이 페이지는 준비될 때까지 기다립니다.',
+  restartManual: '프로세스가 종료되었습니다. 명령줄에서 직접 시작하세요. 이 페이지는 준비될 때까지 기다립니다.',
 
   updateVersions: (current: string, latest: string) => `${current} → ${latest}`,
   updateAction: '업데이트',
   updateCheckFailed: (detail: string) => `업데이트 확인 실패: ${detail}`,
-  noteConsoleMissing: '브라우저 빌드 결과물이 없습니다. 확장 디렉터리에서 빌드한 뒤 프로세스를 재시작하세요.',
+  noteWebUiMissing: '브라우저 빌드 결과물이 없습니다. 확장 디렉터리에서 빌드한 뒤 프로세스를 재시작하세요.',
   noExtensions: '아직 설치된 확장이 없습니다',
   listLoadFailed: (msg: string) => `확장 목록을 불러오지 못했습니다: ${msg}`,
 
@@ -52,7 +52,7 @@ export const S: Partial<typeof en> = {
   removeInUse: '이 봇에서 사용 중입니다. 비활성화한 뒤 삭제하세요.',
   removeBody: '공유 확장 디렉터리에서 이 패키지를 제거하며, 프로세스를 재시작한 뒤 적용됩니다. 이 패키지를 쓰는 다른 봇도 영향을 받습니다. Memory, 저장된 설정, 로컬 확장 소스는 삭제되지 않습니다.',
   builtin: '기본 제공',
-  builtinNote: 'Cortico에 포함되어 있어 따로 삭제할 수 없습니다.',
+  builtinNote: 'Coopanion에 포함되어 있어 따로 삭제할 수 없습니다.',
 
   installedAction: '설치',
   updatedAction: '업데이트',
@@ -65,6 +65,8 @@ export const S: Partial<typeof en> = {
   filterPlaceholder: '필터: 패키지 이름, 설명, 키워드',
   installedFilter: '필터: 이름, 유형, 설명',
   sortLabel: {
+    certified: "인증 우선",
+    rating: '평가순',
     downloads: '다운로드 수(최근 30일)',
     date: '최근 게시순',
     name: '이름순',
@@ -78,7 +80,11 @@ export const S: Partial<typeof en> = {
   pageOf: (page: number, pages: number) => `${page} / ${pages}`,
   searching: '불러오는 중…',
   noPackages: 'npm에 아직 이 종류의 패키지가 없습니다',
-  noPackagesAt: (registry: string) => `npm 레지스트리 ${registry}에 이 종류의 패키지가 없습니다. 레지스트리를 바꾸려면 설치 위치의 .npmrc에 registry=<URL> 줄을 추가하고 프로세스를 재시작하세요.`,
+  noPackagesAt: (registry: string) => `npm 레지스트리 ${registry}에 이 종류의 패키지가 없습니다.`,
+  registryLabel: 'npm 레지스트리',
+  registrySave: '저장',
+  registryHelp: '설치 위치의 .npmrc에 기록되며 업데이트 확인, 검색, 설치에 바로 적용됩니다. 비워 두고 저장하면 기본값으로 돌아갑니다.',
+  registrySaved: (url: string) => `저장했습니다. 사용 중인 레지스트리: ${url}`,
   noHits: '일치하는 패키지가 없습니다',
   searchFailed: (msg: string) => `불러오지 못했습니다: ${msg}`,
   partial: 'npm 검색 결과의 일부만 표시됩니다. 정확한 패키지 이름은 수동 설치로 지정하세요.',
@@ -135,4 +141,5 @@ export const S: Partial<typeof en> = {
   labelled: (label: string, value: string) => `${label}: ${value}`,
   metaSeparator: ' · ',
   listSeparator: ', ',
+  feedbackTags: '태그 신고',
 };

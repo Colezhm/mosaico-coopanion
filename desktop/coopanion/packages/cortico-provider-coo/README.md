@@ -44,6 +44,8 @@ Coo Pet Provider:[Cortico](https://github.com/Pal-AI-Lab/Cortico) 的一个 prov
   Gemini 按 `src/gemini/wire.ts` 的 `thinkingConfig`(Gemini 3 关不掉,不思考时 Flash-Lite 发 `minimal`、其余发 `low`)。
 - **过往推理**:Responses 默认按明文回传;OpenAI、xAI(`encryptedReasoning`)回传服务给的签名块;Chat 按 `reasoning_content` 回传;
   Anthropic 回传 thinking 块和签名,Gemini 回传 `thoughtSignature`,都只回给写出它的端点和模型。
+  明文回传时，没记下推理的工具调用前默认补一条占位推理(`syntheticReasoning`,即 Cortico 的 `sendSyntheticReasoning`):
+  DeepSeek 不补会回 400;OpenRouter 不补。端点因此回 400 时，桌宠的失败气泡请使用者反馈给开发者。
 - **图片**:端点勾了「多模态」且那一家列明所用模型能看图(`Vendor.vision`)时才发;别的地址只看「多模态」。选模型时按它自动勾上或去掉「多模态」。
   只发最近一批送达的事件(user 消息或事件帧)及其后的图片,更早的只留 Core 给每份附件写的 `[blob …]` 那行文字。
   每次送达新的一批,请求里从上一批的第一张图起前缀缓存失效。Chat 的工具结果不带图片,图片挪到紧跟其后的一条 user 消息里;
@@ -54,7 +56,7 @@ Coo Pet Provider:[Cortico](https://github.com/Pal-AI-Lab/Cortico) 的一个 prov
 - **语言**:控制台里的说明、思考档位与协议设置项在 `src/strings.ts`(`zh`、`en`)与 `src/strings.<语言>.ts`(只写译好的顶层键);
   `names` / `keyHint` 按语言给(`localized`);两处都是繁体中文回落简体,其余回落英文;`vendorsFor(language)` 给推荐顺序,
   非中文时豆包、百度千帆、阶跃星辰(只收中国大陆账号)放在 `more` 里;`defaultRegion`:中文用国内平台,其余用国际平台。
-- **接入流程**:`src/connect.ts` 的 `connectVendor` 经 Cortico 控制台的 provider 路由给某一家的某个平台建端点
+- **接入流程**:`src/connect.ts` 的 `connectVendor` 经 Cortico WebUI 的 provider 路由给某一家的某个平台建端点
   (密钥存在该端点 `.env` 的 `Vendor.secret` 下,模型按传入的名字,留空用默认)、测试,通过后设为当前端点并恢复运行;
   已有端点留空 Key 时沿用存着的。Coopanion 的桌面引导和「开始」页都用它。
 
@@ -74,13 +76,12 @@ ChatGPT 套餐。表里的 `CHATGPT`(`vendors.ts`)给界面列出它,模型、�
   每次刷新换新的 refresh token,写盘后才交出新的 access token。refresh token 不再被接受时删掉令牌,client id 与 host id 保留。
 - **请求**(`client.ts`):令牌只发往 `https://api.openai.com/v1`,端点配置里的地址也被固定成它。`POST <该地址>/responses`,始终 `stream: true`、`store: false`、整段上下文重放;system 文本进 `instructions`;
   去掉该路由不收的参数(`max_output_tokens`、`temperature`、`top_p`、`service_tier`、`metadata`、`truncation`、`user` 等);
-  function / custom 工具放进一个 namespace(`app`),重放的调用带上它的名字。模型表是 `GET <baseUrl>/models` 里 `visibility: "list"` 的那些,按服务给的顺序。
+  function / custom 工具放进一个 namespace(`app`),重放的调用带上它的名字。模型表是 `GET <baseUrl>/models` 里 `visibility: "list"` 的那些,按服务给的顺序。套餐流额外的 `response.metadata` 不进入标准事件解析器。
 - **用量上限**:`subscription_sharing_usage_limit_exceeded`(HTTP 429 或流里的 `response.failed`)留在客户端里处理:日志单独记一条,
   5 分钟不发请求，之后重发，上限持续多久就这样等多久;对 Core 来说只是一个慢请求，不算失败，不进连续失败的计数。新事件抢占时等待结束。
   已经流出输出的请求和诊断请求(控制台的测试连接)仍以这个 429 失败;Coopanion 的失败气泡不算它。
-- **控制台方法**:页 `llm:chatgpt` 的面板 `chatgpt`,参数是端点名:`signIn` 回授权 URL,由调用方送到系统浏览器;`state` 报登录进度,
+- **WebUI 面板方法**:页 `llm:chatgpt` 的面板 `chatgpt`,参数是端点名:`signIn` 回授权 URL,由调用方送到系统浏览器;`state` 报登录进度,
   登录完成后带上套餐的模型名;`signOut` 等进行中的刷新写完，删掉令牌并撤销 refresh token。回调每次登录只接受一次。`connect.ts` 的 `connectChatGPT` 建端点、登录、选模型、测试并设为当前端点。
-- **没用真实账号验证过**:以上都只对着本地假的授权服务器和 Responses 流测过。
 
 端点配置示例(`<CORTICO_HOME>/providers/qwen/config.json`,密钥在同目录 `.env` 的 `QWEN_API_KEY`):
 

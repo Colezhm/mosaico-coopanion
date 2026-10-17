@@ -56,7 +56,8 @@
 | `hoverButtons` / `doubleClickChat` / `rememberPosition` | 悬停按钮、双击打字是否打开、是否记住位置 |
 | `userNamed` | 「称呼」是否改过默认值，只报是或否，不报名字 |
 | `cuaEnabled` / `cuaLevel` | 电脑操作是否启用、询问档位 |
-| `personaChanged` | Coo 的人设（CONSTITUTION.md）是否和应用带的初始版本(中文版、英文版)都不同，只报是或否 |
+| `persona` / `personaChanged` | Coo 的人设（CONSTITUTION.md）和应用带的哪一份人设（任一语言）一字不差：`coo`、`grail`、`forge`、`heart`、`winter`、`whale`，改过就是 `custom`；`personaChanged` 是它是否为 `custom`。人设的内容不发送 |
+| `gitAvailable` | 这台电脑上能不能运行 git，也就是 Coo 的工作区有没有版本历史 |
 | `memoryFiles` | Coo 工作区（记忆）里的文件个数 |
 | `chatDays` | 安装以来和 Coo 说过话的天数 |
 | `extensions` | 装了的扩展：包名（本地或网址安装的报 `private`）、版本、类别 |
@@ -70,10 +71,11 @@
 |---|---|---|
 | `first_launch` | | 第一次启动 |
 | `pet_shown` / `pet_missing` | `ms`（只有 `pet_shown` 带） | 引导还没走过的那次启动里，桌宠窗口连上了（`ms` 是 Core 启动后多少毫秒连上的），或 60 秒内没连上 |
-| `guide_step` | `step` | 启动引导走到第几步（1–6；0.1.20 及之前是 1–5，第 3 步「回应模式」之后的步号各加了 1；开头选语言的那一页不计步，步号不变） |
+| `guide_step` | `step` | 启动引导走到第几步（1–7；0.1.27 及之前是 1–6，第 2 步「选人设」之后的步号各加了 1；0.1.20 及之前是 1–5，第 3 步「回应模式」之后的步号各加了 1；开头选语言的那一页不计步，步号不变） |
 | `source` | `answer` | 引导里「你是从哪里认识我的？」的回答：`bilibili` / `xiaohongshu` / `douyin`(仅中文)、`youtube` / `reddit` / `x` / `instagram` / `tiktok`(中文以外)、`steam` / `github` / `friend` / `other` / `skip` |
+| `persona` | `id` | 引导里选定的人设：`coo`、`grail`、`forge`、`heart`、`winter`、`whale` |
 | `guide_finished` | | 引导走完 |
-| `guide_closed` | `step`、`at` | 引导在第几步被关掉；`at` 是关掉时气泡里那一句的名字，如 `language`（开头选语言的那页，此时 `step` 为 0）、`hello`、`name`、`source`、`roam`、`wake`、`vendor`、`model`、`key`、`sign-in`、`voice-download`、`talk`、`persona`、`finish` |
+| `guide_closed` | `step`、`at` | 引导在第几步被关掉；`at` 是关掉时气泡里那一句的名字，如 `language`（开头选语言的那页，此时 `step` 为 0）、`hello`、`name`、`source`、`persona-pick`、`roam`、`wake`、`vendor`、`model`、`key`、`sign-in`、`voice-download`、`talk`、`persona`、`finish` |
 | `model_connected` | `via`、`vendor` | 在气泡里连上了模型。`via`：`guide`（引导里）、`prompt`（没连模型时说话后弹的询问里）、`ask`（定时来问 Key 时）；`vendor` 是选的内置服务的 id |
 | `key_prompt` | `answer` | 没连模型时跟 Coo 说话，它问「要去接通模型吗？」的回答：`connect` / `later` |
 | `voice_model` | `result` | 引导里语音识别模型的下载：`ready`（下好了）、`failed`（没下下来）、`later`（选了先不用） |

@@ -1,8 +1,8 @@
 {
   "repo": "https://github.com/Pal-AI-Lab/Coopanion.git",
-  "ref": "v0.1.26",
-  "commit": "f70613c7a98a33bf20098e3981ab1a63c26c20f8",
-  "cortico": "dce5c12f1b731ef5f9782faaa2071cb4ca51ccd5",
+  "ref": "v0.2.3",
+  "commit": "6ddb1341befea9bad94bb48ed5b1cb998da77fd1",
+  "cortico": "786b79a98041a8d93f6b53b4eb1b86fe71240151",
   "keep": [
     "packages/coopanion-mosaico/",
     "console/features/mosaico/",

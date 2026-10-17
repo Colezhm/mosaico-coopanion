@@ -1,12 +1,12 @@
 /**
- * ConsolePanelContext 组装入口，为扩展提供调用、UI、流与资源管理。signal、interval、frame、own、guardLeave 及 UI 资源均绑定本次面板挂载的生命周期。
+ * WebUiPanelContext 组装入口，为扩展提供调用、UI、流与资源管理。signal、interval、frame、own、guardLeave 及 UI 资源均绑定本次面板挂载的生命周期。
  */
 
 import {
-  type ConsoleMemo,
-  type ConsolePanelContext,
-  type ConsoleStreamHandle,
-  type ConsoleStreamHandlers,
+  type WebUiMemo,
+  type WebUiPanelContext,
+  type WebUiStreamHandle,
+  type WebUiStreamHandlers,
   type Disposable,
 } from '../../base/protocol.ts';
 import { panelStreamRoute } from '../lib/web/shared/console-protocol.ts';
@@ -34,7 +34,7 @@ export interface PanelContextDeps {
   /** 注册离开拦截，返回解除函数。由 router 提供。 */
   addLeaveGuard(fn: () => string | null): Disposable;
   /** 持久化后端。host 给一个按 `page:panel` 命名空间隔离过的实现。 */
-  memo: ConsoleMemo;
+  memo: WebUiMemo;
   /** WS 构造。注入以便测试。 */
   createSocket(url: string): SocketLike;
   /** 绝对化 WS 地址（`/ws/...` → `ws://host/ws/...`）。 */
@@ -55,10 +55,10 @@ export interface PanelContextDeps {
  * memo 按 page:panel 隔离，命名空间由 context 加入，避免不同面板的同名键互相覆盖。
  */
 export function namespacedMemo(
-  backing: ConsoleMemo,
+  backing: WebUiMemo,
   pageId: string,
   panelId: string,
-): ConsoleMemo {
+): WebUiMemo {
   const prefix = `${pageId}${panelId}`;
   return {
     get: (key, fallback) => backing.get(prefix + key, fallback),
@@ -66,7 +66,7 @@ export function namespacedMemo(
   };
 }
 
-export function createPanelContext(deps: PanelContextDeps): ConsolePanelContext {
+export function createPanelContext(deps: PanelContextDeps): WebUiPanelContext {
   const { pageId, panelId, lifecycle } = deps;
   const signal = lifecycle.signal;
 
@@ -104,7 +104,7 @@ export function createPanelContext(deps: PanelContextDeps): ConsolePanelContext 
 
     setConfig: (groupId, values) => writeConfig(groupId, values, { signal }),
 
-    stream(handlers: ConsoleStreamHandlers): ConsoleStreamHandle {
+    stream(handlers: WebUiStreamHandlers): WebUiStreamHandle {
       const handle = openStream({
         url: deps.wsUrl(panelStreamRoute(pageId, panelId)),
         handlers,
