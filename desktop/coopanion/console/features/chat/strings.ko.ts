@@ -4,8 +4,8 @@ import type { Touch } from './index.ts';
 export const S: Partial<typeof en> = {
   nav: '대화',
   title: '대화',
-  trace: '터미널',
-  traceHint: '고급 모드의 「터미널」 페이지: 컨텍스트, 도구 호출, 원시 이벤트',
+  trace: '콘솔',
+  traceHint: '고급 모드의 「콘솔」 페이지: 컨텍스트, 도구 호출, 원시 이벤트',
   placeholder: (bot: string) => `${bot}에게 메시지 보내기…`,
   connecting: '연결하는 중…',
   empty: (bot: string) => `아직 ${bot}에게 한 말이 없습니다.`,

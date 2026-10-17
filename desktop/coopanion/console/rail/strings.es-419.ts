@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'Navegación de la consola',
+  navAria: 'Navegación de la configuración',
   groupWorlds: 'World',
   moduleInstancesAria: 'Instancias de World',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'Apagar',
   finishing: 'Apagando…',
   shutdownTitle: 'Apagar',
-  shutdownBody: 'El proceso se cerrará y la consola se desconectará.',
+  shutdownBody: 'El proceso se cerrará y la conexión se cortará.',
   confirmShutdownTitle: '⚠ Apagar',
   confirmShutdownAgainTitle: '⚠⚠ ¿Confirmar apagado?',
   confirmShutdownAgainBody: '¿Detener la ejecución y salir del proceso?',
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Pasos de apagado ejecutados.',
   noReceipt: (msg: string) =>
     `No se recibió el resultado del apagado (${msg}); es posible que el proceso haya terminado.`,
-  docTitle: (name: string) => `Consola · ${name}`,
+  docTitle: (name: string) => `Configuración · ${name}`,
   renameTitle: 'Haz clic para cambiar el nombre',
   renameSaved: 'Nombre visible guardado',
   renameFailed: (msg: string) => `No se guardó el nombre visible: ${msg}`,

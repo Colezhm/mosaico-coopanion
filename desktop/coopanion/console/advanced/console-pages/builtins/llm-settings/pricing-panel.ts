@@ -1,4 +1,4 @@
-import type { ConsoleUi } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi } from 'cortico/web/shared/client-panel.ts';
 import { pick, type Language } from '../../../lib/core/language.ts';
 import { panel } from './strings.ts';
 
@@ -65,7 +65,7 @@ function writeSimple(cost: SimpleCost): unknown[] {
  * opens the textarea and leaves the form blank until edited.
  */
 export function pricingEditor(
-  ui: ConsoleUi,
+  ui: WebUi,
   saved: unknown[],
   quotes: ModelQuote[],
   commit: (pricing: unknown[]) => void,

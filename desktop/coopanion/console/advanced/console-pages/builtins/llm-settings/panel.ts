@@ -4,11 +4,11 @@
  * reasoningTiers 非空时限制为所列档位；为空时接受开放字符串。空值使用端点默认，none 关闭推理，其余写入 reasoningEffort。
  */
 import type {
-  ConsoleDisablable,
-  ConsoleFormat,
-  ConsolePanelContext,
-  ConsolePanel,
-  ConsoleUi,
+  WebUiDisablable,
+  WebUiFormat,
+  WebUiPanelContext,
+  WebUiPanel,
+  WebUi,
   Disposable,
 } from 'cortico/web/shared/client-panel.ts';
 import { pricingEditor, type ModelQuote } from './pricing-panel.ts';
@@ -96,7 +96,7 @@ function applyEffort(spec: Spec, value: string): void {
   else spec.reasoningEffort = effort;
 }
 
-function datalist(ui: ConsoleUi, id: string, values: readonly string[]): HTMLDataListElement {
+function datalist(ui: WebUi, id: string, values: readonly string[]): HTMLDataListElement {
   const list = ui.h('datalist');
   list.id = id;
   for (const value of values) {
@@ -108,8 +108,8 @@ function datalist(ui: ConsoleUi, id: string, values: readonly string[]): HTMLDat
 }
 
 /** 探活结果的呈现,模块页与连接卡片共用。 */
-export function probeCard(ui: ConsoleUi, S: typeof panel.zh, result: ProbeResult): HTMLElement {
-  const fmt: ConsoleFormat = ui.fmt;
+export function probeCard(ui: WebUi, S: typeof panel.zh, result: ProbeResult): HTMLElement {
+  const fmt: WebUiFormat = ui.fmt;
   const usage = result.usage;
   const rows = [
     {
@@ -152,8 +152,8 @@ export function probeCard(ui: ConsoleUi, S: typeof panel.zh, result: ProbeResult
   return sheet.el;
 }
 
-export const llmSettingsPanel: ConsolePanel = {
-  mount: async (ctx: ConsolePanelContext) => {
+export const llmSettingsPanel: WebUiPanel = {
+  mount: async (ctx: WebUiPanelContext) => {
     const { ui, root } = ctx;
     const S = pick(ctx.language, panel);
     // `<datalist>` 靠全局 id 绑定;每次挂载一个前缀,同页两份面板互不串。
@@ -192,7 +192,7 @@ export const llmSettingsPanel: ConsolePanel = {
       return true;
     };
     /** 读类方法(取模型、探测):不重画;失败把服务端措辞放进 report。 */
-    const query = async <T>(method: string, args: unknown[], ...locked: ConsoleDisablable[]) => {
+    const query = async <T>(method: string, args: unknown[], ...locked: WebUiDisablable[]) => {
       const release = ui.disable(...locked);
       try {
         return await ctx.invoke<T>(method, args);
@@ -419,7 +419,7 @@ export const llmSettingsPanel: ConsolePanel = {
         modelHolder.replaceChildren(ui.field(S.modelFieldLabel, row));
       }
       /** 取目录:成功换成选单并带出上下文窗口,失败把原因留在模型格下面。 */
-      async function fetchCatalog(...locked: ConsoleDisablable[]): Promise<void> {
+      async function fetchCatalog(...locked: WebUiDisablable[]): Promise<void> {
         const release = ui.disable(...locked);
         try {
           const result = await ctx.invoke<{ models: ModelEntry[] }>('models', [{ name: selected }]);

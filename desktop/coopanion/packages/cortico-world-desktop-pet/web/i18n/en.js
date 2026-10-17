@@ -20,6 +20,7 @@ export default {
   'heard.done': 'Recognized',
   'heard.more': 'Listening…',
   'heard.listening': 'Listening…',
+  'heard.cancel': 'Cancel',
 
   // the status bubble: added when the same kind of thing was done several times
   'status.more': ' and {others} more',

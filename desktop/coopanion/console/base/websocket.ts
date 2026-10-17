@@ -4,7 +4,7 @@
  * (`stream.ts`): a frame that is not a JSON object is reported and dropped.
  */
 import { withLanguage } from './language.ts';
-import type { ConsoleStreamHandle } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiStreamHandle } from 'cortico/web/shared/client-panel.ts';
 import type { Lifecycle } from './lifecycle.ts';
 import { openStream, type SocketLike } from './stream.ts';
 
@@ -49,7 +49,7 @@ export interface FrameworkSocketOptions {
 }
 
 /** 返回的通道句柄已登记在 lifecycle，可提前 dispose。 */
-export function openFrameworkSocket(opts: FrameworkSocketOptions): ConsoleStreamHandle {
+export function openFrameworkSocket(opts: FrameworkSocketOptions): WebUiStreamHandle {
   const { env } = opts;
   const handle = openStream({
     url: env.wsUrl(opts.path),

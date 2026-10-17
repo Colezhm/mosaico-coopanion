@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'Navigazione della console',
+  navAria: 'Navigazione delle impostazioni',
   groupWorlds: 'World',
   moduleInstancesAria: 'Istanze dei World',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'Arresta',
   finishing: 'Arresto in corso…',
   shutdownTitle: 'Arresta',
-  shutdownBody: 'Il processo terminerà e la console verrà disconnessa.',
+  shutdownBody: 'Il processo terminerà e la connessione verrà chiusa.',
   confirmShutdownTitle: '⚠ Arresta',
   confirmShutdownAgainTitle: "⚠⚠ Confermare l'arresto?",
   confirmShutdownAgainBody: "Fermare l'esecuzione e uscire dal processo?",
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Passaggi di arresto eseguiti.',
   noReceipt: (msg: string) =>
     `Nessun risultato di arresto ricevuto (${msg}); il processo potrebbe essere terminato.`,
-  docTitle: (name: string) => `Console · ${name}`,
+  docTitle: (name: string) => `Impostazioni · ${name}`,
   renameTitle: 'Clicca per rinominare',
   renameSaved: 'Nome visualizzato salvato',
   renameFailed: (msg: string) => `Nome visualizzato non salvato: ${msg}`,

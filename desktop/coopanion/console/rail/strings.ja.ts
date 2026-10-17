@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'コンソールのナビゲーション',
+  navAria: '設定のナビゲーション',
   groupWorlds: 'World',
   moduleInstancesAria: 'World インスタンス',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'シャットダウン',
   finishing: 'シャットダウン中…',
   shutdownTitle: 'シャットダウン',
-  shutdownBody: 'プロセスが終了し、コンソールの接続が切断されます。',
+  shutdownBody: 'プロセスが終了し、接続が切断されます。',
   confirmShutdownTitle: '⚠ シャットダウン',
   confirmShutdownAgainTitle: '⚠⚠ シャットダウンしますか？',
   confirmShutdownAgainBody: '実行を停止してプロセスを終了しますか？',
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: 'シャットダウン手順を実行しました。',
   noReceipt: (msg: string) =>
     `シャットダウンの結果を受信できませんでした（${msg}）。プロセスは既に終了している可能性があります。`,
-  docTitle: (name: string) => `コンソール · ${name}`,
+  docTitle: (name: string) => `設定 · ${name}`,
   renameTitle: 'クリックして名前を変更',
   renameSaved: '表示名を保存しました',
   renameFailed: (msg: string) => `表示名を保存できませんでした：${msg}`,

@@ -8,7 +8,7 @@ module.exports = {
   trayRestart: 'Reiniciar',
   trayQuit: 'Salir',
 
-  coreFailed: (times, code, logFile) => `El Core se cerró ${times} veces en 5 minutos (código de salida ${code}) y ya no se reinicia. Registro: ${logFile}`,
+  coreFailed: (times, code, logFile) => `El Core se cerró ${times} veces en 5 minutos (código de salida ${code}) y ya no se reinicia. Si la app se acaba de actualizar, elige «Salir» en el menú de la bandeja y vuelve a abrir Coopanion. Registro: ${logFile}`,
   coreRestarting: (code) => `El Core se cerró de forma inesperada (código de salida ${code}); se reinicia en 3 segundos`,
   coreLocked: (pid, file) => `Otro proceso${pid ? ` (PID ${pid})` : ''} está usando los datos de Coopanion, así que el Core no se inició. Espera a que termine o ciérralo, y luego elige «Reiniciar» en el menú de la bandeja. Archivo de bloqueo: ${file}`,
 
@@ -17,4 +17,6 @@ module.exports = {
     + `Al volver a ellos, los datos actuales se renombran como data-replaced-<hora> y se quedan en ${parent}; no se borra nada. Si eliges “Conservar la actual”, no se volverá a preguntar.`,
   strandedRestore: 'Usar la configuración de antes',
   strandedKeep: 'Conservar la actual',
+
+  dataNotWritable: (dir, suggested) => `Coopanion no puede escribir en su carpeta de datos y no se inició:\n${dir}\n\nVuelve a ejecutar el instalador e instala en una carpeta en la que tu cuenta pueda escribir, por ejemplo:\n${suggested}`,
 };

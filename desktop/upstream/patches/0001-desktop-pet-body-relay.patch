@@ -1,7 +1,7 @@
-From e559f6cdfeb5910d80208f93bd4f512d997776c0 Mon Sep 17 00:00:00 2001
+From 298e32a6e7d2455fa67d1cf844daf047fb5f54ff Mon Sep 17 00:00:00 2001
 From: Colezhm <jnfbr5bywg@privaterelay.appleid.com>
 Date: Wed, 14 Oct 2026 07:32:15 -0400
-Subject: [PATCH 1/3] =?UTF-8?q?feat(desktop-pet):=20=E8=BA=AB=E4=BD=93?=
+Subject: [PATCH 1/2] =?UTF-8?q?feat(desktop-pet):=20=E8=BA=AB=E4=BD=93?=
  =?UTF-8?q?=E8=BD=AC=E6=8E=A5,=E5=BA=94=E7=94=A8=E5=8F=AF=E4=BB=A5?=
  =?UTF-8?q?=E6=8A=8A=E6=A1=8C=E5=AE=A0=E7=9A=84=E8=BA=AB=E4=BD=93=E6=90=AC?=
  =?UTF-8?q?=E5=88=B0=E5=88=AB=E7=9A=84=E8=AE=BE=E5=A4=87=E4=B8=8A?=
@@ -24,10 +24,11 @@ World,工具、事件与 Memory 不变。
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  packages/cortico-world-desktop-pet/README.md  |  19 +-
+ .../cortico-world-desktop-pet/describe.json   |   2 +-
  .../src/ENV_PROMPT.en.md                      |   2 +
  .../src/ENV_PROMPT.md                         |   2 +
  .../cortico-world-desktop-pet/src/cua/cua.ts  |   3 +
- .../src/definition.ts                         |  16 ++
+ .../src/definition.ts                         |  22 +-
  .../cortico-world-desktop-pet/src/i18n/de.ts  |   1 +
  .../cortico-world-desktop-pet/src/i18n/en.ts  |   1 +
  .../src/i18n/es-419.ts                        |   1 +
@@ -42,20 +43,20 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  .../cortico-world-desktop-pet/src/index.ts    |   4 +-
  .../cortico-world-desktop-pet/src/relay.ts    |  83 ++++++++
  .../cortico-world-desktop-pet/src/server.ts   |   9 +
- .../cortico-world-desktop-pet/src/world.ts    | 126 +++++++++---
- .../tests/relay.test.ts                       | 192 ++++++++++++++++++
+ .../cortico-world-desktop-pet/src/world.ts    | 128 ++++++++---
+ .../tests/relay.test.ts                       | 201 ++++++++++++++++++
  .../cortico-world-desktop-pet/web/pet-app.js  |  41 +++-
  tests/pet-relay.test.js                       |  64 ++++++
- 23 files changed, 538 insertions(+), 34 deletions(-)
+ 24 files changed, 554 insertions(+), 37 deletions(-)
  create mode 100644 packages/cortico-world-desktop-pet/src/relay.ts
  create mode 100644 packages/cortico-world-desktop-pet/tests/relay.test.ts
  create mode 100644 tests/pet-relay.test.js
 
 diff --git a/packages/cortico-world-desktop-pet/README.md b/packages/cortico-world-desktop-pet/README.md
-index 670ba41..1785ddc 100644
+index c6cb361..c048e0b 100644
 --- a/packages/cortico-world-desktop-pet/README.md
 +++ b/packages/cortico-world-desktop-pet/README.md
-@@ -373,7 +373,7 @@ macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)
+@@ -375,7 +375,7 @@ macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)
  
  ## 给内嵌应用
  
@@ -64,7 +65,7 @@ index 670ba41..1785ddc 100644
  借了哪个就只画哪个按钮或菜单行(暂停要 `isPaused` 和 `setPaused`,设置要 `openSettings`,退出要 `quit` 与可选的 `quitLabel`,可以是每次开菜单时调用的函数);
  `onCreate` 拿到 World 实例,应用可以调 `world.confirm(问题, [同意, 不同意])` 弹一个两选项气泡(或 `[同意, 以后都同意, 不同意]` 三选项,中间那项答 `always`),
  结果是 `yes` / `no` / `dismissed` / `timeout`(60 秒没人答) / `unavailable`(没有桌宠页),不会作为事件送给 bot。
-@@ -386,6 +386,23 @@ macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)
+@@ -388,6 +388,23 @@ macOS 上是 AppleScript 的 `display dialog`,Linux 上是 `zenity --question`)
  `/api/config` 写不了列表和对象,所以「习惯」页的两个自定义弹窗经 `pet` 面板方法保存:`setWakeKinds(种类数组)` 把 `touch.wakeOn` 设成 `custom` 并写 `touch.wakeKinds`,
  `setSelfAdjustCustom({ 项: true/false })` 把 `selfAdjust` 设成 `custom` 并写 `selfAdjustCustom`;`pet.state` 的 `wake`、`selfAdjust` 给出当前值(旧的布尔值已按新含义读出)。
  
@@ -80,7 +81,7 @@ index 670ba41..1785ddc 100644
 +- 桌宠页的消息先过 `fromPage`(转接自己的交接握手);转接的设备听到、摸到、点到的,经 `port.input` 当作桌宠页发来的处理,
 +  经 `port.heard` 当作麦克风听到的话投递(有没答的提问时作为回答),`port.transcribe` 用当前的识别引擎转写设备录的音。
 +- `touchText` 给桌宠页没有的触摸(设备上的拥抱、挠痒)写事件正文;`tools`、`envPrompt`(`{{pet.relay}}`)和 `panel`
-+  分别加工具、环境提示词一节和控制台面板;`unavailable` 说明工具为什么没执行;电脑操作在看屏幕或动手之前先等 `beforeComputer`。
++  分别加工具、环境提示词一节和控制台面板(加的工具与事件经 `relayDescribe` 写进 World 的自描述);`unavailable` 说明工具为什么没执行;电脑操作在看屏幕或动手之前先等 `beforeComputer`。
 +- 桌宠页的一侧:`page()` 的返回值作为 `init.relay` 交给页面,`module` 是 `/relay/` 下的页面模块(从 `pageDir` 提供),
 +  页面加载它并调用 `install(api)`,模块借此在身体离开和回来时做动画。`held` 为真时页面不推进身体、不接指针、不开麦克风,
 +  `hidden` 为真时从第一帧起就不显示身体。
@@ -88,6 +89,19 @@ index 670ba41..1785ddc 100644
  ### 对话页
  
  控制台页 `world:desktop-pet` 的 `chat` 推送连接(`src/chat.ts`,没有对应的面板)给应用做对话页:
+diff --git a/packages/cortico-world-desktop-pet/describe.json b/packages/cortico-world-desktop-pet/describe.json
+index ba98c19..03acd15 100644
+--- a/packages/cortico-world-desktop-pet/describe.json
++++ b/packages/cortico-world-desktop-pet/describe.json
+@@ -609,7 +609,7 @@
+       "key": "worlds.desktop-pet.envPrompt",
+       "title": "桌宠环境",
+       "role": "envPrompt",
+-      "content": "## 桌宠\n\n你在{{pet.user}}的电脑屏幕上有一个身体:{{pet.body}}。它站在屏幕底边(任务栏或程序坞上沿)。{{pet.user}}看得见它,看不见你的消息正文;想让对方看到的话只能经 `pet_say` 和 `pet_ask` 冒出气泡。{{pet.reply}}{{pet.chat}}\n\n没收到指令时身体会自己活动(眨眼、张望、走走、坐下打盹之类);你的指令会先执行。{{pet.user}}可以戳它、摸它、把它拎起来甩出去,身体对这些有自动的反射,当场就做:戳一下换个表情或蹦一下,摸着露出喜欢或害羞,睡着被戳会吓醒,甩出去落地太重会摔晕几秒。\n\n### 说话:`pet_say`\n\n一个气泡放一两句,打字速度约每秒 20 字,说完停留两三秒后消失。几段话接连调用会排队依次显示。\n\n脚本里可以夹带表情和动作标记,用的是现在这个形象的词表。换了形象时,`[figure]` 事件或 `pet_set` 的回执会写明哪些词用不了了、新增了哪些,以它们为准:\n\n| 标记 | 作用 |\n|---|---|\n| 【词, 词】 | 先做这些,然后换一个新气泡继续说 |\n| <词> | 打字打到这里时做,不换气泡 |\n\n{{pet.vocab}}\n\n例:`【开心】今天也辛苦啦!<眨眼>要不要歇一会儿?`\n\n### 提问:`pet_ask`\n\n一个问题配 1–3 个选项,默认再加一格让对方自己写。对方的选择以 `[answer]` 事件送回来;关掉不答也会告诉你。\n\n### 移动与动作\n\n- `pet_walk_to`:走到所在这块屏幕的某处,0 最左、1 最右,`cursor` 是鼠标所在的横向位置。走到或被打断才返回。\n- `pet_act`:不说话,只做一串表情或动作。词表里标着「保持到下一个动作」的会一直保持。\n\n### 调整自己:`pet_set`、`pet_quiet`\n\n`pet_set` 改你自己的样子和习惯:形象和打扮(Coo 的配色和配件也是打扮)、走动多少、呼噜多久、音效、大小、黑白模式、悬停按钮,以及你对{{pet.user}}的称呼。按{{pet.user}}在「习惯」页的设置,有的直接生效,有的先在气泡里征得对方同意,同意了才改,回执等对方回答后才到。{{pet.self}}能选的值:\n\n{{pet.dress}}\n\n`pet_quiet` 是临时的:安静一段时间(默认关音效、站着不动),到时自动恢复,不改设置。对方在忙、在开会、夜深了,用它而不是改设置。\n\n### 收到的事件\n\n每条事件开头是它发生时{{pet.user}}那边的本地时间,如 `[14:32]`;一次运行的第一条和换了日期后的第一条还带日期和星期,如 `[10-05 周日 23:40]`。\n\n- `[voice] {{pet.user}}:…`:麦克风听到并转写的话(语音输入{{pet.voice}})。转写可能有错字或同音字。\n- `[typed] {{pet.user}}:…`:在桌宠上双击或点悬停按钮打的字。\n- `[answer] …`:对 `pet_ask` 的回答。\n- `[touch] …`:戳、摸、拎起来甩出去这类动作,以及落地摔晕。事件里写到的「戳醒」「摔晕」就是身体当场做过的反射,事件送到你这里时已经做完了,不需要再演一遍。有的互动不单独叫醒你,跟着下一批事件到,可能已经过去一会儿。\n- `[figure] …`:{{pet.user}}给你换了形象或打扮,或者形象没能显示出来、换回了 Coo;词表有变化时一并写明。\n\n{{pet.cua}}\n"
++      "content": "## 桌宠\n\n你在{{pet.user}}的电脑屏幕上有一个身体:{{pet.body}}。它站在屏幕底边(任务栏或程序坞上沿)。{{pet.user}}看得见它,看不见你的消息正文;想让对方看到的话只能经 `pet_say` 和 `pet_ask` 冒出气泡。{{pet.reply}}{{pet.chat}}\n\n没收到指令时身体会自己活动(眨眼、张望、走走、坐下打盹之类);你的指令会先执行。{{pet.user}}可以戳它、摸它、把它拎起来甩出去,身体对这些有自动的反射,当场就做:戳一下换个表情或蹦一下,摸着露出喜欢或害羞,睡着被戳会吓醒,甩出去落地太重会摔晕几秒。\n\n### 说话:`pet_say`\n\n一个气泡放一两句,打字速度约每秒 20 字,说完停留两三秒后消失。几段话接连调用会排队依次显示。\n\n脚本里可以夹带表情和动作标记,用的是现在这个形象的词表。换了形象时,`[figure]` 事件或 `pet_set` 的回执会写明哪些词用不了了、新增了哪些,以它们为准:\n\n| 标记 | 作用 |\n|---|---|\n| 【词, 词】 | 先做这些,然后换一个新气泡继续说 |\n| <词> | 打字打到这里时做,不换气泡 |\n\n{{pet.vocab}}\n\n例:`【开心】今天也辛苦啦!<眨眼>要不要歇一会儿?`\n\n### 提问:`pet_ask`\n\n一个问题配 1–3 个选项,默认再加一格让对方自己写。对方的选择以 `[answer]` 事件送回来;关掉不答也会告诉你。\n\n### 移动与动作\n\n- `pet_walk_to`:走到所在这块屏幕的某处,0 最左、1 最右,`cursor` 是鼠标所在的横向位置。走到或被打断才返回。\n- `pet_act`:不说话,只做一串表情或动作。词表里标着「保持到下一个动作」的会一直保持。\n\n### 调整自己:`pet_set`、`pet_quiet`\n\n`pet_set` 改你自己的样子和习惯:形象和打扮(Coo 的配色和配件也是打扮)、走动多少、呼噜多久、音效、大小、黑白模式、悬停按钮,以及你对{{pet.user}}的称呼。按{{pet.user}}在「习惯」页的设置,有的直接生效,有的先在气泡里征得对方同意,同意了才改,回执等对方回答后才到。{{pet.self}}能选的值:\n\n{{pet.dress}}\n\n`pet_quiet` 是临时的:安静一段时间(默认关音效、站着不动),到时自动恢复,不改设置。对方在忙、在开会、夜深了,用它而不是改设置。\n\n### 收到的事件\n\n每条事件开头是它发生时{{pet.user}}那边的本地时间,如 `[14:32]`;一次运行的第一条和换了日期后的第一条还带日期和星期,如 `[10-05 周日 23:40]`。\n\n- `[voice] {{pet.user}}:…`:麦克风听到并转写的话(语音输入{{pet.voice}})。转写可能有错字或同音字。\n- `[typed] {{pet.user}}:…`:在桌宠上双击或点悬停按钮打的字。\n- `[answer] …`:对 `pet_ask` 的回答。\n- `[touch] …`:戳、摸、拎起来甩出去这类动作,以及落地摔晕。事件里写到的「戳醒」「摔晕」就是身体当场做过的反射,事件送到你这里时已经做完了,不需要再演一遍。有的互动不单独叫醒你,跟着下一批事件到,可能已经过去一会儿。\n- `[figure] …`:{{pet.user}}给你换了形象或打扮,或者形象没能显示出来、换回了 Coo;词表有变化时一并写明。\n\n{{pet.cua}}\n\n{{pet.relay}}\n"
+     }
+   ]
+ }
 diff --git a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md
 index 1de7594..d8bf611 100644
 --- a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.en.md
@@ -99,11 +113,11 @@ index 1de7594..d8bf611 100644
 +
 +{{pet.relay}}
 diff --git a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md
-index e3144b1..0304726 100644
+index 49ad096..84e68e3 100644
 --- a/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md
 +++ b/packages/cortico-world-desktop-pet/src/ENV_PROMPT.md
 @@ -47,3 +47,5 @@
- - `[形象] …`:{{pet.user}}给你换了形象或打扮,或者形象没能显示出来、换回了 Coo;词表有变化时一并写明。
+ - `[figure] …`:{{pet.user}}给你换了形象或打扮,或者形象没能显示出来、换回了 Coo;词表有变化时一并写明。
  
  {{pet.cua}}
 +
@@ -130,18 +144,18 @@ index 8856196..0f51715 100644
      if (signal?.aborted) throw new Interrupted(this.t.interruptedBeforeAct);
      if (!this.engine) { this.engine = this.spawn(); this.engineExit = null; }
 diff --git a/packages/cortico-world-desktop-pet/src/definition.ts b/packages/cortico-world-desktop-pet/src/definition.ts
-index 2d12a58..0d67a45 100644
+index c135be4..60e28da 100644
 --- a/packages/cortico-world-desktop-pet/src/definition.ts
 +++ b/packages/cortico-world-desktop-pet/src/definition.ts
-@@ -7,6 +7,7 @@ import { DesktopPetWorld, modelsDirFor, type PetBotControls } from './world.ts';
- import type { DescribeTool } from './status.ts';
- import type { ModelLanguage } from './model-text.ts';
- import type { Answer } from './cua/engine-ipc.ts';
+@@ -10,6 +10,7 @@ import type { Answer } from './cua/engine-ipc.ts';
+ import { CUA_TOOL_DECLS } from './cua/tools.ts';
+ import { petToolDecls } from './tools.ts';
+ import { SELF_TYPE } from './chat.ts';
 +import type { PetBodyRelay } from './relay.ts';
  import { petText } from './i18n/index.ts';
  
  /** The console keeps the bot's avatar here, in the deployment directory. */
-@@ -33,6 +34,20 @@ export interface DesktopPetAssembly {
+@@ -86,6 +87,22 @@ export interface DesktopPetAssembly {
    language?(): Language;
    /** Called with each answer to computer use's question in the pet's bubble. */
    onCuaAnswer?(answer: Answer): void;
@@ -150,6 +164,8 @@ index 2d12a58..0d67a45 100644
 +   * deployment's own directory for the World (`<data>/desktop-pet`), for the relay's state.
 +   */
 +  relay?(ctx: PetRelayContext): PetBodyRelay | null;
++  /** The tools and events a relay adds (its `tools()` and `port.push` types), for the World's self-description. */
++  relayDescribe?: WorldDescribe;
 +}
 +
 +/** What a relay is made with. */
@@ -162,7 +178,7 @@ index 2d12a58..0d67a45 100644
  }
  
  /** The definition, with what an embedding app lends the World. */
-@@ -65,6 +80,7 @@ export function desktopPetDefinition(assembly: DesktopPetAssembly = {}): WorldDe
+@@ -118,11 +135,14 @@ export function desktopPetDefinition(assembly: DesktopPetAssembly = {}): WorldDe
          replyLanguage: () => assembly.replyLanguage?.() ?? null,
          language: () => assembly.language?.() ?? 'zh',
          onCuaAnswer: (answer) => assembly.onCuaAnswer?.(answer),
@@ -170,8 +186,16 @@ index 2d12a58..0d67a45 100644
        });
        assembly.onCreate?.(world);
        return world;
+     },
+-    describe: DESCRIBE,
++    describe: assembly.relayDescribe
++      ? { tools: [...DESCRIBE.tools, ...assembly.relayDescribe.tools], events: [...DESCRIBE.events, ...assembly.relayDescribe.events] }
++      : DESCRIBE,
+   };
+ }
+ 
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/de.ts b/packages/cortico-world-desktop-pet/src/i18n/de.ts
-index 8c5a7a8..7a76a51 100644
+index d8dba54..58ae5c2 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/de.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/de.ts
 @@ -171,6 +171,7 @@ const de: Translation<PetText> = {
@@ -183,10 +207,10 @@ index 8c5a7a8..7a76a51 100644
      noGuide: 'Diese App hat keine Einführung',
      unknownMethod: (name: string) => `Unbekannte Methode ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/en.ts b/packages/cortico-world-desktop-pet/src/i18n/en.ts
-index f45e464..4f46fa8 100644
+index e54b1ad..fe120fa 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/en.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/en.ts
-@@ -197,6 +197,7 @@ const en: PetText = {
+@@ -196,6 +196,7 @@ const en: PetText = {
        'pet.chat': 'A note on the chat page when the app has one; empty otherwise',
        'pet.reply': 'A line telling the bot which language to talk in when the app language is neither Simplified Chinese nor English; empty otherwise',
        'pet.cua': 'The computer use part: screenshot coordinates, when the person is asked first, and staying out of their way; empty while computer use is off',
@@ -195,7 +219,7 @@ index f45e464..4f46fa8 100644
      noGuide: 'This app has no introduction',
      unknownMethod: (name: string) => `Unknown method ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/es-419.ts b/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
-index 4d81e4a..e25553b 100644
+index d0e05b9..5e1ef9b 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/es-419.ts
 @@ -171,6 +171,7 @@ const es419: Translation<PetText> = {
@@ -207,7 +231,7 @@ index 4d81e4a..e25553b 100644
      noGuide: 'Esta app no tiene introducción',
      unknownMethod: (name: string) => `Método desconocido ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/fr.ts b/packages/cortico-world-desktop-pet/src/i18n/fr.ts
-index 8b04f06..bee8bbb 100644
+index 24a8fd5..7eee117 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/fr.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/fr.ts
 @@ -171,6 +171,7 @@ const fr: Translation<PetText> = {
@@ -219,7 +243,7 @@ index 8b04f06..bee8bbb 100644
      noGuide: "Cette application n'a pas d'introduction",
      unknownMethod: (name: string) => `Méthode inconnue ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/it.ts b/packages/cortico-world-desktop-pet/src/i18n/it.ts
-index 39d293e..ae11b26 100644
+index e0361fd..7bf3581 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/it.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/it.ts
 @@ -171,6 +171,7 @@ const it: Translation<PetText> = {
@@ -231,7 +255,7 @@ index 39d293e..ae11b26 100644
      noGuide: "Quest'app non ha un'introduzione",
      unknownMethod: (name: string) => `Metodo sconosciuto ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/ja.ts b/packages/cortico-world-desktop-pet/src/i18n/ja.ts
-index 26e15ac..dbd601d 100644
+index e4aaeb5..e786357 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/ja.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/ja.ts
 @@ -171,6 +171,7 @@ const ja: Translation<PetText> = {
@@ -243,7 +267,7 @@ index 26e15ac..dbd601d 100644
      noGuide: 'このアプリにはガイドがありません',
      unknownMethod: (name: string) => `不明なメソッド ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/ko.ts b/packages/cortico-world-desktop-pet/src/i18n/ko.ts
-index de80c19..34151e5 100644
+index cc70b97..a297eb7 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/ko.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/ko.ts
 @@ -171,6 +171,7 @@ const ko: Translation<PetText> = {
@@ -255,7 +279,7 @@ index de80c19..34151e5 100644
      noGuide: '이 앱에는 시작 안내가 없습니다',
      unknownMethod: (name: string) => `알 수 없는 메서드 ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts b/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
-index f2e3738..c2bf35c 100644
+index 1d01fc0..e51fc5c 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/pt-BR.ts
 @@ -171,6 +171,7 @@ const ptBR: Translation<PetText> = {
@@ -267,7 +291,7 @@ index f2e3738..c2bf35c 100644
      noGuide: 'Este app não tem introdução',
      unknownMethod: (name: string) => `Método desconhecido ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/ru.ts b/packages/cortico-world-desktop-pet/src/i18n/ru.ts
-index e75884c..708cd6d 100644
+index b5b3fb6..db397fd 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/ru.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/ru.ts
 @@ -177,6 +177,7 @@ const ru: Translation<PetText> = {
@@ -279,7 +303,7 @@ index e75884c..708cd6d 100644
      noGuide: 'В этом приложении нет обучения',
      unknownMethod: (name: string) => `Неизвестный метод ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts b/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
-index 28e04e2..cb1f99a 100644
+index 855b743..330cc2f 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/zh-Hant.ts
 @@ -171,6 +171,7 @@ const zhHant: Translation<PetText> = {
@@ -291,10 +315,10 @@ index 28e04e2..cb1f99a 100644
      noGuide: '這個應用程式沒有引導',
      unknownMethod: (name: string) => `未知的方法 ${name}`,
 diff --git a/packages/cortico-world-desktop-pet/src/i18n/zh.ts b/packages/cortico-world-desktop-pet/src/i18n/zh.ts
-index 2c152d8..4cf8f92 100644
+index e39f4b0..2b80a8e 100644
 --- a/packages/cortico-world-desktop-pet/src/i18n/zh.ts
 +++ b/packages/cortico-world-desktop-pet/src/i18n/zh.ts
-@@ -194,6 +194,7 @@ export default {
+@@ -193,6 +193,7 @@ export default {
        'pet.chat': '应用提供对话页时，对它的说明；没有时为空',
        'pet.reply': '应用语言既不是简体中文也不是英文时，让 bot 用那种语言说话的一句；否则为空',
        'pet.cua': '电脑操作一节：截图坐标、何时先询问使用者、让位规则；电脑操作关闭时为空',
@@ -434,7 +458,7 @@ index 866d7b7..b9ad035 100644
      if (!file) { res.writeHead(404).end(); return; }
      const root = normalize(this.opts.webDir).replace(/[\\/]+$/, '') + sep;
 diff --git a/packages/cortico-world-desktop-pet/src/world.ts b/packages/cortico-world-desktop-pet/src/world.ts
-index b143181..7c26569 100644
+index 1ccae49..e7bd415 100644
 --- a/packages/cortico-world-desktop-pet/src/world.ts
 +++ b/packages/cortico-world-desktop-pet/src/world.ts
 @@ -49,6 +49,7 @@ import { ActivityGroup, ChatSockets, SELF_TYPE, chatHistory, chatItem, chatRefs,
@@ -445,7 +469,7 @@ index b143181..7c26569 100644
  import type { Answer } from './cua/engine-ipc.ts';
  import { PackImporter } from './pack-import.ts';
  import { dressTable, planSettings, type SettingChange } from './self.ts';
-@@ -220,6 +221,8 @@ export interface DesktopPetWorldOptions {
+@@ -234,6 +235,8 @@ export interface DesktopPetWorldOptions {
    replyLanguage?: () => string | null;
    /** Called with each answer to computer use's question, asked in the pet's bubble. */
    onCuaAnswer?: (answer: Answer) => void;
@@ -454,7 +478,7 @@ index b143181..7c26569 100644
  }
  
  type SherpaEngine = Exclude<AsrEngine, 'system'>;
-@@ -361,6 +364,7 @@ export class DesktopPetWorld implements World {
+@@ -380,6 +383,7 @@ export class DesktopPetWorld implements World {
      this.cfg = opts.cfg;
      this.cua = new Cua({
        cfg: () => this.cfg.cua,
@@ -462,7 +486,7 @@ index b143181..7c26569 100644
        botName: opts.botName,
        modelLanguage: () => this.language,
        language: () => this.appLanguage,
-@@ -373,7 +377,7 @@ export class DesktopPetWorld implements World {
+@@ -392,7 +396,7 @@ export class DesktopPetWorld implements World {
        },
      });
      this.importer = opts.packDir ? new PackImporter({ packDir: opts.packDir, packs: () => this.packs(), text: () => this.ui }) : null;
@@ -471,7 +495,7 @@ index b143181..7c26569 100644
      this.segmenter = new Segmenter(this.segmentConfig(), FRAME_MS);
      this.segmenter.setSink(this.sink);
      this.store = new RuntimeStore({ runtimesRoot: opts.runtimesRoot, modelsDir: opts.modelsDir, fetchImpl: opts.fetchImpl, funasrModel: opts.funasrModel, whisperModel: opts.whisperModel, text: () => this.ui });
-@@ -383,8 +387,8 @@ export class DesktopPetWorld implements World {
+@@ -402,8 +406,8 @@ export class DesktopPetWorld implements World {
        snapshot: () => this.snapshot(),
        onPetMessage: (msg) => this.onPage(msg),
        onAudio: (frame) => this.onAudio(frame),
@@ -482,7 +506,7 @@ index b143181..7c26569 100644
        onSkin: (skin) => this.saveSkin(skin),
        onPrefs: (prefs) => this.savePrefs(prefs),
        avatarFile: opts.avatarFile,
-@@ -394,9 +398,50 @@ export class DesktopPetWorld implements World {
+@@ -413,9 +417,50 @@ export class DesktopPetWorld implements World {
        language: () => this.appLanguage,
        text: () => this.ui,
        overlay: () => this.cfg.window.exportOverlay,
@@ -533,7 +557,7 @@ index b143181..7c26569 100644
    /* ---------- figures ---------- */
  
    /** Pack problems already logged, so a broken pack is reported once, not on every scan. */
-@@ -558,6 +603,8 @@ export class DesktopPetWorld implements World {
+@@ -577,6 +622,8 @@ export class DesktopPetWorld implements World {
      this.cua.start(host);
      // the words the prompt is rendered with, until the bot is told otherwise
      this.toldVocab = this.vocab();
@@ -542,7 +566,7 @@ index b143181..7c26569 100644
      await this.server.start();
      this.windowHost = new WindowHost(host.log, () => this.t.window);
      if (this.cfg.window.enabled) this.openWindow();
-@@ -587,6 +634,7 @@ export class DesktopPetWorld implements World {
+@@ -606,6 +653,7 @@ export class DesktopPetWorld implements World {
    }
  
    async stop(): Promise<void> {
@@ -550,7 +574,7 @@ index b143181..7c26569 100644
      this.status.clear();
      if (this.quiet) clearTimeout(this.quiet.timer);
      this.quiet = null;
-@@ -622,6 +670,7 @@ export class DesktopPetWorld implements World {
+@@ -643,6 +691,7 @@ export class DesktopPetWorld implements World {
    onTurnEnded(): void {
      this.touchWoke = false;
      this.cua.onTurnEnded();
@@ -558,7 +582,7 @@ index b143181..7c26569 100644
    }
  
    /** Computer use is on and this system runs it. */
-@@ -630,7 +679,7 @@ export class DesktopPetWorld implements World {
+@@ -651,7 +700,7 @@ export class DesktopPetWorld implements World {
    }
  
    outputTap(): OutputTap | undefined {
@@ -567,7 +591,7 @@ index b143181..7c26569 100644
      return {
        // the pet shows nothing of the stream itself; its tools act when they run
        externalizes: () => false,
-@@ -800,6 +849,7 @@ export class DesktopPetWorld implements World {
+@@ -821,6 +870,7 @@ export class DesktopPetWorld implements World {
        status: this.status.status,
        statusBubble: this.cfg.statusBubble,
        bot: this.botInfo(),
@@ -575,7 +599,7 @@ index b143181..7c26569 100644
      };
    }
  
-@@ -848,6 +898,8 @@ export class DesktopPetWorld implements World {
+@@ -871,6 +921,8 @@ export class DesktopPetWorld implements World {
    }
  
    private micWanted(): boolean {
@@ -584,7 +608,7 @@ index b143181..7c26569 100644
      const phase = this.backendState()?.phase;
      return this.cfg.asr.enabled && (phase === 'running');
    }
-@@ -914,6 +966,12 @@ export class DesktopPetWorld implements World {
+@@ -961,6 +1013,12 @@ export class DesktopPetWorld implements World {
    }
  
    private onPage(msg: PageMessage): void {
@@ -597,7 +621,7 @@ index b143181..7c26569 100644
      switch (msg.t) {
        case 'figure': return this.onFigure(msg);
        case 'hello': {
-@@ -1003,7 +1061,7 @@ export class DesktopPetWorld implements World {
+@@ -1056,7 +1114,7 @@ export class DesktopPetWorld implements World {
     */
    confirm(question: string, choices: [yes: string, no: string] | [yes: string, always: string, no: string]): Promise<ConfirmResult> {
      const id = nextId('k');
@@ -606,16 +630,16 @@ index b143181..7c26569 100644
      return new Promise((resolve) => {
        const timer = setTimeout(() => { this.confirms.delete(id); resolve('timeout'); }, CONFIRM_TIMEOUT_MS);
        this.confirms.set(id, { resolve, timer, choices: choices.length });
-@@ -1020,7 +1078,7 @@ export class DesktopPetWorld implements World {
-     const { actions } = parseActions(d.actions ?? [], this.vocab());
+@@ -1078,7 +1136,7 @@ export class DesktopPetWorld implements World {
+       : d.input;
      let settle: (a: PetDialogAnswer) => void = () => {};
      const answer = new Promise<PetDialogAnswer>((resolve) => { settle = resolve; });
--    if (!this.server.sendPet({ t: 'dialog', id, ...d, actions })) settle({ unavailable: true });
-+    if (!this.sendBody({ t: 'dialog', id, ...d, actions })) settle({ unavailable: true });
+-    if (!this.server.sendPet({ t: 'dialog', id, ...d, input, actions })) settle({ unavailable: true });
++    if (!this.sendBody({ t: 'dialog', id, ...d, input, actions })) settle({ unavailable: true });
      else this.dialogs.set(id, settle);
      // a page that never reports back (a tab put to sleep) does not hold a line with nothing to answer forever
      if (!d.input && this.dialogs.has(id)) {
-@@ -1029,11 +1087,11 @@ export class DesktopPetWorld implements World {
+@@ -1087,11 +1145,11 @@ export class DesktopPetWorld implements World {
      }
      return {
        answer,
@@ -629,7 +653,7 @@ index b143181..7c26569 100644
          s?.({ done: true });
        },
      };
-@@ -1062,7 +1120,7 @@ export class DesktopPetWorld implements World {
+@@ -1125,7 +1183,7 @@ export class DesktopPetWorld implements World {
      const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, 500) : '';
      if (index === null && !text) return;
      this.setAsk(null);
@@ -638,7 +662,7 @@ index b143181..7c26569 100644
      const line = index !== null
        ? t.answerPicked(this.userName, ask.question, index + 1, ask.options[index]!)
        : t.answerWrote(this.userName, ask.question, text);
-@@ -1107,7 +1165,11 @@ export class DesktopPetWorld implements World {
+@@ -1170,7 +1228,11 @@ export class DesktopPetWorld implements World {
        case 'throw': text = m.thrown(u, t.crashed); break;
        case 'drop': text = m.dropped(u, t.x !== null && this.screen ? pct(t.x / this.screen.w) : null, t.crashed); break;
        case 'crash': text = m.crashed; break;
@@ -651,7 +675,7 @@ index b143181..7c26569 100644
      }
      const wakes = !this.touchWoke && touchWakes(this.cfg.touch, t.kind);
      if (wakes) this.touchWoke = true;
-@@ -1282,7 +1344,7 @@ export class DesktopPetWorld implements World {
+@@ -1340,7 +1402,7 @@ export class DesktopPetWorld implements World {
    /** A quick tap before the held press: the pet perks up, so the hold that follows feels answered at once. */
    private onTalkTap(): void {
      if (this.talking || !this.cfg.asr.enabled || !this.micWanted()) return;
@@ -660,16 +684,25 @@ index b143181..7c26569 100644
    }
  
    private onTalkKey(down: boolean): void {
-@@ -1297,7 +1359,7 @@ export class DesktopPetWorld implements World {
-     if (!this.cfg.asr.enabled || !this.micWanted()) return;
-     if (on) {
+@@ -1358,7 +1420,7 @@ export class DesktopPetWorld implements World {
        this.listenOpen = true;
--      this.server.sendPet({ t: 'listen', phase: 'start' });
-+      this.sendBody({ t: 'listen', phase: 'start' });
+       // the microphone opens only now: the first frame that reaches the World starts the listening (onAudio)
+       if (this.micOnPress()) this.setMicHeld(true);
+-      else this.server.sendPet({ t: 'listen', phase: 'start' });
++      else this.sendBody({ t: 'listen', phase: 'start' });
        return;
      }
      const tail = this.segmenter.flush();
-@@ -1326,7 +1388,7 @@ export class DesktopPetWorld implements World {
+@@ -1388,7 +1450,7 @@ export class DesktopPetWorld implements World {
+     this.wasSpeaking = false;
+     if (this.listenOpen) {
+       this.listenOpen = false;
+-      this.server.sendPet({ t: 'listen', phase: 'none' });
++      this.sendBody({ t: 'listen', phase: 'none' });
+     }
+     this.log?.info('倾听气泡里点了取消,这次收音已丢弃');
+   }
+@@ -1413,7 +1475,7 @@ export class DesktopPetWorld implements World {
    private enqueue(u: Utterance): void {
      this.counts.utterances++;
      this.queue.push(u);
@@ -678,7 +711,7 @@ index b143181..7c26569 100644
      void this.drain();
    }
  
-@@ -1336,7 +1398,7 @@ export class DesktopPetWorld implements World {
+@@ -1423,7 +1485,7 @@ export class DesktopPetWorld implements World {
      if (open) for (const u of this.segmenter.push(frame)) this.enqueue(u);
      this.level = open ? this.segmenter.level : rmsDb(frame);
      const speaking = open && this.segmenter.active;
@@ -687,7 +720,7 @@ index b143181..7c26569 100644
      this.wasSpeaking = speaking;
      const now = Date.now();
      if (now - this.lastLevelAt >= 100) {
-@@ -1421,7 +1483,7 @@ export class DesktopPetWorld implements World {
+@@ -1510,7 +1572,7 @@ export class DesktopPetWorld implements World {
  
    /** The listening bubble: sentences already transcribed, then the one being heard, greyed. */
    private showHeard(): void {
@@ -696,7 +729,7 @@ index b143181..7c26569 100644
    }
  
    /** Delivers the packed text once nothing upstream is still open. */
-@@ -1436,7 +1498,7 @@ export class DesktopPetWorld implements World {
+@@ -1525,7 +1587,7 @@ export class DesktopPetWorld implements World {
        if (this.listenOpen && !this.talking && !this.segmenter.active) {
          this.listenOpen = false;
          this.partial = '';
@@ -705,7 +738,7 @@ index b143181..7c26569 100644
        }
      }
      if (text) {
-@@ -1444,7 +1506,7 @@ export class DesktopPetWorld implements World {
+@@ -1533,7 +1595,7 @@ export class DesktopPetWorld implements World {
        this.partial = '';
        this.listenOpen = false;
        this.counts.delivered++;
@@ -714,7 +747,7 @@ index b143181..7c26569 100644
        void this.push('desktop-pet.speech', 'desktop-pet.voice', this.t.heard(this.userName, text), 'flush', { meta: { text } });
        return;
      }
-@@ -1453,7 +1515,7 @@ export class DesktopPetWorld implements World {
+@@ -1542,7 +1604,7 @@ export class DesktopPetWorld implements World {
        // the episode ended with nothing worth delivering; an open talk key keeps it going
        this.listenOpen = false;
        this.partial = '';
@@ -723,7 +756,7 @@ index b143181..7c26569 100644
      }
      if (this.packer.pending && !this.packTimer) {
        this.packTimer = setTimeout(() => { this.packTimer = null; this.schedulePack(); }, Math.max(50, this.segmenter.settleRemainingMs || 100));
-@@ -1485,10 +1547,13 @@ export class DesktopPetWorld implements World {
+@@ -1574,10 +1636,13 @@ export class DesktopPetWorld implements World {
        pet_quiet: (args) => this.setQuiet(args),
      };
      const own = petToolDecls(this.appLanguage).map((decl) => ({ ...decl, handler: handlers[decl.name], ...(decl.name === 'pet_walk_to' ? { interruptible: true } : {}) }));
@@ -738,7 +771,7 @@ index b143181..7c26569 100644
      const w = this.windowHost?.state();
      const detail = w && w.phase !== 'running' && w.detail ? w.detail : null;
      return { text: this.t.notConnected(tool, detail, this.userName), failed: true };
-@@ -1501,7 +1566,7 @@ export class DesktopPetWorld implements World {
+@@ -1590,7 +1655,7 @@ export class DesktopPetWorld implements World {
      const { beats, dropped } = parseScript(script, this.vocab());
      const spoken = beats.some((b) => b.text || b.actions.length || b.anchors.length);
      if (!spoken && shown.blobs.length === 0) return { text: this.t.sayEmpty, failed: true };
@@ -747,7 +780,7 @@ index b143181..7c26569 100644
      void this.closeActivity();
      void this.record({ kind: 'say', beats: beats.map((b) => ({ text: b.text, ...moodOf(b.actions, this.vocab()) })) }, beats.map((b) => b.text).join(''), shown.blobs);
      if (!spoken) return { text: this.t.imagesShown(shown.blobs.length, this.chat.size > 0) };
-@@ -1541,7 +1606,7 @@ export class DesktopPetWorld implements World {
+@@ -1630,7 +1695,7 @@ export class DesktopPetWorld implements World {
      if (!question) return { text: this.t.askEmpty, failed: true };
      if (options.length === 0 && !allowOwn) return { text: this.t.askNoWay, failed: true };
      const id = nextId('a');
@@ -756,7 +789,7 @@ index b143181..7c26569 100644
      const replaced = this.ask?.question ?? null;
      this.setAsk({ id, question, options });
      void this.closeActivity();
-@@ -1565,12 +1630,12 @@ export class DesktopPetWorld implements World {
+@@ -1654,12 +1719,12 @@ export class DesktopPetWorld implements World {
      const pack = this.currentPack();
      if (pack?.manifest.can.walk === false) return { text: this.t.walkCannot(modelName(pack.manifest.name, pack.id, this.language)), failed: true };
      const walkId = nextId('w');
@@ -771,7 +804,7 @@ index b143181..7c26569 100644
        };
        const done = (s: string): void => {
          ctx?.signal?.removeEventListener('abort', onAbort);
-@@ -1658,7 +1723,7 @@ export class DesktopPetWorld implements World {
+@@ -1747,7 +1812,7 @@ export class DesktopPetWorld implements World {
      const vocab = this.vocab();
      const { actions, dropped } = parseActions(list, vocab);
      if (!actions.length) return { text: this.t.actNone(dropped), failed: true };
@@ -780,7 +813,7 @@ index b143181..7c26569 100644
      const lasting = actions.filter((a) => vocab.find((v) => v.id === a)?.lasting);
      return { text: this.t.actReceipt(actions, lasting, dropped) };
    }
-@@ -1671,6 +1736,7 @@ export class DesktopPetWorld implements World {
+@@ -1760,6 +1825,7 @@ export class DesktopPetWorld implements World {
      const reply = this.opts.replyLanguage?.() ?? null;
      return {
        'pet.cua': this.cuaOn ? await this.cua.envPrompt() : '',
@@ -788,7 +821,7 @@ index b143181..7c26569 100644
        'pet.user': user,
        'pet.vocab': vocabTable(this.vocab(), language),
        'pet.voice': this.cfg.asr.enabled ? t.on : t.off,
-@@ -1718,7 +1784,7 @@ export class DesktopPetWorld implements World {
+@@ -1807,7 +1873,7 @@ export class DesktopPetWorld implements World {
      return {
        label: c.label,
        lamps,
@@ -797,7 +830,7 @@ index b143181..7c26569 100644
        invoke: (panel, method, args) => this.invoke(panel, method, args),
        stream: (panel, socket) => {
          // `chat` has no panel: the embedding app draws its chat page from this stream
-@@ -1734,13 +1800,14 @@ export class DesktopPetWorld implements World {
+@@ -1823,13 +1889,14 @@ export class DesktopPetWorld implements World {
          ...c.envPrompt,
          path: this.envPromptFile(),
          role: 'envPrompt',
@@ -814,7 +847,7 @@ index b143181..7c26569 100644
      if (panel === 'pet') {
        switch (method) {
          case 'state': return this.petState();
-@@ -1862,3 +1929,8 @@ export class DesktopPetWorld implements World {
+@@ -1950,3 +2017,8 @@ export class DesktopPetWorld implements World {
  }
  
  export const modelsDirFor = (root: string) => join(root, DESKTOP_PET_ID);
@@ -825,10 +858,10 @@ index b143181..7c26569 100644
 +}
 diff --git a/packages/cortico-world-desktop-pet/tests/relay.test.ts b/packages/cortico-world-desktop-pet/tests/relay.test.ts
 new file mode 100644
-index 0000000..629b223
+index 0000000..113b4df
 --- /dev/null
 +++ b/packages/cortico-world-desktop-pet/tests/relay.test.ts
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,201 @@
 +import { afterEach, describe, expect, it } from 'vitest';
 +import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 +import { tmpdir } from 'node:os';
@@ -975,7 +1008,7 @@ index 0000000..629b223
 +    const { world, host } = await mounted(relay, (c) => { c.user = 'Sam'; });
 +    expect(world.tools().map((t) => t.name)).toContain('pet_location');
 +    expect((await world.envPromptVars())['pet.relay']).toBe('BODY CAN TRAVEL');
-+    const decl = world.console();
++    const decl = world.webUi();
 +    expect(decl.panels!.map((p) => p.id)).toContain('board');
 +    expect(await decl.invoke!('board', 'state', [])).toEqual({ method: 'state', away: false });
 +    relay.port!.input({ t: 'touch', kind: 'hug' });
@@ -1008,6 +1041,15 @@ index 0000000..629b223
 +    expect((await fetch(`${origin(world)}/relay/missing.js`)).status).toBe(404);
 +  });
 +
++  it("adds the relay's tools and events to the World's self-description", () => {
++    const tool = { name: 'pet_location', description: 'where', parameters: { type: 'object', properties: {} }, tags: ['read'] as const };
++    const def = desktopPetDefinition({ relayDescribe: { tools: [tool], events: [{ type: 'desktop-pet.presence', description: { zh: '身体在哪', en: 'where the body is' } }] } });
++    expect(def.describe!.tools.map((t) => t.name)).toContain('pet_location');
++    expect(def.describe!.tools.map((t) => t.name)).toContain('pet_say');
++    expect(def.describe!.events.map((e) => e.type)).toContain('desktop-pet.presence');
++    expect(desktopPetDefinition().describe!.tools.map((t) => t.name)).not.toContain('pet_location');
++  });
++
 +  it('is made for each World instance from the assembly', () => {
 +    const made: string[] = [];
 +    const def = desktopPetDefinition({ relay: ({ dataDir }) => { made.push(dataDir); return null; } });
@@ -1022,10 +1064,10 @@ index 0000000..629b223
 +  });
 +});
 diff --git a/packages/cortico-world-desktop-pet/web/pet-app.js b/packages/cortico-world-desktop-pet/web/pet-app.js
-index 32ea2c3..072bf79 100644
+index 8857053..a4cdab8 100644
 --- a/packages/cortico-world-desktop-pet/web/pet-app.js
 +++ b/packages/cortico-world-desktop-pet/web/pet-app.js
-@@ -70,6 +70,8 @@ const bounds = () => ({ W: innerWidth, H: innerHeight, floorY: innerHeight - flo
+@@ -75,6 +75,8 @@ const bounds = () => ({ W: innerWidth, H: innerHeight, floorY: innerHeight - flo
   * vocab, by id). `T` is the page's clock, in seconds of frames drawn.
   */
  let body = null, words = new Map(), T = 0;
@@ -1034,7 +1076,7 @@ index 32ea2c3..072bf79 100644
  /** Where the body last said it is (body-host.js `layout`), or null. */
  const at = () => body?.layout ?? null;
  /** What the body is told of the page: talking orders hold its roaming off, and these states. */
-@@ -228,7 +230,7 @@ function applyPrefs(p) {
+@@ -250,7 +252,7 @@ function applyPrefs(p) {
    if (typeof p.rememberPosition === 'boolean') { prefs.rememberPosition = p.rememberPosition; reportPosition(); }
    if (typeof p.user === 'string') prefs.user = p.user;
    if (typeof p.micDevice === 'string' && p.micDevice !== prefs.micDevice) { prefs.micDevice = p.micDevice; stopMic(); }
@@ -1043,7 +1085,7 @@ index 32ea2c3..072bf79 100644
    if (p.voice && typeof p.voice === 'object') prefs.voice = { ...prefs.voice, ...p.voice };
    if (typeof p.doubleClickChat === 'boolean') prefs.doubleClickChat = p.doubleClickChat;
    if (typeof p.statusBubble === 'boolean') { prefs.statusBubble = p.statusBubble; setBody({ thoughtShown: p.statusBubble }); }
-@@ -253,9 +255,10 @@ async function switchLanguage(code) {
+@@ -275,9 +277,10 @@ async function switchLanguage(code) {
  }
  
  function onOrder(m) {
@@ -1056,7 +1098,7 @@ index 32ea2c3..072bf79 100644
      case 'watching': watching = true; stopMic(); break;
      // the settings window's 「在桌面上隐藏」: the same as the menu's 「隐藏」
      case 'hide': host?.hide?.(); break;
-@@ -274,6 +277,32 @@ function onOrder(m) {
+@@ -296,6 +299,32 @@ function onOrder(m) {
    }
  }
  
@@ -1089,7 +1131,7 @@ index 32ea2c3..072bf79 100644
  /** Tells the body of a change in the page's states (listening, thinking, a bubble that wants it to stay put). */
  function setBody(change) {
    if (Object.entries(change).every(([k, v]) => bodyState[k] === v)) return;
-@@ -1167,6 +1196,7 @@ let interactive = null, renewedAt = -Infinity;
+@@ -1214,6 +1243,7 @@ let interactive = null, renewedAt = -Infinity;
   */
  function setInteractive(on, by) {
    if (!host) return;
@@ -1097,7 +1139,7 @@ index 32ea2c3..072bf79 100644
    const now = performance.now();
    const changed = interactive !== on;
    if (!changed && !(on && now - renewedAt >= MOUSE_RENEW_MS)) return;
-@@ -1260,7 +1290,7 @@ host?.onCursor?.((p) => {
+@@ -1307,7 +1337,7 @@ host?.onCursor?.((p) => {
  /** A press that began on the body and has not been let go of: the window keeps the mouse meanwhile. */
  let pressing = false;
  stage.addEventListener('pointerdown', (e) => {
@@ -1106,7 +1148,7 @@ index 32ea2c3..072bf79 100644
    closeMenu();
    const p = { x: e.clientX, y: e.clientY, t: e.timeStamp };
    body?.pointer('down', p);
-@@ -1533,10 +1563,11 @@ function frame(now) {
+@@ -1580,10 +1610,11 @@ function frame(now) {
      stepListen();
      stepStatus();
      setBody({ dialogOpen: !!item || !!listen.phase });

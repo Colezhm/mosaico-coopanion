@@ -1,9 +1,9 @@
 /**
- * Requests to the console HTTP API. Each carries the window's language and takes an abort signal.
+ * Requests to the WebUI HTTP API. Each carries the window's language and takes an abort signal.
  * A non-2xx reply or a body that is not JSON throws `ConsoleInvokeError`, with the server's
  * `error` when it gave one; an abort is thrown as it is. An empty success is null.
  */
-import type { ConsoleManifest } from 'cortico/web/shared/console-protocol.ts';
+import type { WebUiManifest } from 'cortico/web/shared/webui-protocol.ts';
 import type { PathPickerOptions } from 'cortico/web/shared/path-picker.ts';
 import { languageHeaders } from './language.ts';
 import { AUTH_HEADER, ConsoleInvokeError, panelRoute } from './protocol.ts';
@@ -132,7 +132,7 @@ export async function pickPath(options: PathPickerOptions, opts?: RequestOptions
   return (await post<{ path: string | null }>('/api/path-picker', options, opts)).path;
 }
 
-/** Every page's declaration (`GET /api/console/manifest`). */
-export function fetchManifest(opts?: RequestOptions): Promise<ConsoleManifest> {
-  return get<ConsoleManifest>('/api/console/manifest', opts);
+/** Every page's declaration (`GET /api/webui/manifest`). */
+export function fetchManifest(opts?: RequestOptions): Promise<WebUiManifest> {
+  return get<WebUiManifest>('/api/webui/manifest', opts);
 }

@@ -1,13 +1,13 @@
 /**
- * The settings window: Coopanion's own front end, which talks to Core only through the console HTTP
+ * The settings window: Coopanion's own front end, which talks to Core only through the WebUI HTTP
  * API (tests/console-api.test.ts locks the routes). The Electron main process serves this build
  * under `/coopanion/` on Core's own origin (app/main.cjs), so requests and WebSockets are same-origin.
  *
  * Two modes (features/mode.ts). The normal mode lists the pages about the pet, 系统提示词 (the whole
- * system prompt with 「清空重开」, the page of advanced/ that uses public routes only), 用量与成本 and 对话;
- * every other route opens 开始. The advanced mode adds the pages copied from Cortico's console
+ * system prompt with 「清空对话并重开」, the page of advanced/ that uses public routes only), 用量与成本 and 对话;
+ * every other route opens 开始. The advanced mode adds the pages copied from Cortico's WebUI
  * (advanced/): the World tree with the World pages, 接入 (模型供应商, 扩展), 人格与记忆 (the Persona and
- * Memory pages), 诊断 (终端, Core). Pages from the manifest (`/api/console/manifest`: Worlds, the
+ * Memory pages), 诊断 (控制台, Core). Pages from the manifest (`/api/webui/manifest`: Worlds, the
  * Persona, Memory) mount through the page host (advanced/console-pages) by the panel contract. The rail is built once; a mode
  * change only hides or shows the entries the normal mode does not list, and the page open stays.
  *
@@ -32,7 +32,7 @@ import { BUILTIN_PANELS } from './advanced/console-pages/builtins.ts';
 import { ConsolePageHost, PROVIDER_ROUTE } from './advanced/console-pages/host.ts';
 import { ConsolePageLoader } from './advanced/console-pages/loader.ts';
 import { featureAvailable, type FeatureContext, type FrameworkFeature } from './advanced/features/feature.ts';
-import { promptsWithClearFeature } from './advanced/features/clear-session.ts';
+import { promptsFeature } from './advanced/features/prompts/index.ts';
 import { coreFeature } from './advanced/features/core/index.ts';
 import { extensionsFeature } from './advanced/features/extensions/index.ts';
 import { providersFeature } from './advanced/features/providers/index.ts';
@@ -72,7 +72,7 @@ const fromFeature = (feature: FrameworkFeature, group: Entry['group'], basic = f
 /** The rail's entries in order. */
 export const ENTRIES: readonly Entry[] = [
   fromPage(homePage), fromPage(petPage), fromPage(dressPage), fromPage(voicePage), fromPage(mosaicoPage),
-  fromFeature(promptsWithClearFeature, 'primary', true), fromPage(usagePage), fromPage(chatPage),
+  fromFeature(promptsFeature, 'primary', true), fromPage(usagePage), fromPage(chatPage),
   // 模型供应商 keeps the providers page's own name
   fromFeature(providersFeature, 'integrations'), fromFeature(extensionsFeature, 'integrations'),
   fromFeature(traceFeature, 'diagnostics'), fromFeature(coreFeature, 'diagnostics'),
@@ -147,7 +147,7 @@ export function boot(doc: Document = document): Disposable {
   };
   renderNav();
 
-  // the lamps of the manifest pages, which only the advanced mode lists (`/api/console/lamps` is an internal route)
+  // the lamps of the manifest pages, which only the advanced mode lists (`/api/webui/lamps` is an internal route)
   let lamps: Disposable | null = null;
   const followLamps = (): void => {
     if (mode === 'advanced') lamps ??= subscribeLamps(doc, (next) => rail.setLamps(next));

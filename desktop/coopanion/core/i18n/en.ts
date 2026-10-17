@@ -19,6 +19,7 @@ const en: CoreText = {
   /** What the pet's bubble says after several model requests in a row failed. */
   failure: {
     text: (n: number, status: number, reason: string) => `My last ${n} requests to the model failed. Error${status ? ` ${status}` : ''}: ${reason}. Check the model name and API Key on the Start page in settings, where you can test the connection.`,
+    reasoningReplay: (n: number) => `My last ${n} requests to the model failed: this service requires the thinking to be sent back before every tool call, and Coopanion has that turned off for it. Please report this to the developers: https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: 'Open settings',
     ok: 'OK',
   },
@@ -65,6 +66,18 @@ const en: CoreText = {
     gotName: (name: string) => `${name}, got it!`,
     askSource: 'Where did you hear about me?',
     sourceThanks: 'Oh, I see. Coo...',
+    askPersona: 'What do you think I should be...',
+    /** The persona cards: the words on each, and what Coo says when it is picked. */
+    personas: {
+      coo: { label: 'Small and curious', line: "What's that? Let me take a peek. Coo..." },
+      grail: { label: 'Clingy and greedy', line: 'What are you eating? Share a bite with me. Coo...' },
+      forge: { label: 'Reliable and capable', line: "What needs doing? Leave it to me, it won't take long. Coo." },
+      heart: { label: 'Lively and always there', line: "I'm here! I'll keep you company all day. Coo!" },
+      winter: { label: 'Quiet and wordless', line: '...Mm. Coo.' },
+      whale: { label: 'DeepSeek Chan', line: "Welcome back! What's that? Let me see. Coo..." },
+    },
+    /** The line beside the confirm button; `dress` is the dressing page's name in the settings window, drawn after its icon. */
+    dressHint: { text: 'Change the colours in Dress up', dress: 'Dress up' },
     askRoam: 'Should I keep quiet or be lively most of the time? Click one to see what I\'d do.',
     /** Three cards: the name, how lively, and what Coo says when it is picked. */
     roam: {

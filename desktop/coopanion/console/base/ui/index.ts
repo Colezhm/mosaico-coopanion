@@ -1,6 +1,6 @@
-/** 每次面板挂载创建 ConsoleUi，绑定 memo 命名空间、signal 与浮层宿主。 */
+/** 每次面板挂载创建 WebUi，绑定 memo 命名空间、signal 与浮层宿主。 */
 
-import type { ConsoleMemo, ConsoleUi, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiMemo, WebUi, Disposable } from 'cortico/web/shared/client-panel.ts';
 import { esc, h } from './dom.ts';
 import { consoleFormat } from './format.ts';
 import { kv, progress, statgrid, stat, table } from './data.ts';
@@ -25,7 +25,7 @@ import { busy, confirm, drawer, lightbox, noopDisposable, toast } from './overla
 
 export interface ConsoleUiDeps {
   /** 面板局部持久化。`foldSheet` 的展开状态存这儿。 */
-  memo: ConsoleMemo;
+  memo: WebUiMemo;
   /**
    * toast / confirm / drawer 的挂载点。host 传 `document.body` 或一个专用容器。
    * **不能是面板的 `root`**——那个在 unmount 时会被清空。
@@ -37,7 +37,7 @@ export interface ConsoleUiDeps {
   doc?: Document;
 }
 
-export function createConsoleUi(deps: ConsoleUiDeps): ConsoleUi {
+export function createConsoleUi(deps: ConsoleUiDeps): WebUi {
   const doc = deps.doc ?? deps.overlayHost.ownerDocument;
   const signal = deps.signal;
   const env: OverlayEnv = { doc, host: deps.overlayHost, signal };

@@ -19,6 +19,7 @@ export default {
   'heard.done': '已识别',
   'heard.more': '正在倾听…',
   'heard.listening': '正在倾听…',
+  'heard.cancel': '取消',
 
   // 状态气泡:同一类事做了好几次时接在后面
   'status.more': ' 和另外 {others} 个',

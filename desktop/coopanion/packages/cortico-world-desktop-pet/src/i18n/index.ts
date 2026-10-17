@@ -2,7 +2,7 @@
  * The text this World shows people, one file per language named for its code. `zh.ts` and `en.ts`
  * have every key; another language's file has the top-level keys translated so far, each group in it
  * whole, and the keys it leaves out read `zh.ts` for `zh-Hant` and `en.ts` for the rest. Imports
- * nothing from Cortico at run time, so the console panels (src/console/client.ts) use it too.
+ * nothing from Cortico at run time, so the WebUI panels (src/webui/client.ts) use it too.
  */
 import type { Language, LanguageTable } from 'cortico/core/language.ts';
 import zh from './zh.ts';

@@ -11,7 +11,7 @@ A paired WSS channel coordinates durable single-body transfers with two 500 ms t
 Full-image installation overwrites all 16 MiB of NOR, including existing settings and pairing.
 The retained Vibe Mode partition layout is preserved; existing data is not preserved by initial installation.
 
-- Desktop source: `desktop/coopanion` (upstream Coopanion v0.1.26, AGPL-3.0-or-later, plus the patches and the Mosaico package described in [desktop/upstream](desktop/upstream/README.md)).
+- Desktop source: `desktop/coopanion` (upstream Coopanion v0.2.3, AGPL-3.0-or-later, plus the patches and the Mosaico package described in [desktop/upstream](desktop/upstream/README.md)).
 - Device and shared simulator: `projects/coopanion` (GSP 1.5.1; pinned ESP-IDF/ESP32-S31).
 - Reproducible setup, private pairing, preview and image export: [guide](docs/coopanion-implementation.md).
 - Original workspace documentation: [English](README.upstream.md) / [Chinese](README_CN.upstream.md).

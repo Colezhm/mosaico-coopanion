@@ -10,9 +10,9 @@
  * page, with a backdrop that folds it again. Pause and resume, shutting down and renaming go to Core
  * through `/api/run/*` and `/api/config`.
  */
-import type { ConsoleMemo, ConsoleUi } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiMemo, WebUi } from 'cortico/web/shared/client-panel.ts';
 import { get, post, setConfig } from '../base/api.ts';
-import type { ConsoleLamp } from 'cortico/web/shared/console-protocol.ts';
+import type { WebUiLamp } from 'cortico/web/shared/webui-protocol.ts';
 import { buildHash, type Route, type Router } from '../base/router.ts';
 import { icon, type ConsoleIconName } from '../base/ui/icons.ts';
 import { lampRow, paintLamps } from '../base/ui/lamp.ts';
@@ -34,7 +34,7 @@ export interface NavItem {
   /** Listed in the normal mode too. */
   basic: boolean;
   pageId?: string;
-  lamps?: readonly ConsoleLamp[];
+  lamps?: readonly WebUiLamp[];
 }
 
 /** `primary` entries stand alone; the others sit under a title. `modules` are a World tree's instances. */
@@ -47,10 +47,10 @@ export interface NavGroup {
 
 export interface RailDeps {
   doc: Document;
-  ui: ConsoleUi;
+  ui: WebUi;
   router: Router;
   mode: ConsoleMode;
-  memo: ConsoleMemo;
+  memo: WebUiMemo;
   signal: AbortSignal;
   /** The page area: inert while the narrow rail is open over it. */
   content: HTMLElement;
@@ -67,7 +67,7 @@ export interface Rail {
   setNav(groups: readonly NavGroup[]): void;
   setMode(mode: ConsoleMode, animate: boolean): void;
   /** A new reading of the manifest pages' lamps; only the dots change. */
-  setLamps(lamps: Record<string, readonly ConsoleLamp[]>): void;
+  setLamps(lamps: Record<string, readonly WebUiLamp[]>): void;
   setCapabilities(capabilities: Record<string, boolean>): void;
 }
 
@@ -107,7 +107,7 @@ export function createRail(deps: RailDeps): Rail {
   nav.id = 'companion-navigation';
   nav.setAttribute('aria-label', S.navAria);
   let entries: Array<{ item: HTMLAnchorElement; segments: readonly string[]; pageId?: string; lamps?: HTMLSpanElement }> = [];
-  let lamps: Record<string, readonly ConsoleLamp[]> = {};
+  let lamps: Record<string, readonly WebUiLamp[]> = {};
   let navLife: AbortController | null = null;
   signal.addEventListener('abort', () => navLife?.abort(), { once: true });
   let route: Route | null = null;
@@ -527,7 +527,7 @@ export function createRail(deps: RailDeps): Rail {
       mode = next;
       renderMode(animate);
     },
-    setLamps(next: Record<string, readonly ConsoleLamp[]>): void {
+    setLamps(next: Record<string, readonly WebUiLamp[]>): void {
       lamps = next;
       for (const entry of entries) if (entry.lamps && entry.pageId) paintLamps(entry.lamps, lamps[entry.pageId] ?? []);
     },

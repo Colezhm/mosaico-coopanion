@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: '콘솔 탐색',
+  navAria: '설정 탐색',
   groupWorlds: 'World',
   moduleInstancesAria: 'World 인스턴스',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: '종료',
   finishing: '종료하는 중…',
   shutdownTitle: '종료',
-  shutdownBody: '프로세스가 종료되고 콘솔 연결이 끊어집니다.',
+  shutdownBody: '프로세스가 종료되고 연결이 끊어집니다.',
   confirmShutdownTitle: '⚠ 종료',
   confirmShutdownAgainTitle: '⚠⚠ 종료하시겠습니까?',
   confirmShutdownAgainBody: '실행을 중지하고 프로세스를 종료하시겠습니까?',
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: '종료 단계를 실행했습니다.',
   noReceipt: (msg: string) =>
     `종료 결과를 받지 못했습니다(${msg}). 프로세스가 이미 종료되었을 수 있습니다.`,
-  docTitle: (name: string) => `콘솔 · ${name}`,
+  docTitle: (name: string) => `설정 · ${name}`,
   renameTitle: '클릭하여 이름 변경',
   renameSaved: '표시 이름을 저장했습니다',
   renameFailed: (msg: string) => `표시 이름을 저장하지 못했습니다: ${msg}`,

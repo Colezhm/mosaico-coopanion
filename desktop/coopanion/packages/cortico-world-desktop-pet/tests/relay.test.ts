@@ -144,7 +144,7 @@ describe('body relay', () => {
     const { world, host } = await mounted(relay, (c) => { c.user = 'Sam'; });
     expect(world.tools().map((t) => t.name)).toContain('pet_location');
     expect((await world.envPromptVars())['pet.relay']).toBe('BODY CAN TRAVEL');
-    const decl = world.console();
+    const decl = world.webUi();
     expect(decl.panels!.map((p) => p.id)).toContain('board');
     expect(await decl.invoke!('board', 'state', [])).toEqual({ method: 'state', away: false });
     relay.port!.input({ t: 'touch', kind: 'hug' });
@@ -175,6 +175,15 @@ describe('body relay', () => {
     expect(await ok.text()).toContain('install');
     expect((await fetch(`${origin(world)}/relay/..%2F..%2Fetc%2Fpasswd`)).status).toBe(403);
     expect((await fetch(`${origin(world)}/relay/missing.js`)).status).toBe(404);
+  });
+
+  it("adds the relay's tools and events to the World's self-description", () => {
+    const tool = { name: 'pet_location', description: 'where', parameters: { type: 'object', properties: {} }, tags: ['read'] as const };
+    const def = desktopPetDefinition({ relayDescribe: { tools: [tool], events: [{ type: 'desktop-pet.presence', description: { zh: '身体在哪', en: 'where the body is' } }] } });
+    expect(def.describe!.tools.map((t) => t.name)).toContain('pet_location');
+    expect(def.describe!.tools.map((t) => t.name)).toContain('pet_say');
+    expect(def.describe!.events.map((e) => e.type)).toContain('desktop-pet.presence');
+    expect(desktopPetDefinition().describe!.tools.map((t) => t.name)).not.toContain('pet_location');
   });
 
   it('is made for each World instance from the assembly', () => {

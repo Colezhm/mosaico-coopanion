@@ -2,10 +2,10 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   protocolMismatch: (server: string, page: string) =>
-    `Version du protocole de la console incohérente : serveur ${server}, cette page ${page}.`
+    `Version du protocole de page incohérente : serveur ${server}, cette page ${page}.`
     + ' Forcez le rechargement de la page.',
   pageFailed: (pageId: string) => `Impossible d'ouvrir « ${pageId} »`,
-  noPage: (pageId: string) => `Page de console introuvable : « ${pageId} »`,
+  noPage: (pageId: string) => `Page introuvable : « ${pageId} »`,
   noPageHint: "Vérifiez l'adresse de la page et l'état d'activation du module.",
   noPanels: (label: string) => `« ${label} » ne déclare aucun panneau.`,
   noSuchPanel: (label: string, wanted: string) => `« ${label} » n'a pas de panneau « ${wanted} »`,

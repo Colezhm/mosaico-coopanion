@@ -13,6 +13,7 @@ const zhHant: Translation<CoreText> = {
 
   failure: {
     text: (n: number, status: number, reason: string) => `我連續 ${n} 次沒能從模型那裡拿到回覆。錯誤${status ? ` ${status}` : ''}：${reason}。請在設定的「開始」頁檢查模型名稱和 API Key，那裡可以測試連線。`,
+    reasoningReplay: (n: number) => `我連續 ${n} 次沒能從模型那裡拿到回覆：這家服務商要求每次呼叫工具前都回傳思考內容，Coopanion 對它關掉了這一項。請把這件事回報給開發者：https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: '開啟設定',
     ok: '知道了',
   },
@@ -52,6 +53,16 @@ const zhHant: Translation<CoreText> = {
     gotName: (name: string) => `${name}，記住囉！`,
     askSource: '你是從哪裡認識我的？',
     sourceThanks: '原來是這樣，庫...',
+    askPersona: '你覺得我應該是...',
+    personas: {
+      coo: { label: '小小的、好奇的', line: '這是什麼？我湊過去看一眼，庫...' },
+      grail: { label: '黏人的、貪心的', line: '你在吃什麼呀？也分我一口嘛，庫...' },
+      forge: { label: '可靠的、幹練的', line: '要做什麼？交給我，一下就好，庫。' },
+      heart: { label: '活潑的、陪伴的', line: '我來啦！今天也一直陪著你，庫！' },
+      winter: { label: '安靜的、沉默的', line: '……嗯，庫。' },
+      whale: { label: 'DeepSeek 大肥魚', line: '歡迎回來！這是什麼？讓我看看，庫...' },
+    },
+    dressHint: { text: '配色可以在 裝扮 中替換', dress: '裝扮' },
     askRoam: '平常我該安靜一點，還是活潑一點？點一下，看看我會怎樣。',
     roam: {
       off: { label: '不亂動', level: '低', line: '那我就乖乖站著，你叫我我再動。' },

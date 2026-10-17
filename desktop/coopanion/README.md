@@ -40,11 +40,11 @@ Coopanion is a desktop pet. **Coo** lives on the bottom edge of your screen: it 
 
 - **Many model services**: OpenAI, Anthropic, Gemini, xAI, OpenRouter, DeepSeek, Kimi, Qwen, MiniMax, Zhipu GLM, Doubao, Baidu Qianfan and StepFun. Pick one and paste an API key, or sign in with a ChatGPT account to use its ChatGPT plan.
 - **Chat**: hold the talk key and speak, or type; Coo answers in a bubble. Speech is recognized on your machine with FunASR or Whisper, picked by the app language.
-- **Memory**: Coo remembers what you talked about, and knows when you poke it or pat its head.
+- **Memory**: Coo remembers what you talked about, and knows when you poke it or pat its head. What it knows about you goes in `PARTNER.md` in its workspace, which its prompt includes whole. Every change to the workspace is kept as a version; the Memory page in the advanced mode shows the history. The Windows build carries git; on macOS and Linux git has to be installed.
 - **Computer use**: clicking buttons, typing, switching windows. Coo asks before it acts.
 - **Activity bubbles**: see when Coo is thinking and what it is working on, with a different animated icon for reading, searching, writing and using the computer. File names appear; the bubble lets clicks through. On by default; turn it off in Habits.
-- **Figures**: Coo, or the **DeepSeek Whale**, a fully animated whale girl with eight vendor color schemes and two outfits (a maid dress and a winter outfit). Other figure packs are imported on the Dress up page from a zip or a folder; packs written for figure API 2 keep loading in later versions (see the [figure pack compatibility promise](packages/cortico-world-desktop-pet/README.md#形象包兼容承诺)).
-- **Dress up**: Coo's colors, hats, earrings, glasses and neckwear, plus its size and how often it walks.
+- **Figures**: Coo, or the **DeepSeek Chan**, a fully animated whale girl with eight vendor color schemes and two outfits (a maid dress and a winter outfit). Other figure packs are imported on the Dress up page from a zip or a folder; packs written for figure API 2 keep loading in later versions (see the [figure pack compatibility promise](packages/cortico-world-desktop-pet/README.md#形象包兼容承诺)).
+- **Dress up**: Coo's colors (five of them after Cultist Simulator's principles: Lantern, Grail, Forge, Heart, Winter), hats, earrings, glasses and neckwear, plus its size and how often it walks.
 - **Extensions**: install Worlds such as a QQ bot, a drawing room and small games from the Extensions page.
 
 What changed in each version is in [Releases](https://github.com/Pal-AI-Lab/Coopanion/releases).
@@ -109,14 +109,15 @@ Coopanion to your antivirus's allowed list first.
 1. **Start**: Coo drops to the bottom of the screen and an icon appears in the tray (menu bar on Mac, status bar on Linux). No window opens.
 2. **Guide**: on first start Coo walks you through setup in its bubbles; you pick or type the answers right there:
    1. what Coo should call you, and where you heard about Coopanion ("I'd rather not say" is one of the answers; the answer is sent with the anonymous usage statistics when they are on);
-   2. how much it walks around: stay put / now and then / often;
-   3. which model service to use (the first one listed if unsure), then paste the API key and test the connection;
-   4. download the speech model (FunASR, about 230 MB; Whisper, about 360 MB, when the app language is French, German, Spanish, Portuguese, Italian or Russian; from ModelScope), then how to talk to Coo;
-   5. where the buttons, menu and settings are, and that the persona is on the System prompt page of the settings window.
+   2. what Coo is like: small and curious / clingy and greedy / reliable and capable / lively and always there / quiet and wordless, and on the GitHub build DeepSeek Chan. Picking one dresses Coo in its colors and has it say a line in that voice; the one you keep becomes its persona, which Coo edits from then on, and the colors change on the Dress up page. Once the persona has been edited, running the guide again skips this step;
+   3. how much it walks around: stay put / now and then / often;
+   4. which model service to use (the first one listed if unsure), then paste the API key and test the connection;
+   5. download the speech model (FunASR, about 230 MB; Whisper, about 360 MB, when the app language is French, German, Spanish, Portuguese, Italian or Russian; from ModelScope), then how to talk to Coo;
+   6. where the buttons, menu and settings are, and that the persona is on the System prompt page of the settings window.
 
    After the guide you can talk Coo through its personality, way of speaking and what you call each other; it can write the persona into its prompt itself.
 
-   Coo's persona and prompts are written in Chinese when the app language is Simplified or Traditional Chinese and in English for every other language; for languages other than Simplified Chinese and English, Coo is also told to talk to you in the app language. Changing the language swaps the starting persona for the other version as long as you have not edited it; Coo reads it from its next session. An edited persona stays as it is.
+   Coo's persona follows the app language and exists in all eleven; its other prompts are in Chinese when the app language is Simplified or Traditional Chinese and in English for every other language, and for languages other than Simplified Chinese and English Coo is also told to talk to you in the app language. Changing the language swaps an unedited persona for the same persona in the new language; Coo reads it from its next session. An edited persona stays as it is.
 
    The × at the top right of the bubble ends the guide at any time. Run it again from **Guide** on the Start page. If you chose to enter the key later, Coo asks again after a while, and each time you talk to it before a model is connected it offers to connect one.
 3. **Say hello**: tap **Left Alt** (**Left Option** on Mac), then press and hold it, say "hello", and release to send. Allow microphone access when asked.
@@ -154,7 +155,7 @@ Kimi, Qwen, MiniMax and Zhipu GLM have separate mainland China and international
 
 Only DeepSeek and Anthropic have been tested with real keys; the others follow their documentation. Open an issue if one fails.
 
-**ChatGPT** takes no key: pick it and press **Continue with ChatGPT**, then sign in in the browser that opens (Sign in with ChatGPT). Coo's requests count toward that account's ChatGPT plan, and its usage limits apply; keep an eye on them in ChatGPT's settings. When the limit is reached, Coo goes quiet and tries again every few minutes until the plan allows requests again. The connection starts on the first model the plan lists; the sign-in is kept in the connection's folder and renewed by itself. The ChatGPT section of the connection on the Model page in advanced mode signs in again or out; deleting the connection signs it out, and it cannot be duplicated. Signing in has not been tried with a real account yet.
+**ChatGPT** takes no key: pick it and press **Continue with ChatGPT**, then sign in in the browser that opens (Sign in with ChatGPT). Coo's requests count toward that account's ChatGPT plan, and its usage limits apply; keep an eye on them in ChatGPT's settings. When the limit is reached, Coo goes quiet and tries again every few minutes until the plan allows requests again. The connection starts on the first model the plan lists; the sign-in is kept in the connection's folder and renewed by itself. The ChatGPT section of the connection on the Model page in advanced mode signs in again or out; deleting the connection signs it out, and it cannot be duplicated.
 
 </details>
 
@@ -164,12 +165,12 @@ Only DeepSeek and Anthropic have been tested with real keys; the others follow t
 
 | How           | What to do                                                                                                                            |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Voice         | **Tap Left Alt, then press and hold it** (Left Option on Mac) and speak; releasing ends the sentence. Recognized text shows in a dashed bubble. |
+| Voice         | **Tap Left Alt, then press and hold it** (Left Option on Mac) and speak; releasing ends the sentence. Recognized text shows in a dashed bubble; click Cancel in it to drop the sentence. |
 | Typing        | Rest the pointer on Coo and click the bubble button beside it. With "Double-click Coo to open the typing box" on in Habits, double-clicking works too. |
 | Mic button    | Appears when the pointer rests on Coo and turns voice input on or off. Its corner shows the talk key (`ALT×2` by default) while listening on the key, AUTO while always listening. Long-press it while listening to send the sentence at once. |
 | Answering     | When Coo offers choices, click one or press 1–3; if none fits, write your own in the last box.                                         |
 
-Talk key, microphone and listening mode (hold to talk / press to toggle / always listen) are on the Voice input page. Click the talk key button and press a single key, a combination such as `Ctrl + Space`, or a mouse side button; beside it, choose **Double-tap, then hold** (the default) or **Just hold**. When the talk key is unavailable, nothing is recognized until it can be read again; the Voice input page says why.
+Talk key, microphone and listening mode (hold to talk / press to toggle / always listen) are on the Voice input page. Click the talk key button and press a single key, a combination such as `Ctrl + Space`, or a mouse side button; beside it, choose **Double-tap, then hold** (the default) or **Just hold**. When the talk key is unavailable, speech is not recognized; the Voice input page says why. If a headset, such as a Bluetooth one, switches to call mode and plays no sound while the microphone is open, turn on **Open the microphone only while held** on the Voice input page.
 
 Speech is recognized on your machine and audio is never uploaded: by **FunASR** (the SenseVoiceSmall model, about 230 MB) when the app language is Chinese, English, Japanese or Korean, and by **Whisper** (the small model, about 360 MB; the text appears once a sentence ends) for French, German, Spanish, Portuguese, Italian and Russian. The model is downloaded once, from the guide or the Voice input page. On Windows you can use the built-in recognizer instead, which needs no download but is less accurate.
 
@@ -216,7 +217,7 @@ Click the tray icon, or right-click Coo and click the gear. The window opens in 
 | Habits        | In sections: General (app language, your name, anonymous usage statistics), Behavior (walking, how Coo responds, what Coo may change by itself, hover buttons, double-click to type, status bubble), Display (size, frame rate, hide in full screen on Windows, remember position), Sounds (each kind can be turned off), Computer use (on/off, mouse and keyboard, when to ask you, how long a yes lasts), Other (OBS overlay) |
 | Dress up      | Figure (Coo, the DeepSeek Whale or an installed figure pack), colors and accessories; changes apply at once. **Import** at the end of the figure row installs packs from a zip or a folder (up to 128 MB at a time); dropping one on the page works too |
 | Voice input   | On/off, recognizer, model download, talk key, microphone, listening mode                                          |
-| System prompt | Coo's system prompt; the persona is the CONSTITUTION section. Save with Ctrl+S and apply with **Reload current session**; **Show full prompt** unfolds the whole prompt as assembled from the current files; **Clear and restart** drops the current conversation and starts again from the current prompt |
+| System prompt | Coo's system prompt; the persona is the CONSTITUTION section. The sections form one document; all but CONSTITUTION start folded, and folds last until the app quits. Template variables can be inserted and previewed with their current values; in the advanced mode a World's section links to that World's configuration. Ctrl+S saves to file and **Revert all edits** returns to the last save; **Apply now** saves and updates the current conversation's prompt, keeping its messages; **Clear conversation and restart** saves and clears the current conversation, keeping Memory and persona; **Full prompt preview** unfolds the whole prompt as assembled from the current files |
 | Usage & cost  | Tokens used and money spent per day                                                                               |
 | Chat          | The current conversation, with the images Coo shows; you can also talk to Coo from here                           |
 
@@ -225,7 +226,7 @@ Click the tray icon, or right-click Coo and click the gear. The window opens in 
 
 The expanded sidebar shows the current version at the top left, with a download link below it when a newer release is out. The Windows build and the AppImage download new versions in the background; Coo then asks in its bubble whether to restart and update, or the update installs the next time you quit. If a download stalls, get it from GitHub yourself. On Mac and with the deb, download new versions by hand. After an update, Coo tells you what the new version brings; when you change what it calls you, its dress, walking, computer use or similar settings here, it hears about it and responds.
 
-**Advanced mode** at the bottom left shows every page (Worlds, models, extensions, memory, terminal and diagnostics); **Back to normal mode** hides them again. In normal mode, expand the sidebar to show the Advanced mode button.
+**Advanced mode** at the bottom left shows every page (Worlds, models, extensions, memory, console and diagnostics); **Back to normal mode** hides them again. In normal mode, expand the sidebar to show the Advanced mode button.
 
 ### Changing the model
 
@@ -248,6 +249,8 @@ The Extensions page in advanced mode lists Worlds on npm with the `cortico-world
 - Plants vs. Zombies (`cortico-world-pvz`)
 - Slay the Spire (`cortico-world-sts-1`)
 
+Packages in the official index ([Pal-AI-Lab/cortico-extensions](https://github.com/Pal-AI-Lab/cortico-extensions)) also show tags, badges, votes and comments. Voting and commenting need a GitHub sign-in with a one-time code; the sign-in is kept in the extensions folder.
+
 After installing, click **Restart process** and enable it in **World Overview**. Reinstalling the app keeps your extensions.
 
 ## Cost and privacy
@@ -256,7 +259,7 @@ After installing, click **Restart process** and enable it in **World Overview**.
 - **Sent to the model service**: what you say and type, your interactions with Coo, and screenshots during computer use. Only the service you configured receives them.
 - **Kept on your machine**: API keys and the ChatGPT sign-in, memory, conversation history, settings and logs. Speech is recognized locally and only the text is sent.
 - **Anonymous usage statistics**: sent to `survey.palailab.org`. Only counts, time used, settings and a random install ID; no conversations, screenshots, keys or files. Every field is listed in [docs/TELEMETRY.md](docs/TELEMETRY.md). Turn it off in Habits.
-- **Other network access**: a check for new releases on GitHub when the settings window opens; npm when installing extensions; ModelScope (or Hugging Face as a fallback) when downloading the speech model.
+- **Other network access**: a check for new releases on GitHub when the settings window opens; npm and the official extension index on GitHub on the Extensions page, and GitHub for votes and comments; ModelScope (or Hugging Face as a fallback) when downloading the speech model.
 
 ## Data and uninstalling
 
@@ -307,7 +310,7 @@ If the Windows recognizer reports no speech recognizer, install speech recogniti
 <details>
 <summary><b>I need a proxy</b></summary>
 
-Set `HTTP_PROXY` / `HTTPS_PROXY` in the environment Coopanion starts from. Local traffic bypasses the proxy. See the [development guide](docs/DEVELOPMENT.md).
+Coopanion uses the system proxy (an HTTP or HTTPS proxy; a SOCKS proxy is not used), read again each time Core starts. `HTTP_PROXY` / `HTTPS_PROXY` set in the environment Coopanion starts from take its place. Local traffic bypasses the proxy. See the [development guide](docs/DEVELOPMENT.md).
 
 </details>
 

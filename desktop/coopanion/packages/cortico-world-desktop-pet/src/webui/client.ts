@@ -4,7 +4,7 @@
  * through `ctx.invoke`, the level meter through `ctx.stream('voice')`. Text is the World's table
  * (src/i18n) for the console's language.
  */
-import type { ConsoleClientBundle, ConsolePanel, ConsolePanelContext } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiClientBundle, WebUiPanel, WebUiPanelContext } from 'cortico/web/shared/client-panel.ts';
 import { petText } from '../i18n/index.ts';
 import './style.css';
 
@@ -31,8 +31,7 @@ interface VoiceState {
     mode: MicMode;
     hotkey: string;
     deviceId: string;
-    /** The mode in force: the configured one, also while the talk key cannot be read */
-    effectiveMode: MicMode;
+    openOnPress: boolean;
     /** The keys alone; how they are pressed is the press choice beside them */
     keyLabel: string;
     hint: string;
@@ -72,7 +71,7 @@ const MB = (n: number) => `${Math.round(n / 1048576)} MB`;
 const progress = (a: Artifact) => (a.total ? `${Math.round((a.done / a.total) * 100)}%` : MB(a.done));
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-function statusRow(ctx: ConsolePanelContext, name: string) {
+function statusRow(ctx: WebUiPanelContext, name: string) {
   const { ui } = ctx;
   const row = ui.h('div', 'mountrow');
   const dot = ui.h('span', 'navdot');
@@ -92,7 +91,7 @@ function statusRow(ctx: ConsolePanelContext, name: string) {
   };
 }
 
-const petPanel: ConsolePanel = {
+const petPanel: WebUiPanel = {
   mount(ctx) {
     const { ui, root } = ctx;
     const t = petText(ctx.language).panel;
@@ -163,7 +162,7 @@ const ENGINE_NAMES: Partial<Record<Engine, string>> = { funasr: 'FunASR', whispe
 const FLOOR_DB = -60;
 const meterPct = (db: number) => Math.max(0, Math.min(100, ((db - FLOOR_DB) / -FLOOR_DB) * 100));
 
-const voicePanel: ConsolePanel = {
+const voicePanel: WebUiPanel = {
   mount(ctx) {
     const { ui, root } = ctx;
     const t = petText(ctx.language).panel;
@@ -207,6 +206,13 @@ const voicePanel: ConsolePanel = {
     modeSel.replaceChildren(...(Object.keys(t.modes) as MicMode[]).map((m) => { const o = ui.h('option', null, t.modes[m]); o.value = m; return o; }));
     const pressSel = ui.select();
     modeRow.acts.append(modeSel, pressSel);
+    // hold mode only: the microphone opens with the talk key
+    const onPressRow = statusRow(ctx, t.openOnPress);
+    const onPress = ui.h('input', 'pet-switch');
+    onPress.type = 'checkbox';
+    onPress.setAttribute('role', 'switch');
+    onPress.addEventListener('change', () => void call('setMic', [{ openOnPress: onPress.checked }])());
+    onPressRow.acts.append(onPress);
     // the talk key has a row of its own above how it listens: the key, and a button to set another
     const keyRow = statusRow(ctx, t.talkKeyName);
     const keyBtn = ui.button(t.changeKey, { size: 'sm' });
@@ -223,7 +229,7 @@ const voicePanel: ConsolePanel = {
     meterRow.append(meterDot, ui.h('span', 'mname', t.level), meter);
 
     const log = ui.log({ max: 100, empty: t.noResults });
-    settings.append(eng.row, srv.row, rt.row, micRow.row, keyRow.row, modeRow.row, meterRow, ui.section(t.results, t.resultsHint), log.el);
+    settings.append(eng.row, srv.row, rt.row, micRow.row, keyRow.row, modeRow.row, onPressRow.row, meterRow, ui.section(t.results, t.resultsHint), log.el);
     s.append(master, msg, settings);
 
     let st: VoiceState | null = null;
@@ -232,7 +238,8 @@ const voicePanel: ConsolePanel = {
       st = next;
       enabled.checked = next.enabled;
       master.classList.toggle('on', next.enabled);
-      masterHint.textContent = next.enabled ? t.enabledHint : t.disabledHint;
+      const onPressOn = next.input.mode === 'hold' && next.input.openOnPress;
+      masterHint.textContent = !next.enabled ? t.disabledHint : onPressOn ? t.enabledHintOnPress : t.enabledHint;
       settings.classList.toggle('off', !next.enabled);
       const engines: Partial<Record<Engine, string>> = { funasr: t.funasr, whisper: t.whisper };
       // Windows' own recognizer exists only there
@@ -288,9 +295,12 @@ const voicePanel: ConsolePanel = {
       if (!capturing) keyRow.set(input.keyLabel, input.hotkeyProblem ? 'bad' : 'on');
       pressSel.hidden = input.mode === 'always';
       keyRow.row.style.display = input.mode === 'always' ? 'none' : '';
-      modeRow.set(input.open ? t.listening : t.waitingKey, input.open ? 'on' : 'off', input.hotkeyProblem ? t.keyProblem(input.hotkeyProblem) : input.hint);
+      modeRow.set(input.open ? t.listening : t.waitingKey, input.open ? 'on' : 'off', input.hint);
+      onPressRow.row.style.display = input.mode === 'hold' ? '' : 'none';
+      onPress.checked = input.openOnPress;
+      onPressRow.set(input.openOnPress ? t.switchOn : t.switchOff, input.openOnPress ? 'on' : 'off', t.openOnPressHint);
       // the loudness threshold only decides where speech starts when the key is not held down
-      mark.hidden = input.effectiveMode === 'hold';
+      mark.hidden = input.mode === 'hold';
       mark.style.left = `${meterPct(next.thresholdDb)}%`;
       for (const line of next.recent) {
         if (line.at <= seen) continue;
@@ -367,5 +377,5 @@ const voicePanel: ConsolePanel = {
   },
 };
 
-const bundle: ConsoleClientBundle = { panels: { pet: petPanel, voice: voicePanel } };
+const bundle: WebUiClientBundle = { panels: { pet: petPanel, voice: voicePanel } };
 export default bundle;

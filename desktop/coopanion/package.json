@@ -1,7 +1,7 @@
 {
   "name": "coopanion",
   "productName": "Mosaico Coopanion",
-  "version": "0.1.26-mosaico.8",
+  "version": "0.2.3-mosaico.9",
   "private": true,
   "description": "A desktop companion built on Cortico: a pet on your screen that talks, listens and can operate the computer",
   "license": "AGPL-3.0-or-later",
@@ -9,7 +9,7 @@
   "homepage": "https://github.com/Pal-AI-Lab/Coopanion",
   "type": "module",
   "main": "app/main.cjs",
-  "packageManager": "pnpm@11.5.0",
+  "packageManager": "pnpm@11.28.6",
   "engines": {
     "node": ">=22"
   },
@@ -31,11 +31,12 @@
     "cortico-world-desktop-pet": "workspace:*",
     "electron-updater": "^6.8.9",
     "express": "^4.22.3",
-    "pnpm": "11.5.0",
+    "pnpm": "11.28.6",
     "tsx": "^4.23.15",
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@codemirror/commands": "^6.11.1",
     "@codemirror/state": "^6.7.5",
     "@codemirror/view": "^6.43.12",
     "@tailwindcss/cli": "^4.3.3",

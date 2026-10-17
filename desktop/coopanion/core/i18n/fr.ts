@@ -13,6 +13,7 @@ const fr: Translation<CoreText> = {
 
   failure: {
     text: (n: number, status: number, reason: string) => `Mes ${n} dernières requêtes au modèle ont échoué. Erreur${status ? ` ${status}` : ''} : ${reason}. Vérifiez le nom du modèle et l'API Key sur la page Accueil des paramètres, où vous pouvez tester la connexion.`,
+    reasoningReplay: (n: number) => `Mes ${n} dernières requêtes au modèle ont échoué : ce service exige que la réflexion soit renvoyée avant chaque appel d'outil, et Coopanion a désactivé cela pour lui. Merci de le signaler aux développeurs : https://github.com/Pal-AI-Lab/Coopanion/issues`,
     open: 'Ouvrir les paramètres',
     ok: 'OK',
   },
@@ -52,6 +53,16 @@ const fr: Translation<CoreText> = {
     gotName: (name: string) => `${name}, c'est noté !`,
     askSource: 'Où avez-vous entendu parler de moi ?',
     sourceThanks: 'Ah, je vois. Coo...',
+    askPersona: 'À votre avis, je devrais être...',
+    personas: {
+      coo: { label: 'Petit et curieux', line: "Qu'est-ce que c'est ? Je vais jeter un œil. Coo..." },
+      grail: { label: 'Collant et gourmand', line: "Vous mangez quoi ? Donnez-m'en une bouchée. Coo..." },
+      forge: { label: 'Fiable et efficace', line: "Qu'y a-t-il à faire ? Laissez-moi faire, ce ne sera pas long. Coo." },
+      heart: { label: 'Enjoué, toujours là', line: 'Me voilà ! Je vous tiens compagnie toute la journée. Coo !' },
+      winter: { label: 'Calme et taciturne', line: '...Mm. Coo.' },
+      whale: { label: 'DeepSeek Chan', line: "Bon retour ! Qu'est-ce que c'est ? Montrez-moi. Coo..." },
+    },
+    dressHint: { text: 'Les couleurs se changent dans Habillage', dress: 'Habillage' },
     askRoam: "La plupart du temps, je reste tranquille ou je bouge beaucoup ? Cliquez sur l'une des cartes pour voir ce que je ferais.",
     roam: {
       off: { label: 'Reste sur place', level: 'Faible', line: "Alors je reste immobile et je bouge quand vous m'appelez." },

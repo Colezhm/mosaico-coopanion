@@ -11,9 +11,9 @@ import { S as ru } from './strings.ru.ts';
 
 const zh = {
   protocolMismatch: (server: string, page: string) =>
-    `控制台协议版本不一致：服务端 ${server}，页面 ${page}。请强制刷新页面。`,
+    `页面协议版本不一致：服务端 ${server}，页面 ${page}。请强制刷新页面。`,
   pageFailed: (pageId: string) => `页面「${pageId}」打开失败`,
-  noPage: (pageId: string) => `控制台页面不存在：「${pageId}」`,
+  noPage: (pageId: string) => `页面不存在：「${pageId}」`,
   noPageHint: '请检查页面地址及模块激活状态。',
   noPanels: (label: string) => `「${label}」没有声明任何面板。`,
   noSuchPanel: (label: string, wanted: string) => `「${label}」没有面板「${wanted}」`,
@@ -54,10 +54,10 @@ const zh = {
 
 export const en: typeof zh = {
   protocolMismatch: (server: string, page: string) =>
-    `Console protocol version mismatch: server ${server}, this page ${page}.`
+    `Page protocol version mismatch: server ${server}, this page ${page}.`
     + ' Force a page refresh.',
   pageFailed: (pageId: string) => `Could not open "${pageId}"`,
-  noPage: (pageId: string) => `Console page not found: "${pageId}"`,
+  noPage: (pageId: string) => `Page not found: "${pageId}"`,
   noPageHint: 'Check the page address and module activation status.',
   noPanels: (label: string) => `"${label}" declares no panels.`,
   noSuchPanel: (label: string, wanted: string) => `"${label}" has no panel "${wanted}"`,

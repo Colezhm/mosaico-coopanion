@@ -4,8 +4,8 @@ import type { en, stepEn } from './strings.ts';
 export const S: Partial<typeof en> = {
   nav: '對話',
   title: '對話',
-  trace: '終端',
-  traceHint: '進階模式的「終端」頁：上下文、工具呼叫與原始事件',
+  trace: '控制台',
+  traceHint: '進階模式的「控制台」頁：上下文、工具呼叫與原始事件',
   placeholder: (bot: string) => `給 ${bot} 傳訊息…`,
   connecting: '正在連線…',
   empty: (bot: string) => `還沒有和 ${bot} 說過話。`,

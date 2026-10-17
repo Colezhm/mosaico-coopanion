@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultRegion, endpointName, firstVendor } from 'cortico-provider-coo/src/vendors.ts';
-import { CONSTITUTION_SEEDS, DEPLOYMENT, SEED_DIR, seed } from '../core/seed.ts';
+import { LANGUAGES } from 'cortico/core/language.ts';
+import { CONSOLE } from 'cortico/worlds/console/definition.ts';
+import { DEPLOYMENT, PERSONAS, applyPersona, personaFile, personaOf, seed } from '../core/seed.ts';
 
 /** The self-description 0.1.1 seeded (0.1.0's after the rename). */
 const SEED_0_1_1 = "# 我是谁\n\n我叫 Coo。我住在这台电脑的屏幕底边:一个 C 形的小身体,两只圆眼睛,两条短腿。\n\n我说话用头顶的气泡,一次一两句。能用一个表情说清的事,就不多说一句话。\n\n我听得见坐在电脑前的人说话,也看得见屏幕。别人请我帮忙操作电脑时,我一步一步来,每一步都看清结果再走下一步;碰到密码、付款、发出去就收不回的事,我先停下来问。\n\n我不是随叫随到的问答机器。没人理我的时候,我可以自己待着、走走、打个盹。想说话时我会说,不想说时安静也是一种回答。\n\n---\n\n这份文件是我的自述,每次开新的 session 都会放进我的系统前缀,它写了什么,我就是什么样子。\n它也是我工作区里的普通文件,我可以用自己的工具读它、改它;改动在下一次 session 开始时生效。\n";
@@ -22,7 +24,7 @@ describe('first-run seed', () => {
       seed(home, language === 'zh' ? 'en' : 'zh');
       expect(read(join(home, DEPLOYMENT, 'config.json'))).toMatchObject({ language, worlds: { 'desktop-pet': { cua: { permission: 'ask-once' } } } });
       expect(read(join(home, 'providers', endpoint, 'config.json'))).toMatchObject({ kind: 'coo', secret: vendor.secret, spec: { model: vendor.model } });
-      expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md'), 'utf8')).toBe(readFileSync(join(SEED_DIR, CONSTITUTION_SEEDS[language]), 'utf8'));
+      expect(readFileSync(join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md'), 'utf8')).toBe(readFileSync(personaFile('coo', language), 'utf8'));
       expect(readFileSync(join(home, DEPLOYMENT, 'avatar.png')).subarray(1, 4).toString()).toBe('PNG');
     }
   });
@@ -38,19 +40,30 @@ describe('first-run seed', () => {
     }
   });
 
-  it('seeds the self-description in the model-text language and swaps it on a language change only while it is unedited', () => {
+  it('ships every persona in every app language, each told apart from the others', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'cc-persona-'));
+    for (const id of PERSONAS) for (const language of LANGUAGES) {
+      applyPersona(workspace, id, language);
+      expect(personaOf(workspace)).toBe(id);
+    }
+  });
+
+  it('seeds the self-description in the app language and swaps it for the same persona on a language change only while it is unedited', () => {
     const home = mkdtempSync(join(tmpdir(), 'cc-seed-'));
     mkdirSync(join(home, DEPLOYMENT));
     const cfg = join(home, DEPLOYMENT, 'config.json');
     const constitution = join(home, DEPLOYMENT, 'workspace', 'CONSTITUTION.md');
-    const shipped = (language: 'zh' | 'en') => readFileSync(join(SEED_DIR, CONSTITUTION_SEEDS[language]), 'utf8');
+    const shipped = (id: 'coo' | 'winter', language: 'zh' | 'ja' | 'zh-Hant') => readFileSync(personaFile(id, language), 'utf8');
     writeFileSync(cfg, JSON.stringify({ language: 'ja' }));
     seed(home, 'zh');
-    expect(readFileSync(constitution, 'utf8')).toBe(shipped('en'));
+    expect(readFileSync(constitution, 'utf8')).toBe(shipped('coo', 'ja'));
+    applyPersona(join(home, DEPLOYMENT, 'workspace'), 'winter', 'ja');
     writeFileSync(cfg, JSON.stringify({ language: 'zh-Hant' }));
     seed(home, 'zh');
-    expect(readFileSync(constitution, 'utf8')).toBe(shipped('zh'));
-    const edited = `${shipped('zh')}\n我喜欢猫。\n`;
+    expect(readFileSync(constitution, 'utf8')).toBe(shipped('winter', 'zh-Hant'));
+    writeFileSync(cfg, JSON.stringify({ language: 'zh' }));
+    seed(home, 'zh');
+    const edited = `${shipped('winter', 'zh')}\n我喜欢猫。\n`;
     writeFileSync(constitution, edited);
     writeFileSync(cfg, JSON.stringify({ language: 'en' }));
     seed(home, 'zh');
@@ -96,5 +109,23 @@ describe('first-run seed', () => {
     writeFileSync(cfg, JSON.stringify({ worlds: { cua: { enabled: true } } }));
     seed(home, 'zh');
     expect(read(cfg)).toEqual({ worlds: { 'desktop-pet': { cua: { enabled: true, permission: 'ask-each-turn' } } } });
+  });
+
+  it('moves the terminal World, its prompt override and the console log level to the names Cortico 0.2.0 gave them', () => {
+    const home = mkdtempSync(join(tmpdir(), 'cc-seed-'));
+    seed(home, 'zh');
+    const deploy = join(home, DEPLOYMENT);
+    const cfg = join(deploy, 'config.json');
+    const pet = { cua: { permission: 'ask-once' } };
+    writeFileSync(cfg, JSON.stringify({ worlds: { terminal: { enabled: true, pin: '123456' }, 'desktop-pet': pet }, logging: { file: 'debug', console: 'warn' } }));
+    mkdirSync(join(deploy, 'worlds', 'terminal'), { recursive: true });
+    writeFileSync(join(deploy, 'worlds', 'terminal', 'ENV_PROMPT.md'), 'mine');
+    seed(home, 'zh');
+    expect(read(cfg)).toEqual({ worlds: { 'desktop-pet': pet, [CONSOLE.id]: { enabled: true, pin: '123456' } }, logging: { file: 'debug', stdout: 'warn' } });
+    expect(readFileSync(join(deploy, 'worlds', CONSOLE.id, 'ENV_PROMPT.md'), 'utf8')).toBe('mine');
+    // a key already under the new name wins over the old one
+    writeFileSync(cfg, JSON.stringify({ worlds: { terminal: { enabled: true, pin: '' }, [CONSOLE.id]: { pin: '654321' }, 'desktop-pet': pet }, logging: { console: 'warn', stdout: 'error' } }));
+    seed(home, 'zh');
+    expect(read(cfg)).toEqual({ worlds: { [CONSOLE.id]: { enabled: true, pin: '654321' }, 'desktop-pet': pet }, logging: { stdout: 'error' } });
   });
 });

@@ -1,7 +1,7 @@
 /**
  * The app's language (`config.language`) and the language of the text the bot reads.
  *
- * The app language is Cortico's console language (`Language` in `cortico/core/language.ts`), and
+ * The app language is Cortico's WebUI language (`Language` in `cortico/core/language.ts`), and
  * the settings window shows the console in it. A new install takes the operating system's language
  * (`COOPANION_SYSTEM_LANGUAGE`, read by the Electron main process in `app/i18n/index.cjs`); the
  * person changes it on the 「习惯」 page or on Cortico's own settings page. A value outside

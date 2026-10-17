@@ -7,7 +7,7 @@ import { S } from './strings.ts';
 
 export const REPO_URL = 'https://github.com/Colezhm/mosaico-coopanion';
 const RELEASE_API = 'https://api.github.com/repos/Colezhm/mosaico-coopanion/releases/latest';
-/** 与 Cortico 控制台查框架 Release 同一时限。 */
+/** 与 Cortico WebUI 查框架 Release 同一时限。 */
 const RELEASE_TIMEOUT_MS = 15_000;
 
 export interface ReleaseUpdate { version: string; url: string }

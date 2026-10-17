@@ -12,9 +12,9 @@
 
 | 组件 | 版本 |
 |---|---|
-| Coopanion（AGPL-3.0-or-later，保留原 LICENSE） | v0.1.26 `f70613c7a98a33bf20098e3981ab1a63c26c20f8` + `desktop/upstream/patches/` |
-| Cortico 子模块 | `dce5c12f1b731ef5f9782faaa2071cb4ca51ccd5`（上游 v0.1.26 所钉） |
-| 桌面应用版本 | `0.1.26-mosaico.8` |
+| Coopanion（AGPL-3.0-or-later，保留原 LICENSE） | v0.2.3 `6ddb1341befea9bad94bb48ed5b1cb998da77fd1` + `desktop/upstream/patches/` |
+| Cortico 子模块 | `786b79a98041a8d93f6b53b4eb1b86fe71240151`（上游 v0.2.3 所钉，Cortico 0.2） |
+| 桌面应用版本 | `0.2.3-mosaico.9` |
 | ESP-IDF / esp32s31 | `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe` |
 | BSP | `a2c985ad698b3f04a21c63e006b43e7e948bc1d7` |
 | utils | `fc63d43f3ac72aa54e701b07b07fbed07a16b3ca` |
@@ -24,7 +24,7 @@
 | 保留 Vibe Mode | utils 评审包 `0.1.4` |
 | 板端应用描述符版本 | `1.1.1`（传送回执修复候选；实机当前为 `1.1.0`，并非硬件验收结论） |
 
-桌面端是上游 Coopanion 的原样发布加三个小补丁，同步与升级方法见 [desktop/upstream](../desktop/upstream/README.md)。
+桌面端是上游 Coopanion 的原样发布加两个补丁，同步与升级方法见 [desktop/upstream](../desktop/upstream/README.md)。
 Mosaico 的全部桌面代码在 `desktop/coopanion/packages/coopanion-mosaico/`（[说明](../desktop/coopanion/packages/coopanion-mosaico/README.md)），
 作为桌宠 World 的「身体转接」（`PetBodyRelay`，补丁 0001，拟提交上游）接入；Cortico Core、Persona、Memory
 和桌宠 World 的其余代码不改。上游升级时 Mosaico 包不用动，只需重新打补丁并跑测试。
@@ -48,7 +48,7 @@ pnpm run typecheck
 pnpm run typecheck:worlds          # 含 packages/coopanion-mosaico
 pnpm run build:cortico
 pnpm run typecheck:web             # 含设置窗口的 Mosaico 页
-pnpm test
+pnpm test                          # Node 26 上加 NODE_OPTIONS=--no-experimental-webstorage(其 localStorage 遮住 jsdom 的)
 pnpm run test:worlds               # 桌宠 World 与 Mosaico 包的测试
 pnpm --dir vendor/cortico check:extension ../../packages/cortico-world-desktop-pet
 pnpm exec tsx scripts/pack.ts --dir

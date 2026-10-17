@@ -16,6 +16,7 @@ export default {
   'heard.done': '認識しました',
   'heard.more': '聞き取り中…',
   'heard.listening': '聞き取り中…',
+  'heard.cancel': 'キャンセル',
 
   // the status bubble
   'status.more': ' ほか {others} 件',
