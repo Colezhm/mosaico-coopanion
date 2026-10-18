@@ -2,6 +2,8 @@ name: release
 
 # Pushing a tag v<version> builds the Windows installer, the macOS downloads (Apple silicon and
 # Intel, both built on the Apple silicon runner) and the Linux AppImage and deb, and attaches them to that tag's release.
+# Once the repository has the Steam variable and secrets (docs/STEAM.md), the same tag also builds the Steam
+# version for Windows and uploads it to the Steam branch `staging`; it goes to everyone when set live in Steamworks.
 on:
   push:
     tags: ['v*']
@@ -17,7 +19,7 @@ jobs:
         include:
           - os: windows-latest
             arch: x64
-            files: dist/Coopanion-Setup-*.exe
+            files: dist/Coopanion-Setup-*.exe dist/Coopanion-Setup-*.exe.blockmap dist/latest.yml
           - os: macos-latest
             arch: arm64
             files: dist/Coopanion-*-mac-arm64.dmg dist/Coopanion-*-mac-arm64.zip
@@ -26,7 +28,7 @@ jobs:
             files: dist/Coopanion-*-mac-x64.dmg dist/Coopanion-*-mac-x64.zip
           - os: ubuntu-latest
             arch: x64
-            files: dist/Coopanion-*-linux-x64.AppImage dist/Coopanion-*-linux-x64.deb
+            files: dist/Coopanion-*-linux-x64.AppImage dist/Coopanion-*-linux-x64.deb dist/latest-linux.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +74,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           cd release-artifacts
           files=("Coopanion-Setup-${version}.exe" "Coopanion-${version}-mac-arm64.dmg" "Coopanion-${version}-mac-arm64.zip" "Coopanion-${version}-mac-x64.dmg" "Coopanion-${version}-mac-x64.zip" "Coopanion-${version}-linux-x64.AppImage" "Coopanion-${version}-linux-x64.deb")
-          for file in "${files[@]}"; do test -s "$file"; done
+          for file in "${files[@]}" latest.yml latest-linux.yml; do test -s "$file"; done
           sha256sum "${files[@]}" > SHA256SUMS.txt
           cd ..
           notes="docs/releases/${GITHUB_REF_NAME}.md"
@@ -80,3 +82,45 @@ jobs:
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "Coopanion $GITHUB_REF_NAME" --notes-file "$notes"
           gh release upload "$GITHUB_REF_NAME" release-artifacts/* --clobber
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest --notes-file "$notes"
+
+  steam-build:
+    if: vars.STEAM_APP_ID != ''
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:installer
+        env:
+          COOPANION_CHANNEL: steam
+          STEAM_APP_ID: ${{ vars.STEAM_APP_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steam-win64
+          path: dist/win-unpacked
+          if-no-files-found: error
+
+  steam-upload:
+    needs: steam-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: steam-win64
+          path: steam/win64
+      - uses: game-ci/steam-deploy@50f6b29fc64922e19a16d202a88fe199d394b536 # v3.2.1
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: ${{ vars.STEAM_APP_ID }}
+          buildDescription: ${{ github.ref_name }}
+          rootPath: steam
+          depot1Path: win64
+          releaseBranch: staging
+          cliVersion: v0.1.72

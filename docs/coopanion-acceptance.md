@@ -1,8 +1,31 @@
-<!-- Owner: desktop/coopanion/packages/*/tests/, projects/coopanion/tools/test_native.py, projects/coopanion/tools/export_browser_image.py -->
+<!-- Owner: desktop/coopanion/packages/*/tests/, desktop/upstream/, projects/coopanion/tools/test_native.py, projects/coopanion/tools/export_browser_image.py -->
 
 # Mosaico × Coopanion 验收记录
 
 2026-10-07，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
+
+## 桌面 0.2.3-mosaico.9（上游 Coopanion v0.2.3，已装入本机，与板子的真机联调待做）
+
+2026-10-17，Apple Silicon Mac。固件未变，仍为 1.5.1。
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 结构 | 上游 v0.2.3（`6ddb134`，Cortico 0.2 `786b79a`）+ 0001、0002；0003 已由上游合并（#182）删除。两补丁冲突经 `sync.py --stack` 三方合并解决：上游新增的「按下才开麦」、对话框卡片、取消收音也走身体转接；Cortico 0.2 的 `webUi()` 改名、`describe.json` 重新生成；转接加的 `pet_location`、`pet_transfer` 与 `desktop-pet.presence` 经 `relayDescribe` 进自描述，启动不再告警；Coo 的初始自述改用上游 `core/seed/persona/coo.<语言>.md` | 上游 v0.2 起引导里可选人设（含官方大肥鱼），与按形象切换自述并存 |
+| 自动化 | 三项 typecheck 与 `check:extension` 通过；`test:worlds` 204 个（1 跳过）通过；根目录 278 个（1 跳过）在 `NODE_OPTIONS=--no-experimental-webstorage` 下通过 | 不加该选项时两个控制台页面测试在 Node 26 失败（Node 自带的 localStorage），与 Mosaico 无关 |
+| 打包与安装 | 381 MB，0.2.3-mosaico.9；运行时依赖锁按新依赖重新生成；0.1.26 的 .app 与部署数据已另存 | 主进程常驻托盘，AppleEvent 退出不关 Core，安装新包需让主进程正常退出（SIGTERM 走完关机步骤） |
+| 运行 | 启动后 Mosaico 启用、设置保留、身体在电脑上、桌宠页连上；面板接口随 Cortico 0.2 改为 `/api/webui/providers/…`，设置页经上游 `invokePanel` 自动跟随 | 板子未连接，传送等仍待真机 |
+
+## 桌面 0.1.26-mosaico.8（上游 Coopanion v0.1.26，已装入本机，与板子的真机联调待做）
+
+2026-10-14，Apple Silicon Mac。固件未变，仍为 1.5.1。
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 结构 | `desktop/coopanion` = 上游 v0.1.26（`f70613c`，Cortico `dce5c12`）+ 三个补丁；`desktop/upstream/sync.py` 重新同步后与「上游 + 补丁」逐文件一致，`--stack` 用 `git am -3` 还原出同样的三个提交 | 上游下一版的补丁冲突要到那时才知道 |
+| 自动化 | `typecheck`、`typecheck:worlds`、`typecheck:web` 通过；根目录 191 个测试、`test:worlds` 200 个（含 Mosaico 包 42 个：真实 WSS 资源同步与录音转写、指令转发与词表映射、jsdom 页面传送动画、设置迁移、人格切换）通过；桌宠 World `check:extension` 通过；转接补丁在干净的上游上另跑 158 + 191 个测试通过 | 自动化覆盖桌面一侧，板端由固件测试覆盖 |
+| 打包与安装 | `scripts/pack.ts --dir`：375 MB，`io.github.colezhm.mosaico-coopanion`，版本 0.1.26-mosaico.8；运行时依赖锁 `installer/package-lock.json` 重新生成；旧 .app 与部署数据已另存 | ad hoc 签名，首次启动 macOS 重新询问麦克风与输入监控 |
+| 运行 | 启动后 Mosaico 转接启用、旧设置自动迁到 `settings.json`、身体在电脑上、无报错；桌宠页连上、大肥鱼显示；说话键无输入监控权限时麦克风保持关闭 | 板子当时未连接：传送、板上语音、贴图同步未在真机上复测 |
+| 未移植 | `scripts/mosaico-preview.ts`（桌面网页接模拟器）；大肥鱼图集导出器；上游没有的桌面大肥鱼表情 | 见 coopanion-implementation.md、coopanion-whale.md |
 
 ## 1.5.1 / 桌面 0.1.0-mosaico.7（已装入真机，板上切换网络待人工验收）
 

@@ -23,7 +23,7 @@ for source in sorted((Path(__file__).resolve().parents[1] / 'main').glob('*.c'))
 print('PASS: caption glyphs present in the UI font subset')
 
 root = Path(__file__).resolve().parents[1]
-whale = root.parents[1] / 'desktop/coopanion/packages/cortico-world-desktop-pet/web/whale/mosaico-deepseek.bin'
+whale = root.parents[1] / 'desktop/coopanion/packages/coopanion-mosaico/web/whale-deepseek.bin'
 cjson = Path(os.environ.get('CJSON_DIR') or root / 'managed_components/espressif__cjson/cJSON')
 if not (cjson / 'cJSON.h').exists():
     raise SystemExit(f'cJSON not found at {cjson}; build once with ESP-IDF or set CJSON_DIR')

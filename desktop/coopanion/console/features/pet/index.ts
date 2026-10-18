@@ -1,122 +1,238 @@
 /**
- * 「习惯」: the everyday settings of the desktop pet, written to the desktop-pet World's config
- * group through `/api/config` (only the keys shown here are sent). The pet's own menu changes some
- * of the same values, so they are read again every few seconds. Dressing up has its own page
- * (features/dress). The hover buttons are picked from the pet menu's own actions, drawn with the
- * pet page's icons. The last row switches the app's anonymous usage statistics (the `companion`
- * group, core/telemetry.ts).
+ * 「习惯」: the everyday settings of the desktop pet, in sections: 通用 (language, what Coo calls you,
+ * the app's anonymous usage statistics in the `companion` group, core/telemetry.ts), 行为与互动, 显示,
+ * 音效, 电脑操作 (features/cua) and 其他 (the OBS overlay). Every row names its setting in the label column, except one that
+ * only refines the row above it. In each row the setting comes first and what it means under it. An
+ * on/off setting is a switch; picks among several (sound kinds, the popups) are checkboxes. Most are
+ * written to the desktop-pet World's config group through `/api/config` (only the keys shown here are sent). The pet's own menu
+ * changes some of the same values, so they are read again every few seconds. Dressing up has its own
+ * page (features/dress). The hover buttons are picked from the pet menu's own actions, drawn with the
+ * pet page's icons. The 「音效」 section writes the World's sound group: the master switch (the same
+ * one the pet menu flips), each kind of sound, and how long Coo snores in each sleep.
+ *
+ * The first row is the app language (`language` in the `companion` group), listed by the names the
+ * Core gives (`/api/config/options/coopanion.language`). A change applies at once: the Core tells the
+ * app, which reloads this window in the new language.
+ *
+ * 「回应模式」 (`touch.wakeOn`) and 「自主配置权限」 (`selfAdjust`) are read from the pet panel's state,
+ * which gives values written by earlier versions as they now read. Their 「自定义…」 opens a popup whose
+ * picks (a list, a map) `/api/config` cannot write; they are saved through the pet panel's
+ * `setWakeKinds` and `setSelfAdjustCustom`, which set the mode to `custom` in the same write.
  */
-import { ICONS } from 'cortico-world-desktop-pet/web/pet-core.js';
-import { get, setConfig } from '../../core/api.ts';
-import { pick } from '../../core/language.ts';
-import type { FeatureContext, FrameworkFeature } from '../feature.ts';
+import { ICONS } from 'cortico-world-desktop-pet/web/ui.js';
+import { get, invokePanel, setConfig } from '../../base/api.ts';
+import type { Page, PageContext } from '../../base/page.ts';
+import { intro } from '../intro.ts';
+import { cuaSection } from '../cua/index.ts';
+import { scaleSlider } from './scale-slider.ts';
+import { S } from './strings.ts';
 
 const GROUP = 'world:desktop-pet';
+const SOUND_GROUP = 'world:desktop-pet:sound';
 const STATS_GROUP = 'companion';
 const STATS_KEY = 'companion.telemetry';
 const STATS_DOC = 'https://github.com/Pal-AI-Lab/Coopanion/blob/main/docs/TELEMETRY.md';
+/** The app language: a key of the `companion` group, its choices from the Core. */
+const LANGUAGE_KEY = 'language';
+const LANGUAGE_OPTIONS = '/api/config/options/coopanion.language';
+/** The pet panel's page: its `state` gives the default name for the person in the app language and the two rows below. */
+const PET_PAGE = 'world:desktop-pet';
 const K = 'worlds.desktop-pet';
 const KEYS = {
   user: `${K}.user`,
   roam: `${K}.roam`,
-  theme: `${K}.theme`,
   scale: `${K}.window.scale`,
+  glow: `${K}.window.glow`,
+  lockFps: `${K}.window.lockFrameRate`,
+  frameRate: `${K}.window.frameRate`,
+  hideFullscreen: `${K}.window.hideWhenFullscreen`,
+  overlay: `${K}.window.exportOverlay`,
   sound: `${K}.sound`,
+  snoreSeconds: `${K}.sounds.snoreSeconds`,
+  remember: `${K}.rememberPosition`,
   hover: `${K}.hoverButtons`,
+  dblclick: `${K}.doubleClickChat`,
+  statusBubble: `${K}.statusBubble`,
+  wakeOn: `${K}.touch.wakeOn`,
+  selfAdjust: `${K}.selfAdjust`,
 } as const;
 
-/** The pet menu's actions in its order (the World's PET_ACTIONS), with the icon each shows. */
+/** `touch.wakeOn` in the row's order, and the touches 「自定义…」 picks from (the World's TOUCH_KINDS). */
+const WAKE_MODES = ['none', 'poke', 'all', 'custom'] as const;
+const TOUCH_KINDS = ['poke', 'pet', 'throw', 'drop'] as const;
+/** `selfAdjust` in the row's order, and `pet_set`'s items in the World's order (SELF_KEYS), the first four direct by default. */
+const SELF_MODES = ['off', 'default', 'any', 'custom'] as const;
+const SELF_KEYS = ['figure', 'scheme', 'roam', 'snoreSeconds', 'sound', 'scale', 'theme', 'hoverButtons', 'user'] as const;
+const SELF_DEFAULT: readonly string[] = ['figure', 'scheme', 'roam', 'snoreSeconds'];
+
+/** What the pet panel's state says of the two rows. */
+interface HabitState {
+  wake?: { wakeOn: string; wakeKinds: string[] };
+  selfAdjust?: { mode: string; custom: Record<string, boolean> };
+}
+
+/** The pet's actions in the menu's order (the World's PET_ACTIONS), with the icon each shows. */
 const ACTIONS: ReadonlyArray<[id: string, icon: string]> = [
-  ['chat', 'chat'], ['voice', 'mic'], ['roam', 'roam_calm'], ['theme', 'moon'], ['sound', 'sound'], ['dress', 'shirt'], ['hide', 'eyeOff'],
+  ['chat', 'chat'], ['voice', 'mic'], ['roam', 'roam_calm'], ['theme', 'moon'], ['sound', 'sound'], ['hide', 'eyeOff'], ['dress', 'shirt'],
 ];
+/** Kinds of sound (the World's SOUND_KINDS), each under `worlds.desktop-pet.sounds.<kind>`. */
+const SOUND_KINDS = ['move', 'touch', 'face', 'snore', 'talk', 'ui'] as const;
 /** Most hover buttons (the World's MAX_HOVER_BUTTONS). */
 const MAX_HOVER = 6;
 
-const S = pick({
-  zh: {
-    nav: '习惯',
-    settingsTitle: '习惯',
-    user: '怎么称呼你',
-    userHint: 'Coo 会用这个名字叫你。',
-    roam: '走动',
-    roamFree: '常走动',
-    roamCalm: '多待着',
-    roamOff: '不乱动',
-    theme: '颜色',
-    themeDark: '夜间(浅色身体)',
-    themeLight: '白天(深色身体)',
-    scale: '大小',
-    sound: '音效',
-    hover: '悬停按钮',
-    hoverHint: (n: number) => `鼠标停在 Coo 身上时旁边出现的按钮,最多 ${n} 个。`,
-    actions: { chat: '打字', voice: '语音输入', roam: '行为模式', theme: '夜间模式', sound: '音效', dress: '装扮', hide: '隐藏桌宠' } as Record<string, string>,
-    saved: '已保存',
-    saveFailed: (why: string) => `没保存上:${why}`,
-    stats: '匿名使用统计',
-    statsHint: '发送使用次数、时长和设置,不含对话内容、Key 和文件。',
-    statsDoc: '具体发送哪些字段',
-  },
-  en: {
-    nav: 'Habits',
-    settingsTitle: 'Habits',
-    user: 'What to call you',
-    userHint: 'Coo calls you by this name.',
-    roam: 'Walking',
-    roamFree: 'Often',
-    roamCalm: 'Now and then',
-    roamOff: 'Stay put',
-    theme: 'Colors',
-    themeDark: 'Night (light body)',
-    themeLight: 'Day (dark body)',
-    scale: 'Size',
-    sound: 'Sounds',
-    hover: 'Hover buttons',
-    hoverHint: (n: number) => `Buttons beside Coo while the pointer rests on it, up to ${n}.`,
-    actions: { chat: 'Type', voice: 'Voice input', roam: 'Walking', theme: 'Night mode', sound: 'Sounds', dress: 'Dress up', hide: 'Hide pet' } as Record<string, string>,
-    saved: 'Saved',
-    saveFailed: (why: string) => `Not saved: ${why}`,
-    stats: 'Anonymous usage statistics',
-    statsHint: 'Sends counts, time used and settings; never conversations, keys or files.',
-    statsDoc: 'Every field it sends',
-  },
-});
-
 interface ConfigEntry { group: { id: string }; values?: Record<string, unknown> }
+
+/** The size range (as SCALE_MIN, SCALE_MAX in the World's config.ts) and where the slider's short stretch starts; the frame-rate choices, 0 following the display. */
+const SCALE_MIN = .5, SCALE_SOFT_MAX = 2, SCALE_MAX = 10;
+/** The halo's reach in pixels, as GLOW_MAX and GLOW_DEFAULT in the World's config.ts: 0 turns it off. */
+const GLOW_MAX = 16, GLOW_DEFAULT = 7;
+const FRAME_RATES = [60, 120, 144, 0];
 
 /** While the size slider moves, at most one save per this many milliseconds. */
 const SCALE_SEND_MS = 80;
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-async function mount(ctx: FeatureContext): Promise<void> {
+async function mount(ctx: PageContext): Promise<void> {
   const { ui, root, signal } = ctx;
   const opts = { signal };
   root.classList.add('home');
 
   /* ---------- habits ---------- */
-  const habits = ui.sheet({ title: S.settingsTitle });
+  const habits = ui.sheet({ title: S.groupGeneral });
   const msg = ui.msgline('');
+  // a failure shows at the bottom of its own section
+  const behaviorMsg = ui.msgline(''), displayMsg = ui.msgline('');
 
-  const user = ui.input({ placeholder: '伙伴' });
+  const language = ui.select({ onChange: (v) => void save(LANGUAGE_KEY, v, STATS_GROUP) });
+  void get<{ options?: Array<{ value: string; label: string }> }>(LANGUAGE_OPTIONS, opts).then((d) => {
+    const current = language.value;
+    language.replaceChildren(...(d.options ?? []).map((o) => { const el = ui.h('option', null, o.label); el.value = o.value; return el; }));
+    if (current) language.value = current;
+  }).catch(() => {});
+  const user = ui.input();
+  void invokePanel<{ defaultUser?: string }>(PET_PAGE, 'pet', 'state', [], opts).then((s) => { if (s?.defaultUser) user.placeholder = s.defaultUser; }).catch(() => {});
   const roam = ui.segmented([
     { value: 'free', label: S.roamFree }, { value: 'calm', label: S.roamCalm }, { value: 'off', label: S.roamOff },
-  ], { size: 'sm', onSelect: (v) => void save(KEYS.roam, v) });
-  const theme = ui.segmented([
-    { value: 'dark', label: S.themeDark }, { value: 'light', label: S.themeLight },
-  ], { size: 'sm', onSelect: (v) => void save(KEYS.theme, v) });
-  const scale = ui.h('input', 'companion-range');
-  scale.type = 'range';
-  scale.min = '0.5'; scale.max = '2'; scale.step = '0.05';
+  ], { size: 'sm', onSelect: (v) => void save(KEYS.roam, v, GROUP, behaviorMsg) });
   const scaleText = ui.h('span', 'companion-rangeval');
   const scaleBox = ui.h('div', 'companion-rangebox');
-  scaleBox.append(scale, scaleText);
-  const sound = ui.checkbox(S.sound, { onChange: (on) => void save(KEYS.sound, on) });
+  const scale = scaleSlider(root.ownerDocument, {
+    min: SCALE_MIN, soft: SCALE_SOFT_MAX, max: SCALE_MAX, label: S.scale,
+    room: () => scaleBox.clientWidth - scaleText.offsetWidth - 12,
+    onInput: () => { showScale(); scaleTimer ??= setTimeout(sendScale, SCALE_SEND_MS); },
+    onChange: () => { if (scaleTimer) clearTimeout(scaleTimer); sendScale(); },
+  });
+  scaleBox.append(scale.el, scaleText);
+  new ResizeObserver(() => scale.relayout()).observe(scaleBox);
+  // 外发光: the same slider in whole pixels, 0 (off) to GLOW_MAX; saved once a drag or a key press ends
+  const glowLabel = (v: number) => (v > 0 ? S.glowPx(v) : S.glowOff);
+  const glowText = ui.h('span', 'companion-rangeval');
+  const glowBox = ui.h('div', 'companion-rangebox');
+  const glow = scaleSlider(root.ownerDocument, {
+    min: 0, soft: GLOW_MAX, max: GLOW_MAX, step: 1, label: S.glow, format: glowLabel,
+    room: () => glowBox.clientWidth - glowText.offsetWidth - 12,
+    onInput: () => showGlow(),
+    onChange: () => { showGlow(); void save(KEYS.glow, glow.value, GROUP, displayMsg); },
+  });
+  glowBox.append(glow.el, glowText);
+  new ResizeObserver(() => glow.relayout()).observe(glowBox);
+  const showGlow = () => { glowText.textContent = glowLabel(glow.value); };
+  const frameRate = ui.segmented(FRAME_RATES.map((n) => ({ value: String(n), label: n ? String(n) : S.frameUnlimited })),
+    { size: 'sm', onSelect: (v) => void save(KEYS.frameRate, Number(v), GROUP, displayMsg) });
+  const lockFps = ui.checkbox(S.lockFps, { onChange: (on) => void save(KEYS.lockFps, on, GROUP, displayMsg) });
+  const hideFullscreen = ui.checkbox(S.hideFullscreen, { onChange: (on) => void save(KEYS.hideFullscreen, on, GROUP, displayMsg) });
+  const remember = ui.checkbox(S.remember, { onChange: (on) => void save(KEYS.remember, on, GROUP, displayMsg) });
+  const dblclick = ui.checkbox(S.dblclick, { onChange: (on) => void save(KEYS.dblclick, on, GROUP, behaviorMsg) });
+  const statusBubble = ui.checkbox(S.statusBubble, { onChange: (on) => void save(KEYS.statusBubble, on, GROUP, behaviorMsg) });
+  // the two rows below follow the pet panel's state; 「自定义…」 is picked by saving its popup
+  let habit: Required<HabitState> = { wake: { wakeOn: 'poke', wakeKinds: ['poke'] }, selfAdjust: { mode: 'default', custom: {} } };
+  const wakeHint = ui.h('p', 'home-note');
+  const wake = ui.segmented(WAKE_MODES.map((v) => ({ value: v, label: S.wakeModes[v] ?? v })), {
+    size: 'sm',
+    onSelect: (v) => {
+      if (v === 'custom') return;
+      habit.wake.wakeOn = v;
+      renderHabits();
+      void save(KEYS.wakeOn, v, GROUP, behaviorMsg);
+    },
+  });
+  const selfHint = ui.h('p', 'home-note');
+  const selfMode = ui.segmented(SELF_MODES.map((v) => ({ value: v, label: S.selfModes[v] ?? v })), {
+    size: 'sm',
+    onSelect: (v) => {
+      if (v === 'custom') return;
+      habit.selfAdjust.mode = v;
+      renderHabits();
+      void save(KEYS.selfAdjust, v, GROUP, behaviorMsg);
+    },
+  });
+  // 「自定义…」 opens its popup each time, picked or not; the row shows it picked once the popup is saved
+  wake.el.lastElementChild?.addEventListener('click', () => { renderHabits(); openWakePopup(); }, { signal });
+  selfMode.el.lastElementChild?.addEventListener('click', () => { renderHabits(); openSelfPopup(); }, { signal });
+  const directOf = (h: Required<HabitState>) => (h.selfAdjust.mode === 'any' ? [...SELF_KEYS]
+    : h.selfAdjust.mode === 'default' ? SELF_KEYS.filter((k) => SELF_DEFAULT.includes(k))
+    : SELF_KEYS.filter((k) => h.selfAdjust.custom[k] ?? SELF_DEFAULT.includes(k)));
+  function renderHabits(): void {
+    const { wakeOn, wakeKinds } = habit.wake;
+    wake.setValue(wakeOn);
+    const kinds = TOUCH_KINDS.filter((k) => wakeKinds.includes(k)).map((k) => S.wakeKinds[k] ?? k);
+    wakeHint.textContent = wakeOn !== 'custom' ? S.wakeHints[wakeOn] ?? '' : kinds.length ? S.wakeCustomHint(kinds) : S.wakeHints.none ?? '';
+    const mode = habit.selfAdjust.mode;
+    selfMode.setValue(mode);
+    const direct = directOf(habit);
+    const name = (k: string) => S.selfItems[k] ?? k;
+    selfHint.textContent = mode !== 'custom' ? S.selfHints[mode] ?? ''
+      : direct.length === SELF_KEYS.length ? S.selfHints.any ?? ''
+      : S.selfCustomHint(direct.map(name), SELF_KEYS.filter((k) => !direct.includes(k)).map(name));
+  }
+  /** A popup of checkboxes; `onSave` gets the keys left checked. */
+  function popup(title: string, note: string | null, items: ReadonlyArray<[key: string, label: string, on: boolean]>, onSave: (keys: string[]) => void): void {
+    const body = ui.h('div', 'companion-popup');
+    if (note) body.append(ui.h('p', 'home-note', note));
+    const list = ui.h('div', 'companion-checks');
+    const boxes = items.map(([key, label, on]) => {
+      const c = ui.checkbox(label, { checked: on });
+      list.append(c.el);
+      return [key, c] as const;
+    });
+    const bar = ui.actions();
+    const cancel = ui.button(S.popupCancel);
+    const ok = ui.button(S.popupSave, { variant: 'primary' });
+    bar.append(ui.h('span', 'grow'), cancel, ok);
+    body.append(list, bar);
+    const drawer = ui.drawer(title, body);
+    cancel.addEventListener('click', () => drawer.dispose(), { signal });
+    ok.addEventListener('click', () => {
+      drawer.dispose();
+      onSave(boxes.filter(([, c]) => c.checked).map(([key]) => key));
+    }, { signal });
+    boxes[0]?.[1].input.focus();
+  }
+  function openWakePopup(): void {
+    const { wakeKinds } = habit.wake;
+    popup(S.wakeTitle, null, TOUCH_KINDS.map((k) => [k, S.wakeKinds[k] ?? k, wakeKinds.includes(k)]), (kinds) => {
+      habit.wake = { wakeOn: 'custom', wakeKinds: kinds };
+      renderHabits();
+      void callPet('setWakeKinds', [kinds]);
+    });
+  }
+  function openSelfPopup(): void {
+    // starts from what the mode in force lets Coo change directly; from `off`, from the custom picks
+    const direct = habit.selfAdjust.mode === 'off' ? directOf({ ...habit, selfAdjust: { ...habit.selfAdjust, mode: 'custom' } }) : directOf(habit);
+    popup(S.selfTitle, S.selfNote, SELF_KEYS.map((k) => [k, S.selfItems[k] ?? k, direct.includes(k)]), (keys) => {
+      const custom = Object.fromEntries(SELF_KEYS.map((k) => [k, keys.includes(k)]));
+      habit.selfAdjust = { mode: 'custom', custom };
+      renderHabits();
+      void callPet('setSelfAdjustCustom', [custom]);
+    });
+  }
   const stats = ui.checkbox(S.stats, { onChange: (on) => void save(STATS_KEY, on, STATS_GROUP) });
-  const statsDoc = ui.h('a', 'home-link', S.statsDoc);
+  const statsDoc = ui.h('a', 'home-link companion-statsdoc', S.statsDoc);
   statsDoc.href = STATS_DOC;
   statsDoc.target = '_blank';
   statsDoc.rel = 'noreferrer';
-  const statsBox = ui.h('div');
+  const statsBox = ui.h('div', 'companion-switchbox');
   statsBox.append(stats.el, statsDoc);
   // hover buttons: one round toggle per action, in the menu's order; picked ones are lit
   let picked: string[] = [];
@@ -134,7 +250,7 @@ async function mount(ctx: FeatureContext): Promise<void> {
       // kept in the menu's order, whatever order they were picked in
       picked = ACTIONS.map(([a]) => a).filter((a) => (a === id ? !on : picked.includes(a)));
       renderHover();
-      void save(KEYS.hover, picked.join(','));
+      void save(KEYS.hover, picked.join(','), GROUP, behaviorMsg);
     });
     hoverBox.append(b);
     return [id, b] as const;
@@ -148,51 +264,131 @@ async function mount(ctx: FeatureContext): Promise<void> {
     }
   };
 
-  const row = (label: string, control: HTMLElement, hint?: string) => {
+  const row = (label: string, control: HTMLElement, hint?: string | HTMLElement) => {
     const r = ui.h('div', 'companion-row');
     const l = ui.h('div', 'companion-label', label);
     const c = ui.h('div', 'companion-control');
+    // the setting first, what it means under it
     c.append(control);
-    if (hint) c.append(ui.h('p', 'home-note', hint));
+    if (hint) c.append(typeof hint === 'string' ? ui.h('p', 'home-note', hint) : hint);
     r.append(l, c);
     return r;
   };
+  // the World declares this setting on Windows only; elsewhere its value never arrives and the row stays hidden
+  const hideFullscreenRow = row(S.hideFullscreenLabel, hideFullscreen.el, S.hideFullscreenHint);
+  hideFullscreenRow.hidden = true;
+
+  // sections: general, how Coo behaves and is reached, how it shows on the screen, sounds, computer use;
+  // every row names its setting on the left, except one that only refines the row above it
   habits.body.append(
+    row(S.language, language, S.languageHint),
     row(S.user, user, S.userHint),
-    row(S.roam, roam.el),
-    row(S.theme, theme.el),
-    row(S.scale, scaleBox),
-    row('', sound.el),
-    row(S.hover, hoverBox, S.hoverHint(MAX_HOVER)),
-    row('', statsBox, S.statsHint),
+    row(S.statsLabel, statsBox, S.statsHint),
     msg,
   );
-  root.append(habits.el);
+  const behavior = ui.sheet({ title: S.groupBehavior });
+  behavior.body.append(
+    row(S.roam, roam.el),
+    row(S.wake, wake.el, wakeHint),
+    row(S.self, selfMode.el, selfHint),
+    row(S.hover, hoverBox, S.hoverHint(MAX_HOVER)),
+    row(S.dblclickLabel, dblclick.el),
+    row(S.statusBubbleLabel, statusBubble.el, S.statusBubbleHint),
+    behaviorMsg,
+  );
+  const display = ui.sheet({ title: S.groupDisplay });
+  display.body.append(
+    row(S.scale, scaleBox),
+    row(S.glow, glowBox, S.glowHint),
+    row(S.frameRate, frameRate.el, S.frameRateHint),
+    row('', lockFps.el, S.lockFpsHint),
+    hideFullscreenRow,
+    row(S.rememberLabel, remember.el, S.rememberHint),
+    displayMsg,
+  );
+  root.append(intro(ui, S.nav), habits.el, behavior.el, display.el);
+
+  /* ---------- sounds ---------- */
+  const sounds = ui.sheet({ title: S.soundTitle });
+  const soundMsg = ui.msgline('');
+  const sound = ui.checkbox(S.sound, { onChange: (on) => { void save(KEYS.sound, on, SOUND_GROUP, soundMsg); renderKinds(); } });
+  const kindBox = ui.h('div', 'companion-checks');
+  const kinds = SOUND_KINDS.map((kind) => {
+    const [label, what] = S.kinds[kind] ?? [kind, ''];
+    const c = ui.checkbox(label, { title: what, onChange: (on) => void save(`${K}.sounds.${kind}`, on, SOUND_GROUP, soundMsg) });
+    kindBox.append(c.el);
+    return [kind, c] as const;
+  });
+  // the kinds only matter while sounds play at all
+  const renderKinds = () => { for (const [, c] of kinds) c.input.disabled = !sound.checked; };
+  const snore = ui.input({ type: 'number' });
+  snore.min = '0'; snore.max = '3600'; snore.step = '1';
+  const snoreBox = ui.h('div', 'companion-rangebox');
+  snoreBox.append(snore, ui.h('span', 'companion-rangeval', S.snoreUnit));
+  sounds.body.append(
+    row(S.soundLabel, sound.el),
+    row(S.soundKinds, kindBox, S.soundKindsHint),
+    row(S.snore, snoreBox, S.snoreHint),
+    soundMsg,
+  );
+  root.append(sounds.el, cuaSection(ctx, row));
+
+  /* ---------- other: the OBS overlay ---------- */
+  const other = ui.sheet({ title: S.groupOther });
+  const otherMsg = ui.msgline('');
+  const overlay = ui.checkbox(S.overlay, { onChange: (on) => { overlayUrlBox.hidden = !on || !overlayUrl.value; void save(KEYS.overlay, on, GROUP, otherMsg); } });
+  // the address to paste into OBS, while the overlay is exported
+  const overlayUrl = ui.input();
+  overlayUrl.readOnly = true;
+  const overlayUrlBox = ui.h('div', 'companion-rangebox');
+  overlayUrlBox.append(overlayUrl, ui.copyButton(() => overlayUrl.value));
+  overlayUrlBox.hidden = true;
+  const overlayBox = ui.h('div', 'companion-switchbox');
+  overlayBox.append(overlay.el, overlayUrlBox);
+  other.body.append(row(S.overlayLabel, overlayBox, S.overlayHint), otherMsg);
+  root.append(other.el);
 
   /* ---------- behaviour ---------- */
-  const save = async (key: string, value: string | number | boolean, group = GROUP) => {
+  const save = async (key: string, value: string | number | boolean, group = GROUP, line = msg) => {
     try {
       await setConfig(group, { [key]: value }, opts);
-      msg.textContent = S.saved;
-      msg.classList.remove('bad');
+      // everything saves as it changes: only a failure is worth a line
+      line.textContent = '';
+      line.classList.remove('bad');
     } catch (err) {
       if (signal.aborted) return;
-      msg.textContent = S.saveFailed(errText(err));
-      msg.classList.add('bad');
+      line.textContent = S.saveFailed(errText(err));
+      line.classList.add('bad');
     }
   };
-  const showScale = () => { scaleText.textContent = `${Math.round(Number(scale.value) * 100)}%`; };
+  /** Calls a pet panel method (回应模式, 自主配置权限); a failure shows under 行为与互动, and the rows follow the state it returns. */
+  const callPet = async (method: string, args: unknown[]) => {
+    try {
+      const state = await invokePanel<HabitState>(PET_PAGE, 'pet', method, args, opts);
+      takeHabits(state);
+      behaviorMsg.textContent = '';
+      behaviorMsg.classList.remove('bad');
+    } catch (err) {
+      if (signal.aborted) return;
+      behaviorMsg.textContent = S.saveFailed(errText(err));
+      behaviorMsg.classList.add('bad');
+    }
+  };
+  function takeHabits(state: HabitState | null | undefined): void {
+    if (!state?.wake || !state.selfAdjust) return;
+    habit = { wake: state.wake, selfAdjust: state.selfAdjust };
+    renderHabits();
+  }
+  function showScale(): void { scaleText.textContent = `${Math.round(scale.value * 100)}%`; }
   // saved while the slider moves, so the pet on the desktop grows and shrinks with it
   let scaleTimer: ReturnType<typeof setTimeout> | null = null;
-  let scaleSent = '';
-  const sendScale = () => {
+  let scaleSent = NaN;
+  function sendScale(): void {
     scaleTimer = null;
     if (scale.value === scaleSent) return;
     scaleSent = scale.value;
-    void save(KEYS.scale, Number(scale.value));
-  };
-  scale.addEventListener('input', () => { showScale(); scaleTimer ??= setTimeout(sendScale, SCALE_SEND_MS); });
-  scale.addEventListener('change', () => { if (scaleTimer) clearTimeout(scaleTimer); sendScale(); });
+    void save(KEYS.scale, scale.value, GROUP, displayMsg);
+  }
   signal.addEventListener('abort', () => { if (scaleTimer) clearTimeout(scaleTimer); });
   const saveUser = () => {
     const name = user.value.trim();
@@ -200,25 +396,62 @@ async function mount(ctx: FeatureContext): Promise<void> {
   };
   user.addEventListener('change', saveUser);
   user.addEventListener('keydown', (e) => { if (e.key === 'Enter') user.blur(); });
+  snore.addEventListener('change', () => {
+    const n = Math.round(Number(snore.value));
+    if (snore.value === '' || !Number.isFinite(n) || n < 0 || n > 3600) { snore.value = snore.dataset.saved ?? '0'; return; }
+    snore.value = String(n);
+    if (snore.value !== snore.dataset.saved) { snore.dataset.saved = snore.value; void save(KEYS.snoreSeconds, n, SOUND_GROUP, soundMsg); }
+  });
+  snore.addEventListener('keydown', (e) => { if (e.key === 'Enter') snore.blur(); });
 
   const refreshValues = async () => {
+    // with the OBS overlay page while it is exported
+    const habitState = invokePanel<HabitState & { overlayUrl?: string | null }>(PET_PAGE, 'pet', 'state', [], opts).catch(() => null);
     let values: Record<string, unknown> = {};
+    let soundValues: Record<string, unknown> = {};
     let statsValues: Record<string, unknown> = {};
     try {
       const d = await get<{ groups?: ConfigEntry[] }>('/api/config', opts);
       values = d.groups?.find((g) => g.group.id === GROUP)?.values ?? {};
+      soundValues = d.groups?.find((g) => g.group.id === SOUND_GROUP)?.values ?? {};
       statsValues = d.groups?.find((g) => g.group.id === STATS_GROUP)?.values ?? {};
     } catch { return; }
     if (typeof statsValues[STATS_KEY] === 'boolean') stats.setChecked(statsValues[STATS_KEY] as boolean);
+    if (typeof statsValues[LANGUAGE_KEY] === 'string' && document.activeElement !== language) {
+      // before the choices arrive the select keeps the value as a lone option
+      if (![...language.options].some((o) => o.value === statsValues[LANGUAGE_KEY])) language.append(Object.assign(ui.h('option', null, statsValues[LANGUAGE_KEY] as string), { value: statsValues[LANGUAGE_KEY] as string }));
+      language.value = statsValues[LANGUAGE_KEY] as string;
+    }
     const active = document.activeElement;
     if (typeof values[KEYS.user] === 'string' && active !== user) {
       user.value = values[KEYS.user] as string;
       user.dataset.saved = user.value;
     }
     if (typeof values[KEYS.roam] === 'string') roam.setValue(values[KEYS.roam] as string);
-    if (typeof values[KEYS.theme] === 'string') theme.setValue(values[KEYS.theme] as string);
-    if (typeof values[KEYS.scale] === 'number' && active !== scale) { scale.value = String(values[KEYS.scale]); showScale(); }
-    if (typeof values[KEYS.sound] === 'boolean') sound.setChecked(values[KEYS.sound] as boolean);
+    if (typeof values[KEYS.scale] === 'number' && !scale.active && active !== scale.el) { scale.set(values[KEYS.scale] as number); showScale(); }
+    if (!glow.active && active !== glow.el) { glow.set(typeof values[KEYS.glow] === 'number' ? values[KEYS.glow] as number : GLOW_DEFAULT); showGlow(); }
+    if (typeof values[KEYS.frameRate] === 'number') frameRate.setValue(String(values[KEYS.frameRate]));
+    if (typeof soundValues[KEYS.sound] === 'boolean') sound.setChecked(soundValues[KEYS.sound] as boolean);
+    for (const [kind, c] of kinds) {
+      const v = soundValues[`${K}.sounds.${kind}`];
+      if (typeof v === 'boolean') c.setChecked(v);
+    }
+    renderKinds();
+    if (typeof soundValues[KEYS.snoreSeconds] === 'number' && active !== snore) {
+      snore.value = String(soundValues[KEYS.snoreSeconds]);
+      snore.dataset.saved = snore.value;
+    }
+    if (typeof values[KEYS.lockFps] === 'boolean') lockFps.setChecked(values[KEYS.lockFps] as boolean);
+    if (typeof values[KEYS.hideFullscreen] === 'boolean') { hideFullscreen.setChecked(values[KEYS.hideFullscreen] as boolean); hideFullscreenRow.hidden = false; }
+    if (typeof values[KEYS.remember] === 'boolean') remember.setChecked(values[KEYS.remember] as boolean);
+    if (typeof values[KEYS.dblclick] === 'boolean') dblclick.setChecked(values[KEYS.dblclick] as boolean);
+    if (typeof values[KEYS.statusBubble] === 'boolean') statusBubble.setChecked(values[KEYS.statusBubble] as boolean);
+    if (typeof values[KEYS.overlay] === 'boolean') overlay.setChecked(values[KEYS.overlay] as boolean);
+    // a popup open over the page keeps the rows as they are until it is saved or closed
+    const state = await habitState;
+    if (!root.ownerDocument.querySelector('.companion-popup')) takeHabits(state);
+    overlayUrl.value = state?.overlayUrl ?? '';
+    overlayUrlBox.hidden = !overlay.checked || !overlayUrl.value;
     if (typeof values[KEYS.hover] === 'string') {
       picked = (values[KEYS.hover] as string).split(',').map((x) => x.trim()).filter((x) => ACTIONS.some(([a]) => a === x));
       renderHover();
@@ -229,10 +462,9 @@ async function mount(ctx: FeatureContext): Promise<void> {
   ctx.lifecycle.interval(() => void refreshValues(), 3000);
 }
 
-export const petFeature: FrameworkFeature = {
+export const petPage: Page = {
   route: 'pet',
   label: S.nav,
   icon: 'bot',
-  navMode: 'primary',
   mount,
 };

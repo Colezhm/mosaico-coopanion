@@ -10,13 +10,18 @@ directories:
 # the Core child runs TypeScript sources through tsx and spawns esbuild, koffi, sherpa-onnx and pnpm: keep files unpacked
 asar: false
 npmRebuild: false
-# Chromium's own UI strings (context menus, form validation) only in the app's languages: about
-# 47 MB less installed on macOS. Names match files exactly: underscores for macOS .lproj, hyphens for
-# Windows/Linux .pak; en-US.pak is Chromium's required fallback there.
-electronLanguages: [en, en-US, zh_CN, zh-CN, zh_TW, zh-TW]
+# Chromium's own UI strings (context menus, form validation) only in the app's eleven languages:
+# underscores for macOS .lproj, hyphens for Windows/Linux .pak; en-US.pak is Chromium's fallback there.
+electronLanguages: [en, en-US, zh_CN, zh-CN, zh_TW, zh-TW, de, es_419, es-419, fr, it, ja, ko, pt_BR, pt-BR, ru]
 nodeGypRebuild: false
 files:
   - "**/*"
+# where app/updater.cjs looks for releases; with --publish never this only writes latest.yml and
+# latest-linux.yml next to the installers (and app-update.yml into the app), which the release workflow uploads
+publish:
+  provider: github
+  owner: Colezhm
+  repo: mosaico-coopanion
 win:
   target:
     - target: nsis
@@ -32,6 +37,11 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: false
   shortcutName: Coopanion
+  # the installer's own pages follow the system language among these (NSIS has one Spanish, es_ES);
+  # the app's language is the app's own setting
+  installerLanguages: [en_US, zh_CN, zh_TW, ja_JP, ko_KR, fr_FR, de_DE, es_ES, pt_BR, it_IT, ru_RU]
+  multiLanguageInstaller: true
+  displayLanguageSelector: false
   runAfterFinish: true
   deleteAppDataOnUninstall: false
   artifactName: Coopanion-Setup-${version}.exe
@@ -50,8 +60,9 @@ mac:
   gatekeeperAssess: false
   extendInfo:
     LSUIElement: true
-    NSMicrophoneUsageDescription: Coo 用麦克风听你说话,语音在本机识别,录音不会上传。
-    NSAppleEventsUsageDescription: 操作电脑时,Coo 用它把你指定的应用切到前面。
+    # English for every language: electron-builder has no option for per-language InfoPlist.strings
+    NSMicrophoneUsageDescription: Coo listens to you through the microphone. Speech is recognized on this Mac; recordings are not uploaded.
+    NSAppleEventsUsageDescription: While using the computer for you, Coo uses this to bring the app you name to the front.
 dmg:
   writeUpdateInfo: false
 # x64 only. Data goes to ~/.config/Coopanion. The app runs on X11 (XWayland under Wayland, see app/main.cjs);
@@ -65,7 +76,7 @@ linux:
   icon: app/icons/icon.png
   category: Utility
   executableName: coopanion
-  synopsis: 桌面上的 AI 陪伴桌宠
+  synopsis: An AI companion pet on your desktop
   maintainer: Pal-AI-Lab <phantivia@gmail.com>
   # ${arch} would read x86_64 for the AppImage and amd64 for the deb
   artifactName: Coopanion-${version}-linux-x64.${ext}

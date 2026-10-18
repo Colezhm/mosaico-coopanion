@@ -1,6 +1,6 @@
 /**
  * Voice input end to end inside the World: PCM frames over the pet socket → segmenter →
- * FunASR (a stand-in for sherpa-onnx's recognizer that answers with a set line) →
+ * FunASR or Whisper (a stand-in for sherpa-onnx's recognizer that answers with a set line) →
  * `desktop-pet.speech` event, with the listen phases the page shows along the way.
  */
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,10 +11,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DESKTOP_PET_DEFAULTS } from '../src/config.ts';
 import { DesktopPetWorld } from '../src/world.ts';
+import { petText } from '../src/i18n/index.ts';
 import type { MicMode } from '../src/config.ts';
-import type { SherpaModule } from '../src/asr/funasr.ts';
+import type { Language } from 'cortico/core/language.ts';
+import type { SherpaModule } from '../src/asr/sherpa.ts';
 import type { ModelSpec } from '../src/runtime/store.ts';
 import { parseHotkey, type Hotkey } from '../src/asr/hotkey.ts';
+import { rmsDb } from '../src/asr/segmenter.ts';
 import { FakeHost } from './helpers/fake-host.ts';
 import { FakePage } from './helpers/page.ts';
 import { fakeSapi } from './helpers/fake-sapi.ts';
@@ -51,13 +54,20 @@ const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 /** A small stand-in for the FunASR model, fetched from `url` when not placed beforehand. */
 const modelSpec = (url = 'http://127.0.0.1:9'): ModelSpec => ({
   id: 'test-model',
-  files: [{ name: 'model.int8.onnx', bytes: MODEL.length, sha256: sha(MODEL) }, { name: 'tokens.txt', bytes: TOKENS.length, sha256: sha(TOKENS) }],
+  files: [{ role: 'model', name: 'model.int8.onnx', bytes: MODEL.length, sha256: sha(MODEL) }, { role: 'tokens', name: 'tokens.txt', bytes: TOKENS.length, sha256: sha(TOKENS) }],
   sources: [(f) => `${url}/${f}`],
 });
 function placeModel(modelsDir: string): void {
   mkdirSync(join(modelsDir, 'test-model'), { recursive: true });
   writeFileSync(join(modelsDir, 'test-model', 'model.int8.onnx'), MODEL);
   writeFileSync(join(modelsDir, 'test-model', 'tokens.txt'), TOKENS);
+}
+/** A small stand-in for the Whisper model, placed in `modelsDir`. */
+function placeWhisper(modelsDir: string): ModelSpec {
+  const files = ['encoder', 'decoder', 'tokens'].map((role) => ({ role, name: `${role}.bin`, body: Buffer.from(role) }));
+  mkdirSync(join(modelsDir, 'test-whisper'), { recursive: true });
+  for (const file of files) writeFileSync(join(modelsDir, 'test-whisper', file.name), file.body);
+  return { id: 'test-whisper', files: files.map(({ role, name, body }) => ({ role, name, bytes: body.length, sha256: sha(body) })), sources: [] };
 }
 
 const tone = (ms: number, amp: number) => {
@@ -91,17 +101,18 @@ function scriptedKey(problem?: string) {
   return { key, watch };
 }
 
-async function setup(text: string | ((samples: number) => string), mode: MicMode = 'always', watch?: ReturnType<typeof scriptedKey>['watch']) {
+async function setup(text: string | ((samples: number) => string), mode: MicMode = 'always', watch?: ReturnType<typeof scriptedKey>['watch'], language: Language = 'zh', openOnPress = false) {
   const asr = fakeFunAsr(text);
   const cfg = structuredClone(DESKTOP_PET_DEFAULTS);
   Object.assign(cfg, { enabled: true, port: 0 });
   cfg.window.enabled = false;
   cfg.asr.mic.mode = mode;
+  cfg.asr.mic.openOnPress = openOnPress;
   const dir = mkdtempSync(join(tmpdir(), 'pet-voice-'));
   placeModel(join(dir, 'm'));
   const world = new DesktopPetWorld({
     cfg, timezone: 'Asia/Shanghai', persist: () => {}, runtimesRoot: () => join(dir, 'rt'), modelsDir: () => join(dir, 'm'),
-    watchHotkey: watch, loadSherpa: () => asr.sherpa, funasrModel: modelSpec(),
+    watchHotkey: watch, loadSherpa: () => asr.sherpa, funasrModel: modelSpec(), whisperModel: placeWhisper(join(dir, 'm')), language: () => language,
   });
   const host = new FakeHost();
   await world.start(host);
@@ -118,7 +129,7 @@ describe('voice input', () => {
     for (const fr of [...tone(900, .3), ...tone(900, 0)]) page.audio(fr);
     await page.next((m) => m.t === 'listen' && m.phase === 'start');
     await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
-    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.speech', senderKey: 'desktop-pet.voice', text: '[语音] 伙伴:今天天气怎么样' });
+    expect(host.events[0]).toMatchObject({ type: 'desktop-pet.speech', senderKey: 'desktop-pet.voice', text: '[voice] 伙伴:今天天气怎么样' });
     expect(host.pushOpts[0]).toEqual({ trigger: 'flush' });
     expect((await page.next((m) => m.t === 'listen' && m.phase === 'heard')).text).toBe('今天天气怎么样');
     // the last decode is the whole utterance: at least the 900 ms spoken
@@ -151,17 +162,57 @@ describe('voice input', () => {
     expect(host.events).toHaveLength(0);
     key.press(false);
     await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
-    expect(host.events[0].text).toBe('[语音] 伙伴:帮我看看这个');
+    expect(host.events[0].text).toBe('[voice] 伙伴:帮我看看这个');
   });
 
-  it('a talk key that cannot be read keeps the microphone closed and says why', async () => {
-    const { watch } = scriptedKey('no keyboard here');
-    const { host, page, world } = await setup('不该听到', 'hold', watch);
-    expect(world.voiceState().input).toMatchObject({ mode: 'hold', effectiveMode: 'hold', hotkeyProblem: 'no keyboard here', open: false });
-    expect((world.voiceState().input as { hint: string }).hint).toContain('no keyboard here');
-    for (const fr of [...tone(900, .3), ...tone(900, 0)]) page.audio(fr);
-    await new Promise((r) => setTimeout(r, 600));
+  it('hold: the microphone stays open across a press and release unless it is set to open on press', async () => {
+    const { key, watch } = scriptedKey();
+    const { page } = await setup('帮我看看这个', 'hold', watch);
+    expect(page.init.mic).toBe(true);
+    key.press(true);
+    key.press(false);
+    await new Promise((r) => setTimeout(r, 800));
+    expect(page.messages.some((m) => m.t === 'prefs' && m.mic === false)).toBe(false);
+  });
+
+  it('hold, open on press: the page opens the microphone from the press until shortly after the release', async () => {
+    const { key, watch } = scriptedKey();
+    const { page } = await setup('帮我看看这个', 'hold', watch, 'zh', true);
+    expect(page.init.mic).toBe(false);
+    key.press(true);
+    await page.next((m) => m.t === 'prefs' && m.mic === true);
+    // listening starts with the first frame from the microphone the press opened
+    page.audio(tone(20, .01)[0]!);
+    await page.next((m) => m.t === 'listen' && m.phase === 'start');
+    key.press(false);
+    await page.next((m) => m.t === 'prefs' && m.mic === false);
+  });
+
+  it("the listening bubble's cancel drops what was heard, sends nothing and closes the bubble", async () => {
+    const { key, watch } = scriptedKey();
+    const { host, page } = await setup('说错了', 'hold', watch);
+    key.press(true);
+    for (const fr of tone(600, .3)) page.audio(fr);
+    await page.next((m) => m.t === 'listen' && m.phase === 'start');
+    page.send({ t: 'cancel' });
+    await page.next((m) => m.t === 'listen' && m.phase === 'none');
+    // the key comes up after the cancel: nothing is left to send
+    key.press(false);
+    await new Promise((r) => setTimeout(r, 500));
     expect(host.events).toHaveLength(0);
+    expect(page.messages.some((m) => m.t === 'listen' && m.phase === 'heard')).toBe(false);
+  });
+
+  it('a talk key that cannot be read keeps the gate closed', async () => {
+    const { watch } = scriptedKey('no keyboard here');
+    const { page, world } = await setup('不该听见', 'toggle', watch);
+    expect(world.voiceState().input).toMatchObject({ mode: 'toggle', hotkeyProblem: 'no keyboard here', open: false });
+    expect((world.voiceState().input as { hint: string }).hint).toContain('no keyboard here');
+    const last = tone(20, .05)[0];
+    for (const fr of [...tone(900, .3), ...tone(900, 0), last]) page.audio(fr);
+    // frames arrive in order: once the last one is metered, every sentence the others made is counted
+    await expect.poll(() => world.voiceState().level).toBe(rmsDb(last));
+    expect((world.voiceState().counts as { utterances: number }).utterances).toBe(0);
   });
 
   it('the microphone button held down sends the sentence without waiting for its closing pause', async () => {
@@ -173,7 +224,7 @@ describe('voice input', () => {
     expect(host.events).toHaveLength(0);
     page.send({ t: 'commit' });
     await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
-    expect(host.events[0].text).toBe('[语音] 伙伴:帮我开灯');
+    expect(host.events[0].text).toBe('[voice] 伙伴:帮我开灯');
     expect((await page.next((m) => m.t === 'listen' && m.phase === 'heard')).text).toBe('帮我开灯');
   });
 
@@ -223,7 +274,7 @@ describe('voice input', () => {
     expect(host.events).toHaveLength(0);
     for (const fr of tone(900, 0)) page.audio(fr);
     await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
-    expect(host.events[0].text).toBe('[语音] 伙伴:听清楚了');
+    expect(host.events[0].text).toBe('[voice] 伙伴:听清楚了');
     expect((await page.next((m) => m.t === 'listen' && m.phase === 'heard')).text).toBe('听清楚了');
     // one streamed sentence, not a second pass over the finished audio
     expect(spawned[0].lines.filter((l) => l.startsWith('B '))).toHaveLength(1);
@@ -238,7 +289,33 @@ describe('voice input', () => {
     expect(host.events).toHaveLength(0);
     for (const fr of tone(900, 0)) page.audio(fr);
     await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
-    expect(host.events[0].text.length).toBeGreaterThan('[语音] 伙伴:'.length + 13);
+    expect(host.events[0].text.length).toBeGreaterThan('[voice] 伙伴:'.length + 13);
+  });
+
+  it('whisper: an app language SenseVoice does not hear goes to Whisper in that language, decoded once when the sentence ends', async () => {
+    const { asr, host, page } = await setup('Quelle heure est-il ?', 'always', undefined, 'fr');
+    for (const fr of tone(1400, .3)) page.audio(fr);
+    await page.next((m) => m.t === 'listen' && m.phase === 'start');
+    await new Promise((r) => setTimeout(r, 300));
+    expect(asr.decodes).toHaveLength(0);
+    for (const fr of tone(900, 0)) page.audio(fr);
+    await expect.poll(() => host.events.length, { timeout: 5000 }).toBe(1);
+    expect(host.events[0].text).toContain('Quelle heure est-il ?');
+    expect(asr.decodes).toHaveLength(1);
+    expect(asr.configs[0]).toMatchObject({ modelConfig: { whisper: { language: 'fr', task: 'transcribe' } } });
+  });
+
+  it('whisper: a talk key held over silence is not decoded and sends nothing', async () => {
+    const { key, watch } = scriptedKey();
+    const { asr, host, page } = await setup('Повтори', 'hold', watch, 'ru');
+    key.press(true);
+    await page.next((m) => m.t === 'listen' && m.phase === 'start');
+    for (const fr of tone(800, 0)) page.audio(fr);
+    await new Promise((r) => setTimeout(r, 200));
+    key.press(false);
+    await page.next((m) => m.t === 'listen' && m.phase === 'none');
+    expect(asr.decodes).toHaveLength(0);
+    expect(host.events).toHaveLength(0);
   });
 
   it('funasr without its model says so, and the download starts it', async () => {
@@ -261,7 +338,7 @@ describe('voice input', () => {
     });
     await world.start(new FakeHost());
     cleanup.push(() => world.stop());
-    await expect.poll(() => (world.voiceState().server as { detail: string | null }).detail).toContain('识别模型还没下载');
+    await expect.poll(() => (world.voiceState().server as { detail: string | null }).detail).toContain(petText('zh').voice.modelMissing(0));
     expect((world.voiceState().server as { phase: string }).phase).toBe('stopped');
     expect((world.voiceState().model as { phase: string }).phase).toBe('absent');
     await world.installVoice();

@@ -7,7 +7,7 @@ and then the whale, saving a screenshot about every 100 ms plus the backend's
 state, and writes frames.ffconcat for ffmpeg.
 
 Start the official simulator + coop_backend first, with COOP_SIM_PORT matching
---input-port and COOP_SIM_ASSET_PATH pointing at web/whale/mosaico-deepseek.bin.
+--input-port and COOP_SIM_ASSET_PATH pointing at packages/coopanion-mosaico/web/whale-deepseek.bin.
 The simulator feeds held IMU values once per 33 ms UI tick, so short knocks
 are coarser than on the device's 100 Hz sensor.
 """

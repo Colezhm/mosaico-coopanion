@@ -1,0 +1,12 @@
+{
+  "repo": "https://github.com/Pal-AI-Lab/Coopanion.git",
+  "ref": "v0.2.3",
+  "commit": "6ddb1341befea9bad94bb48ed5b1cb998da77fd1",
+  "cortico": "786b79a98041a8d93f6b53b4eb1b86fe71240151",
+  "keep": [
+    "packages/coopanion-mosaico/",
+    "console/features/mosaico/",
+    "installer/package-lock.json",
+    "pnpm-lock.yaml"
+  ]
+}

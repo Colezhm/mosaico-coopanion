@@ -4,8 +4,8 @@
   "include": [
     "packages/cortico-world-desktop-pet/src/**/*.ts",
     "packages/cortico-world-desktop-pet/tests/**/*.ts",
-    "packages/cortico-world-cua/src/**/*.ts",
-    "packages/cortico-world-cua/tests/**/*.ts"
+    "packages/coopanion-mosaico/src/**/*.ts",
+    "packages/coopanion-mosaico/tests/**/*.ts"
   ],
-  "exclude": ["node_modules", "packages/cortico-world-cua/tests/e2e"]
+  "exclude": ["node_modules", "packages/cortico-world-desktop-pet/tests/cua/e2e"]
 }

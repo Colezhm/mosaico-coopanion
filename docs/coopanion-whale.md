@@ -1,4 +1,4 @@
-<!-- Owner: desktop/coopanion/packages/cortico-world-desktop-pet/web/whale/; projects/coopanion/main/coop_animation.c -->
+<!-- Owner: desktop/coopanion/packages/coopanion-mosaico/web/; projects/coopanion/main/coop_animation.c -->
 
 # DeepSeek 大肥鱼 · Mosaico 1.1.0
 
@@ -46,7 +46,11 @@
 
 ## 资源与协议
 
-默认资源：`desktop/coopanion/packages/cortico-world-desktop-pet/web/whale/mosaico-deepseek.bin`。
+> 桌面端自 0.1.26-mosaico.8 起直接使用上游 Coopanion 的大肥鱼形象包（含冬装、眉毛和上游的整套表情），
+> 不再修改它；上面列的桌面新增表情中，上游没有的几个（炸毛、撒娇、好奇、眉开眼笑、比耶、背身生闷气）
+> 只保留在板端图集里。桌面发出的上游新词由 `packages/coopanion-mosaico/src/words.ts` 映射到板端最接近的片段。
+
+默认资源：`desktop/coopanion/packages/coopanion-mosaico/web/whale-deepseek.bin`（由 0.1.0-mosaico.7 导出，沿用不变）。
 192 × 216 像素、128 色、1,020,422 字节（上限 1,024,000，余量很小，再加动作需先压缩或减帧）；SHA-256：
 `fd849b772c7f06e0d87c071f762ee8f687cc4690ccd31ed27248e5e21bb23613`。
 1.2.0 的资源由 headless Chromium（Playwright，SwiftShader WebGL）运行同一个 `whale-export.html` 导出，
@@ -71,20 +75,11 @@ COO2 使用小端序，严格检查全部边界，资源上限 1000 KiB，原有
 
 ## 导出与预览
 
-在 `desktop/coopanion` 目录、锁定依赖已安装后：
-
-```sh
-./node_modules/.bin/electron packages/cortico-world-desktop-pet/host/export-whale.cjs /absolute/output/mosaico-deepseek.bin atlas deepseek
-pnpm --dir packages/cortico-world-desktop-pet test
-```
-
-导出器使用原版 WebGL 部件模型，在隔离页面内以固定 60 Hz 步长推进弹簧，输出 COO2 和同名
-`.json` 清单。它不启动用户部署、模型、麦克风或设备连接。默认蓝色资源预编译随桌面交付，
-正常同步无需临时渲染全部采样帧。修改角色后需要重新导出并更新对应校验记录。
-
-在桌宠包目录运行 `node examples/whale/serve.mjs 4319`，打开
-`http://127.0.0.1:4319/examples/whale/mosaico.html`，可逐项切换原版骨骼动作与新表情。
-这是角色预览；板端的重力、位移、传送与字幕应通过官方 GSP 模拟器验收。
+该资源由 0.1.0-mosaico.7 的 `host/export-whale.cjs` 用当时的大肥鱼骨骼导出（旧版本在 Git 历史里）。
+上游 v0.1.26 的大肥鱼改成了形象包结构，那个导出器没有移植；要给板端换上新版大肥鱼（如冬装）的图集，
+需要基于上游形象包的 kit 重写导出器。在那之前，所有大肥鱼配色在板上都使用这份蓝色图集。
+`pnpm --dir packages/coopanion-mosaico test` 校验它的格式与每一帧。
+板端的重力、位移、传送与字幕应通过官方 GSP 模拟器验收。
 共享 C 测试：根目录运行 `python projects/coopanion/tools/test_native.py`。
 连续录像工具为 `projects/coopanion/tools/record_whale.py`，需先启动官方模拟器和共享后端，
 用 `--input-port`、`--api-port` 指定本机端口，`--output` 指定证据目录。

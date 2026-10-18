@@ -1,6 +1,6 @@
 # macOS 输入修复验证
 
-关联实现：`packages/cortico-world-desktop-pet/host/electron-main.cjs`、`web/pet-app.js`、`src/world.ts`，以及 `packages/cortico-world-cua/src/engine/darwin.ts`。
+关联实现：`packages/cortico-world-desktop-pet/host/electron-main.cjs`、`web/pet-app.js`、`src/world.ts`，以及 `packages/cortico-world-desktop-pet/src/cua/engine/darwin.ts`。
 
 ## 诊断结论
 

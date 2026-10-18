@@ -10,7 +10,7 @@ FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸和情�
 完整初装镜像会覆盖全部 16 MiB NOR，包含旧设置、配对与缓存；保留 Vibe Mode 布局和功能，
 不代表保留原数据。实际覆盖需要针对具体镜像再次确认。
 
-- 桌面端：`desktop/coopanion`，基于 Coopanion `78a46f83`，保留原 MIT 许可证。
+- 桌面端：`desktop/coopanion`，即上游 Coopanion v0.2.3（AGPL-3.0-or-later），加上 [desktop/upstream](desktop/upstream/README.md) 说明的补丁与 Mosaico 包。
 - 板端和共享模拟器：`projects/coopanion`，固定 ESP-IDF、ESP32-S31、GSP 1.5.1。
 - 构建、私有配对、双端预览和整包导出：[使用说明](docs/coopanion-implementation.md)。
 - 原工作区文档：[中文](README_CN.upstream.md) / [English](README.upstream.md)。
@@ -18,4 +18,4 @@ FunASR 与电脑操作授权；板端独立运行 C 动画、IMU、触摸和情�
 1.1.0 新增大肥鱼原版角色、36 段板端动画及扩展表情，见[大肥鱼说明](docs/coopanion-whale.md)。
 1.2.0（桌面 0.1.0-mosaico.4）修复误报离线、字幕与版本号问题，空闲时 Wi-Fi 省电并改进板端画面；真机验收待完成。
 1.3.0（桌面 0.1.0-mosaico.5）新增物理反馈：惯性晃动、抛接、敲击、摇晃、转圈与朝下睡觉，程序化眼睛与情绪特效，脏矩形渲染提速约 3–5 倍；已装入真机，手感待人工验收。
-不含摄像头和外接模块。依赖保留各自许可证，新增桌面与应用模块使用 MIT。
+不含摄像头和外接模块。依赖保留各自许可证，Mosaico 新增的桌面与应用模块使用 MIT，桌面应用整体按上游的 AGPL-3.0-or-later 分发。

@@ -1,12 +1,37 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
 import { spawn } from 'node:child_process';
 const require = createRequire(import.meta.url);
-const { coreEnvironment } = require('../app/core-env.cjs') as { coreEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv };
+const { coreEnvironment, systemProxyEnvironment, PROXY_LOOKUP_MS } = require('../app/core-env.cjs') as {
+  coreEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
+  systemProxyEnvironment(env: NodeJS.ProcessEnv, resolveProxy: (url: string) => Promise<string>): Promise<{ vars: Record<string, string>, note: string }>;
+  PROXY_LOOKUP_MS: number;
+};
 
 describe('Core proxy environment', () => {
+  it('takes HTTP and HTTPS system proxies, keeps the environment\'s own, and leaves DIRECT, SOCKS and a failed or unanswered lookup direct', async () => {
+    const vars = async (rule: string | Error, env: NodeJS.ProcessEnv = {}) =>
+      (await systemProxyEnvironment(env, async () => { if (rule instanceof Error) throw rule; return rule; })).vars;
+    expect(await vars('PROXY proxy.test:7890; DIRECT')).toEqual({
+      HTTP_PROXY: 'http://proxy.test:7890', HTTPS_PROXY: 'http://proxy.test:7890', http_proxy: 'http://proxy.test:7890', https_proxy: 'http://proxy.test:7890',
+    });
+    expect((await vars('HTTPS proxy.test:443')).HTTPS_PROXY).toBe('https://proxy.test:443');
+    expect(await vars('PROXY proxy.test:7890', { https_proxy: 'http://own.test:8080' })).toEqual({});
+    expect(await vars('DIRECT')).toEqual({});
+    expect(await vars('SOCKS5 proxy.test:1080')).toEqual({});
+    expect(await vars(new Error('lookup failed'))).toEqual({});
+    vi.useFakeTimers();
+    try {
+      const pending = systemProxyEnvironment({}, () => new Promise<string>(() => {}));
+      await vi.advanceTimersByTimeAsync(PROXY_LOOKUP_MS);
+      const unanswered = await pending;
+      expect(unanswered.vars).toEqual({});
+      expect(unanswered.note).toContain('timed out');
+    } finally { vi.useRealTimers(); }
+  });
+
   it('preserves proxy settings and both bypass lists without losing local IPC', () => {
     const source = { HTTP_PROXY: 'http://proxy.test:8080', NO_PROXY: 'one.test', no_proxy: 'two.test, localhost' };
     const env = coreEnvironment(source);

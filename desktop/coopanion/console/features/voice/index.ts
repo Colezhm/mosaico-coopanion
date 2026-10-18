@@ -3,35 +3,25 @@
  * meter, what it heard), mounted on its own without the World page around it, so the normal mode
  * reaches it without the World tree.
  */
-import { pick } from '../../core/language.ts';
-import type { FeatureContext, FrameworkFeature } from '../feature.ts';
+import type { Page, PageContext } from '../../base/page.ts';
+import { intro } from '../intro.ts';
+import { S } from './strings.ts';
 
 const PET_PAGE = 'world:desktop-pet';
 
-const S = pick({
-  zh: { nav: '语音输入', unavailable: '这个窗口打不开语音输入面板,请重新打开设置窗口。' },
-  en: { nav: 'Voice input', unavailable: 'The voice input panel cannot open here; reopen the settings window.' },
-});
-
-async function mount(ctx: FeatureContext): Promise<void> {
+async function mount(ctx: PageContext): Promise<void> {
   const { ui, root } = ctx;
   root.classList.add('home');
-  if (!ctx.consolePageHost) {
-    root.append(ui.placeholder(S.unavailable));
-    return;
-  }
-  const box = ui.h('div');
+  // the panel's own first card is titled like the page: companion.css hides that heading
+  root.append(intro(ui, S.nav));
+  const box = ui.h('div', 'companion-voicebox');
   root.append(box);
-  const host = ctx.consolePageHost({ root: ui.h('div'), route: () => ['voice'] });
-  await host.load();
-  if (ctx.signal.aborted) return;
-  ctx.lifecycle.own(await host.mountConnection(PET_PAGE, 'voice', box, {}, (context) => context));
+  ctx.lifecycle.own(await ctx.mountPanel(PET_PAGE, 'voice', box));
 }
 
-export const voiceFeature: FrameworkFeature = {
+export const voicePage: Page = {
   route: 'voice',
   label: S.nav,
   icon: 'activity',
-  navMode: 'primary',
   mount,
 };
