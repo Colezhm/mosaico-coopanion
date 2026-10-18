@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'Navegação do console',
+  navAria: 'Navegação das configurações',
   groupWorlds: 'World',
   moduleInstancesAria: 'Instâncias de World',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'Desligar',
   finishing: 'Desligando…',
   shutdownTitle: 'Desligar',
-  shutdownBody: 'O processo será encerrado e o console será desconectado.',
+  shutdownBody: 'O processo será encerrado e a conexão será desfeita.',
   confirmShutdownTitle: '⚠ Desligar',
   confirmShutdownAgainTitle: '⚠⚠ Confirmar desligamento?',
   confirmShutdownAgainBody: 'Parar a execução e encerrar o processo?',
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Etapas de desligamento executadas.',
   noReceipt: (msg: string) =>
     `Nenhum resultado de desligamento recebido (${msg}); o processo pode ter sido encerrado.`,
-  docTitle: (name: string) => `Console · ${name}`,
+  docTitle: (name: string) => `Configurações · ${name}`,
   renameTitle: 'Clique para renomear',
   renameSaved: 'Nome de exibição salvo',
   renameFailed: (msg: string) => `Nome de exibição não salvo: ${msg}`,

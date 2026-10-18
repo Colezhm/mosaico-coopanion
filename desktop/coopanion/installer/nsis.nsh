@@ -15,6 +15,12 @@
   ${EndIf}
 !macroend
 
+!macro customInstallMode
+  ; the app writes data\ beside itself, which an install for all users (Program Files) cannot: the
+  ; "for all users / only for me" page is skipped and the install is per-user, as "only for me" makes it
+  StrCpy $isForceCurrentInstall "1"
+!macroend
+
 !macro customInit
   ; the per-user default is %LOCALAPPDATA%\Programs. An update stays where the install is: moving it left
   ; data\ behind (#84; app/main.cjs takes it back after such a move)

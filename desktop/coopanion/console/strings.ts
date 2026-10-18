@@ -11,7 +11,7 @@ import { L as ru } from './strings.ru.ts';
 
 const zh = {
   collapseSidebar: '折叠侧栏', expandSidebar: '展开侧栏',
-  trace: '终端', integrations: '接入', personaMemory: '人格与记忆', diagnostics: '诊断',
+  trace: '控制台', integrations: '接入', personaMemory: '人格与记忆', diagnostics: '诊断',
   toAdvanced: '高级模式', toAdvancedHint: '显示 Cortico 的全部设置：模型、扩展、World、记忆与运行诊断',
   toNormal: '回到普通模式', toNormalHint: '只显示关于桌宠的页面',
   /** feature 挂载抛错时那张错误卡的标题 */
@@ -22,7 +22,7 @@ const zh = {
 
 export const en: typeof zh = {
   collapseSidebar: 'Collapse sidebar', expandSidebar: 'Expand sidebar',
-  trace: 'Terminal', integrations: 'Integrations', personaMemory: 'Persona & Memory', diagnostics: 'Troubleshooting',
+  trace: 'Console', integrations: 'Integrations', personaMemory: 'Persona & Memory', diagnostics: 'Troubleshooting',
   toAdvanced: 'Advanced mode', toAdvancedHint: 'Show all of Cortico: models, extensions, Worlds, memory and diagnostics',
   toNormal: 'Back to normal mode', toNormalHint: 'Show only the pages about the pet',
   featureLoadFailed: (label: string) => `"${label}" failed to load`,

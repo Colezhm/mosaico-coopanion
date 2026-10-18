@@ -4,6 +4,17 @@
 
 2026-10-07，Apple Silicon Mac。本版本是开发候选版，真机验收尚未完成。
 
+## 桌面 0.2.3-mosaico.9（上游 Coopanion v0.2.3，已装入本机，与板子的真机联调待做）
+
+2026-10-17，Apple Silicon Mac。固件未变，仍为 1.5.1。
+
+| 项目 | 已观察结果 | 边界 |
+|---|---|---|
+| 结构 | 上游 v0.2.3（`6ddb134`，Cortico 0.2 `786b79a`）+ 0001、0002；0003 已由上游合并（#182）删除。两补丁冲突经 `sync.py --stack` 三方合并解决：上游新增的「按下才开麦」、对话框卡片、取消收音也走身体转接；Cortico 0.2 的 `webUi()` 改名、`describe.json` 重新生成；转接加的 `pet_location`、`pet_transfer` 与 `desktop-pet.presence` 经 `relayDescribe` 进自描述，启动不再告警；Coo 的初始自述改用上游 `core/seed/persona/coo.<语言>.md` | 上游 v0.2 起引导里可选人设（含官方大肥鱼），与按形象切换自述并存 |
+| 自动化 | 三项 typecheck 与 `check:extension` 通过；`test:worlds` 204 个（1 跳过）通过；根目录 278 个（1 跳过）在 `NODE_OPTIONS=--no-experimental-webstorage` 下通过 | 不加该选项时两个控制台页面测试在 Node 26 失败（Node 自带的 localStorage），与 Mosaico 无关 |
+| 打包与安装 | 381 MB，0.2.3-mosaico.9；运行时依赖锁按新依赖重新生成；0.1.26 的 .app 与部署数据已另存 | 主进程常驻托盘，AppleEvent 退出不关 Core，安装新包需让主进程正常退出（SIGTERM 走完关机步骤） |
+| 运行 | 启动后 Mosaico 启用、设置保留、身体在电脑上、桌宠页连上；面板接口随 Cortico 0.2 改为 `/api/webui/providers/…`，设置页经上游 `invokePanel` 自动跟随 | 板子未连接，传送等仍待真机 |
+
 ## 桌面 0.1.26-mosaico.8（上游 Coopanion v0.1.26，已装入本机，与板子的真机联调待做）
 
 2026-10-14，Apple Silicon Mac。固件未变，仍为 1.5.1。

@@ -25,8 +25,8 @@ export const S: Partial<typeof en> = {
   runtimeVersion: (version: string) => `プロセスはまだ ${version} を使用中`,
 
   providerManagement: 'プロバイダー拡張機能は、この共有環境を使うボットに提供されます。',
-  idleManagement: 'World の有効化と無効化は World ページで行います。組み込みの拡張機能は削除できません。',
-  createBody: 'Cortico を実行しているコンピューターでプロジェクトのターミナルを開き、pnpm start --new を実行して、このボットテンプレートを選んで新しいインスタンスを作成してください。',
+  idleManagement: 'World の読み込みと停止は左側の World 一覧ページで行います。組み込みの拡張機能は削除できません。',
+  createBody: 'Cortico を実行しているコンピューターでプロジェクトでコマンドラインを開き、pnpm start --new を実行して、このボットテンプレートを選んで新しいインスタンスを作成してください。',
 
   restartConfirmTitle: 'プロセスを再起動しますか？',
   restartNoLoopTitle: '手動での起動が必要です',
@@ -38,12 +38,12 @@ export const S: Partial<typeof en> = {
   resultDefault: 'シャットダウン手順を実行しました。',
   reloadWait: 'このボットの新しいプロセスの準備ができるのを待っています…',
   otherBot: 'このポートは別のボットが使用しているため、復帰を中止しました。',
-  restartManual: 'プロセスが終了しました。ターミナルで手動で起動してください。このページは準備ができるまで待機します。',
+  restartManual: 'プロセスが終了しました。コマンドラインから手動で起動してください。このページは準備ができるまで待機します。',
 
   updateVersions: (current: string, latest: string) => `${current} → ${latest}`,
   updateAction: '更新',
   updateCheckFailed: (detail: string) => `更新の確認に失敗しました：${detail}`,
-  noteConsoleMissing: 'ブラウザー用のビルド成果物がありません。拡張機能ディレクトリでビルドしてから、プロセスを再起動してください。',
+  noteWebUiMissing: 'ブラウザー用のビルド成果物がありません。拡張機能ディレクトリでビルドしてから、プロセスを再起動してください。',
   noExtensions: '拡張機能はまだインストールされていません',
   listLoadFailed: (msg: string) => `拡張機能の一覧を読み込めませんでした：${msg}`,
 
@@ -52,7 +52,7 @@ export const S: Partial<typeof en> = {
   removeInUse: 'このボットで使用中です。無効にしてから削除してください。',
   removeBody: 'このパッケージを共有の拡張機能ディレクトリから削除します。プロセスの再起動後に反映されます。これを使っている他のボットにも影響します。Memory、保存済みの設定、ローカルの拡張機能ソースは削除されません。',
   builtin: '組み込み',
-  builtinNote: 'Cortico に同梱されているため、個別には削除できません。',
+  builtinNote: 'Coopanion に同梱されているため、個別には削除できません。',
 
   installedAction: 'インストール',
   updatedAction: '更新',
@@ -65,6 +65,8 @@ export const S: Partial<typeof en> = {
   filterPlaceholder: '絞り込み：パッケージ名、説明、キーワード',
   installedFilter: '絞り込み：名前、種類、説明',
   sortLabel: {
+    certified: "認証済みを優先",
+    rating: '評価',
     downloads: 'ダウンロード数（30 日）',
     date: '最近の公開',
     name: '名前',
@@ -78,7 +80,11 @@ export const S: Partial<typeof en> = {
   pageOf: (page: number, pages: number) => `${page} / ${pages}`,
   searching: '読み込み中…',
   noPackages: 'npm にはまだこの種類のパッケージがありません',
-  noPackagesAt: (registry: string) => `npm レジストリ ${registry} にこの種類のパッケージはありません。レジストリを変えるには、インストール先の .npmrc に registry=<URL> の行を書き、プロセスを再起動してください。`,
+  noPackagesAt: (registry: string) => `npm レジストリ ${registry} にこの種類のパッケージはありません。`,
+  registryLabel: 'npm レジストリ',
+  registrySave: '保存',
+  registryHelp: 'インストール先の .npmrc に書き込み、更新確認・検索・インストールはすぐにこのレジストリを使います。空のまま保存すると既定に戻ります。',
+  registrySaved: (url: string) => `保存しました。使用中のレジストリ: ${url}`,
   noHits: '一致するパッケージがありません',
   searchFailed: (msg: string) => `読み込みに失敗しました：${msg}`,
   partial: 'npm の検索結果は一部のみ表示しています。正確なパッケージ名は手動インストールで指定してください。',
@@ -135,4 +141,5 @@ export const S: Partial<typeof en> = {
   labelled: (label: string, value: string) => `${label}：${value}`,
   metaSeparator: '　',
   listSeparator: '、',
+  feedbackTags: 'タグを報告',
 };

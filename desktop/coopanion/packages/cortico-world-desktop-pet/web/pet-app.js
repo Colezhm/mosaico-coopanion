@@ -13,9 +13,9 @@
 import { applyTheme, clamp, f, ICONS } from './ui.js';
 import { language, t, useLanguage } from './i18n.js';
 import { createSfx } from './sound.js';
-import { COO_CSS, mini, normalizeSkin, skinCss } from './coo/coo.js';
+import { COO_CSS, PALETTES, mini, normalizeSkin, skinCss } from './coo/coo.js';
 import { loadBody } from './body-host.js';
-import { announcePainted, dressFloor, glowColor, lightWall, modeButton, setGlow } from './stage.js';
+import { accentColors, announcePainted, dressFloor, glowColor, lightWall, modeButton, setGlow } from './stage.js';
 import { bindAppearance } from './appearance.js';
 
 const $ = (s) => document.querySelector(s);
@@ -26,9 +26,10 @@ const stage = $('#stage');
 const bubble = $('#bubble'), heardEl = $('#heard'), trail = $('#trail'), menu = $('#menu');
 const tools = $('#tools');
 // Coo's drawing classes for the menu's avatar; the bubbles and buttons take their colours from Coo's palette
-const cooStyle = document.createElement('style'), skinStyle = document.createElement('style');
+// another pack's body sets the theme color instead (accentStyle, after skinStyle so it wins)
+const cooStyle = document.createElement('style'), skinStyle = document.createElement('style'), accentStyle = document.createElement('style');
 cooStyle.textContent = COO_CSS;
-document.head.append(cooStyle, skinStyle);
+document.head.append(cooStyle, skinStyle, accentStyle);
 
 const prefs = {
   roam: 'calm', sound: true, theme: document.documentElement.dataset.theme, scale: 1, glow: 7, user: '', mic: false, micDevice: '', bot: null,
@@ -55,7 +56,11 @@ if (!host) {
 }
 /** The pack on screen, as /api/figures lists it: its colors light the wall in a tab. */
 let shownPack = null;
-const lightFor = (s) => { if (!host) setGlow(document.body, glowColor(shownPack, s)); };
+const lightFor = (s) => {
+  if (!host) setGlow(document.body, glowColor(shownPack, s));
+  const a = accentColors(shownPack, s);
+  accentStyle.textContent = a ? `html:root{--skin-eye:${a.light}}@media (prefers-color-scheme: dark){html:root:not([data-theme="light"]){--skin-eye:${a.dark}}}html:root[data-theme="dark"]{--skin-eye:${a.dark}}` : '';
+};
 
 const sfx = createSfx();
 if (host) sfx.unlock();
@@ -219,8 +224,25 @@ function reportPosition() {
   send({ t: 'position', x });
 }
 
+/** The skin as the config has it while a dialog card dresses the body in another (`tryOn`); null otherwise. */
+let worn = null;
+function putOn(s) { skin = s; skinStyle.textContent = skinCss(skin); void applyFigure(skin); }
+/** A dialog card's skin on the body, over the config's, until the step ends (`takeOff`). */
+function tryOn(patch) {
+  worn ??= skin;
+  putOn(normalizeSkin({ ...worn, ...patch }));
+}
+/** Ends a card's try-on: `keep` leaves it on (it was the answer, and the config takes it next), else the config's skin comes back. */
+function takeOff(keep) {
+  if (!worn) return;
+  const was = worn;
+  worn = null;
+  if (!keep) putOn(was);
+}
+
 function applyPrefs(p) {
-  if (p.skin) { skin = normalizeSkin(p.skin); skinStyle.textContent = skinCss(skin); void applyFigure(skin); }
+  // while a card is tried on, the config's skin waits until the step ends
+  if (p.skin) { if (worn) worn = normalizeSkin(p.skin); else putOn(normalizeSkin(p.skin)); }
   if (p.roam) { prefs.roam = p.roam; body?.set({ roam: p.roam }); }
   if (typeof p.sound === 'boolean') { prefs.sound = p.sound; sfx.set(p.sound); }
   if (p.sounds && typeof p.sounds === 'object') sfx.configure({ kinds: p.sounds, snoreSeconds: p.sounds.snoreSeconds });
@@ -374,7 +396,8 @@ function openBubble(kind, html) {
 }
 function closeBubble() {
   releaseKeys(item);
-  if (item?.kind === 'dialog') talk.motion = null;
+  // a step taken off the bubble unanswered puts back the skin a card tried on
+  if (item?.kind === 'dialog') { talk.motion = null; takeOff(false); }
   bubble.hidden = true; bubble.innerHTML = '';
   item = null;
 }
@@ -570,7 +593,7 @@ function showDialogInput(it) {
     input.options.forEach((o, i) => row.appendChild(pill(o.label, o.primary, () => settleDialog(it, { index: i }))));
     body.appendChild(row);
   } else if (input.kind === 'choices') {
-    const cards = Object.assign(document.createElement('div'), { className: 'd-cards' });
+    const cards = Object.assign(document.createElement('div'), { className: input.list ? 'd-cards list' : 'd-cards' });
     const extra = Array.isArray(input.more?.options) ? input.more.options : [];
     const all = [...input.options, ...extra];
     const pick = (i, speak) => {
@@ -580,14 +603,20 @@ function showDialogInput(it) {
       // the bubble stays put from here on, so the cards do not run off while Coo shows how it moves
       if (it.pinX === undefined) { const a = at()?.bubble ?? { x: innerWidth / 2, y: innerHeight }; it.pinX = a.x; it.pinY = a.y; }
       talk.motion = o?.motion ?? null; talk.next = 0;
+      if (o?.skin) tryOn(o.skin);
       if (speak && o?.line) { it.text = o.line; it.shown = 0; it.acc = 0; }
+      if (speak && o?.actions) acts.push(...o.actions);
     };
     const card = (o, k, onClick) => {
       const c = document.createElement('button');
-      c.type = 'button'; c.className = 'd-card';
+      // the card's own colour, else the eye colour of the palette it tries on
+      const pal = PALETTES.find((p) => p.id === o.skin?.palette);
+      const tint = o.tint ?? (pal ? { light: pal.l[1], dark: pal.d[1] } : null);
+      c.type = 'button'; c.className = tint ? 'd-card tint' : 'd-card';
+      if (tint) { c.style.setProperty('--tint-l', tint.light); c.style.setProperty('--tint-d', tint.dark); }
       c.style.animationDelay = (k * .07) + 's';
       const image = typeof o.image === 'string' && o.image.startsWith('data:image/') ? `<img class="d-cardimg" alt="" src="${esc(o.image)}">` : '';
-      c.innerHTML = `${image || (o.icon && ICONS[o.icon] ? `<span class="d-cardic">${ICONS[o.icon]}</span>` : '')}<span class="d-cardlbl">${esc(o.label)}</span>${o.note ? `<span class="d-cardnote">${esc(o.note)}</span>` : ''}${o.level ? `<b class="d-level">${esc(o.level)}</b>` : ''}`;
+      c.innerHTML = `${image || (o.icon && ICONS[o.icon] ? `<span class="d-cardic ic-${esc(o.icon)}">${ICONS[o.icon]}</span>` : '')}<span class="d-cardlbl">${esc(o.label)}</span>${o.note ? `<span class="d-cardnote">${esc(o.note)}</span>` : ''}${o.level ? `<b class="d-level">${esc(o.level)}</b>` : ''}`;
       c.addEventListener('click', () => { sfx.tick(); onClick(); });
       cards.appendChild(c);
       setTimeout(() => sfx.blub(), k * 70);
@@ -613,7 +642,12 @@ function showDialogInput(it) {
       });
     }
     body.appendChild(cards);
-    const row = Object.assign(document.createElement('div'), { className: 'd-row' });
+    const row = Object.assign(document.createElement('div'), { className: input.hint ? 'd-row d-foot-row' : 'd-row' });
+    if (input.hint) {
+      const h = input.hint, at = h.text.indexOf(h.mark);
+      const mark = `<b>${ICONS[h.icon] ?? ''}${esc(h.mark)}</b>`;
+      row.insertAdjacentHTML('beforeend', `<span class="d-hint">${at < 0 ? esc(h.text) : esc(h.text.slice(0, at)) + mark + esc(h.text.slice(at + h.mark.length))}</span>`);
+    }
     row.appendChild(pill(input.confirm, true, () => settleDialog(it, { index: it.value ?? 0 })));
     body.appendChild(row);
     pick(start, false);
@@ -708,6 +742,7 @@ function settleDialog(it, answer) {
   if (item !== it || it.answered) return;
   it.answered = true;
   send({ t: 'dialog', id: it.id, ...answer });
+  takeOff('index' in answer);
   if (answer.done) { closeBubble(); return; }
   sfx.select();
   bubble.querySelectorAll('button, input').forEach((n) => { n.disabled = true; });
@@ -804,10 +839,21 @@ function onListen(m) {
     setBody({ listening: false });
   }
 }
-/** `text` is settled; `interim` is the sentence still being heard, greyed, and may still change. */
+/**
+ * `text` is settled; `interim` is the sentence still being heard, greyed, and may still change.
+ * The bubble is built once and then only updated, so a click on its cancel button is not lost to a redraw.
+ */
 function showHeard(text, live, hint, interim = '') {
   heardEl.hidden = false; trail.hidden = false;
-  heardEl.innerHTML = `<p class="b-text"><span class="fin"></span><span class="interim"></span>${live ? '<span class="caret" aria-hidden="true"></span>' : ''}</p><span class="b-hint"></span>`;
+  if (!heardEl.querySelector('.b-text')) {
+    heardEl.innerHTML = '<p class="b-text"><span class="fin"></span><span class="interim"></span><span class="caret" aria-hidden="true"></span></p><div class="b-foot"><span class="b-hint"></span><button class="b-cancel" type="button"></button></div>';
+    heardEl.querySelector('.b-cancel').addEventListener('click', () => { sfx.tick(); send({ t: 'cancel' }); });
+  }
+  heardEl.querySelector('.caret').hidden = !live;
+  // the World drops what this bubble shows and closes it; with the talk key off (always) there is no capture to cancel
+  const cancel = heardEl.querySelector('.b-cancel');
+  cancel.textContent = t('heard.cancel');
+  cancel.hidden = !live || prefs.voice.mode === 'always';
   heardEl.querySelector('.fin').textContent = text;
   // a space only before Latin text that follows Latin text or ASCII punctuation; Chinese sentences run on
   heardEl.querySelector('.interim').textContent = text && interim && /[A-Za-z0-9.,!?;:]$/.test(text) && /^[A-Za-z0-9]/.test(interim) ? ' ' + interim : interim;
@@ -871,11 +917,11 @@ function stepStatus() {
   }
 }
 
-/* ---------- microphone ---------- */
+/* ---------- microphone: open while `prefs.mic`, which the World turns on and off with a held talk key in hold mode ---------- */
 let mic = null;
 async function startMic() {
   if (mic) return;
-  mic = { starting: true };
+  const opening = mic = { starting: true };
   // 拿到一半就失败时也要停麦关声卡,否则录音指示灯常亮到页面刷新
   let stream = null, ctx = null;
   try {
@@ -888,14 +934,15 @@ async function startMic() {
     const node = new AudioWorkletNode(ctx, 'pet-mic');
     node.port.onmessage = (e) => { if (ws && ws.readyState === 1) ws.send(e.data); };
     src.connect(node);
-    if (!prefs.mic || !mic) { stream.getTracks().forEach((t) => t.stop()); ctx.close(); mic = null; return; }
+    // closed, or closed and opened again, while this one was opening
+    if (!prefs.mic || mic !== opening) { stream.getTracks().forEach((t) => t.stop()); ctx.close(); if (mic === opening) mic = null; return; }
     mic = { stream, ctx, node };
     send({ t: 'mic', state: 'on', detail: stream.getAudioTracks()[0]?.label || null });
     void reportDevices();
   } catch (err) {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     if (ctx) ctx.close();
-    mic = null;
+    if (mic === opening) mic = null;
     send({ t: 'mic', state: err && err.name === 'NotAllowedError' ? 'denied' : 'error', detail: String(err && err.message || err) });
   }
 }

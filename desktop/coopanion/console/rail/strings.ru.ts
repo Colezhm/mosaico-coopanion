@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'Навигация консоли',
+  navAria: 'Навигация настроек',
   groupWorlds: 'World',
   moduleInstancesAria: 'Экземпляры World',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'Выключить',
   finishing: 'Выключение…',
   shutdownTitle: 'Выключение',
-  shutdownBody: 'Процесс завершится, и консоль отключится.',
+  shutdownBody: 'Процесс завершится, и соединение будет разорвано.',
   confirmShutdownTitle: '⚠ Выключение',
   confirmShutdownAgainTitle: '⚠⚠ Подтвердить выключение?',
   confirmShutdownAgainBody: 'Остановить работу и завершить процесс?',
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Шаги выключения выполнены.',
   noReceipt: (msg: string) =>
     `Результат выключения не получен (${msg}); возможно, процесс уже завершился.`,
-  docTitle: (name: string) => `Консоль · ${name}`,
+  docTitle: (name: string) => `Настройки · ${name}`,
   renameTitle: 'Нажмите, чтобы переименовать',
   renameSaved: 'Отображаемое имя сохранено',
   renameFailed: (msg: string) => `Отображаемое имя не сохранено: ${msg}`,

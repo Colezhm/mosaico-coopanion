@@ -3,7 +3,7 @@
  * 状态属于本次 mount；定时器使用 lifecycle.interval，监听绑定 signal，tooltip 挂在本页 root。领域图表由 chart.ts 提供。
  */
 
-import type { ConsoleUi, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi, Disposable } from 'cortico/web/shared/client-panel.ts';
 import { get, setConfig } from '../../base/api.ts';
 import { consoleFormat } from '../../base/ui/format.ts';
 import { pageIntro } from '../../base/ui/page.ts';
@@ -62,7 +62,7 @@ function isAbort(err: unknown): boolean {
 }
 
 /** 一行工具条（`.usagebar`）。与 `ui.rowbar()` 的差别只在版式，这一页有自己的一套。 */
-function usagebar(ui: ConsoleUi): HTMLDivElement {
+function usagebar(ui: WebUi): HTMLDivElement {
   return ui.h('div', 'usagebar');
 }
 
@@ -337,7 +337,7 @@ export function mountUsage(ctx: PageContext): void {
    * 模型名由供应商定义，控制台两边都不认识，也就不为任何一边备一张翻译表。
    */
   function renderGroup(
-    table: ReturnType<ConsoleUi['table']>,
+    table: ReturnType<WebUi['table']>,
     groups: readonly UsageGroupStat[],
     cur: string,
   ): void {

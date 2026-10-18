@@ -16,6 +16,7 @@ export default {
   'heard.done': '已辨識',
   'heard.more': '正在傾聽…',
   'heard.listening': '正在傾聽…',
+  'heard.cancel': '取消',
 
   // the status bubble
   'status.more': ' 和另外 {others} 個',

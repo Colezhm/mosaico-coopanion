@@ -8,7 +8,7 @@ module.exports = {
   trayRestart: '再起動',
   trayQuit: '終了',
 
-  coreFailed: (times, code, logFile) => `Core が 5 分以内に ${times} 回終了したため（終了コード ${code}）、再起動を停止しました。ログ：${logFile}`,
+  coreFailed: (times, code, logFile) => `Core が 5 分以内に ${times} 回終了したため（終了コード ${code}）、再起動を停止しました。更新した直後の場合は、トレイメニューの「終了」を選んでから Coopanion をもう一度開いてください。ログ：${logFile}`,
   coreRestarting: (code) => `Core が予期せず終了しました（終了コード ${code}）。3 秒後に再起動します`,
   coreLocked: (pid, file) => `別のプロセス${pid ? `（PID ${pid}）` : ''}が Coopanion のデータを使用中のため、Core は起動しませんでした。そのプロセスが終わるのを待つか手動で終了してから、トレイメニューの「再起動」を選んでください。ロックファイル：${file}`,
 
@@ -17,4 +17,6 @@ module.exports = {
     + `元に戻すと、現在のデータは data-replaced-<時刻> に名前が変わり、${parent} に残ります。削除されるものはありません。「今の設定を使い続ける」を選ぶと、今後は確認しません。`,
   strandedRestore: '更新前の設定に戻す',
   strandedKeep: '今の設定を使い続ける',
+
+  dataNotWritable: (dir, suggested) => `Coopanion はデータフォルダーに書き込めないため、起動しませんでした：\n${dir}\n\nインストーラーをもう一度実行し、現在のユーザーが書き込めるフォルダーにインストールしてください。例：\n${suggested}`,
 };

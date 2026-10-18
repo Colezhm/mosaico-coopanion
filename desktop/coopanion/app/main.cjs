@@ -5,7 +5,8 @@
  * - the app: tray icon, the settings window (Coopanion's own front end, `build/console`, served under
  *   `/coopanion/` on the Core child's console origin in a session of its own, see serveWindow), and
  *   the Core child process (`core-host.cjs`). A start shows the pet and the tray icon only; the settings window opens from the tray, the pet's menu, or when the pet asks for
- *   a missing model key (`core/companion.ts`). Starting it again while it runs brings the pet back;
+ *   a missing model key (`core/companion.ts`). Starting it again while it runs brings the pet back, or starts the
+ *   Core again when it stopped retrying (`failed`);
  * - `--pet-host --pet-url=… --parent-pid=…`: the desktop pet's transparent window, started by
  *   the desktop-pet World through `CORTICO_DESKTOP_PET_HOST`. It uses its own profile directory.
  *
@@ -56,9 +57,37 @@ const DATA = process.env.CORTICO_COMPANION_DATA
     : MAC || LINUX || STEAM ? join(app.getPath('appData'), 'Coopanion') : join(dirname(process.execPath), 'data'));
 
 /**
- * An install made through the installer's pages sits in %LOCALAPPDATA%\Programs\Coopanion: the "only for me"
- * page sets that after installer/nsis.nsh's customInit ran. From 0.1.14 to 0.1.16 an update, which installs
- * silently and so keeps customInit's choice, moved the program to %USERPROFILE%\Coopanion and left data\ behind
+ * data\ beside the program cannot be written when the program sits in a directory that needs administrator
+ * rights, such as Program Files. The app then shows why and quits before anything is created under DATA; the
+ * probe goes into DATA, or into the install directory while DATA does not exist yet.
+ */
+function dataWritable() {
+  const probe = join(existsSync(DATA) ? DATA : dirname(DATA), `.write-test-${process.pid}`);
+  try {
+    writeFileSync(probe, '');
+    rmSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+if (app.isPackaged && process.platform === 'win32' && !STEAM && !process.env.CORTICO_COMPANION_DATA && !dataWritable()) {
+  // Chromium's own files for this one dialog go to the temp directory
+  app.setPath('userData', join(app.getPath('temp'), 'Coopanion'));
+  app.whenReady().then(() => {
+    const { configuredLanguage, systemLanguage, textOf } = require('./i18n/index.cjs');
+    const t = textOf(configuredLanguage(join(DATA, 'home')) ?? systemLanguage(app));
+    const suggested = join(process.env.LOCALAPPDATA ?? app.getPath('home'), 'Programs', 'Coopanion');
+    dialog.showErrorBox('Coopanion', t.dataNotWritable(DATA, suggested));
+    app.exit(1);
+  });
+  return;
+}
+
+/**
+ * An install made through the installer's pages sits in %LOCALAPPDATA%\Programs\Coopanion: the per-user
+ * install mode (installer/nsis.nsh's customInstallMode) sets that after its customInit ran. From 0.1.14 to
+ * 0.1.16 an update, which installs silently and so keeps customInit's choice, moved the program to %USERPROFILE%\Coopanion and left data\ behind
  * (#84). The first start in the new place takes that data\ back. When the app has run here since, this data\ may
  * be the one in use, so a dialog asks first (askRestoreStranded); taking the old one back then happens on the
  * next start, before anything here is open, and keeps this one beside it as data-replaced-<time>.
@@ -123,11 +152,15 @@ const { RELEASES_URL, startUpdater } = require('./updater.cjs');
 
 const userData = app.getPath('userData');
 const shimDir = join(__dirname, 'shims');
+/** MinGit's command directory in the Windows build (scripts/pack.ts). */
+const MINGIT = join(APP_ROOT, 'mingit', 'cmd');
 const petHost = app.isPackaged ? [process.execPath, '--pet-host'] : [process.execPath, APP_ROOT, '--pet-host'];
 
 const core = new CoreHost({
   appRoot: APP_ROOT,
   logDir: join(userData, 'logs'),
+  // the default session follows the operating system's proxy settings, PAC scripts included
+  resolveProxy: (url) => session.defaultSession.resolveProxy(url),
   env: {
     ...process.env,
     CORTICO_HOME: join(userData, 'home'),
@@ -139,12 +172,15 @@ const core = new CoreHost({
     pnpm_config_store_dir: join(DATA, 'pnpm', 'store'),
     pnpm_config_cache_dir: join(DATA, 'pnpm', 'cache'),
     pnpm_config_state_dir: join(DATA, 'pnpm', 'state'),
-    // extension installs call `corepack pnpm`; the shim (corepack.cmd, or corepack on macOS) runs the bundled pnpm on this runtime
-    PATH: `${shimDir}${delimiter}${process.env.PATH ?? ''}`,
+    // extension installs call `corepack pnpm`; the shim (corepack.cmd, or corepack on macOS) runs the bundled pnpm on this runtime.
+    // The Windows build carries MinGit (scripts/pack.ts), ahead of any other git, for the history of Coo's workspace
+    PATH: [shimDir, ...existsSync(MINGIT) ? [MINGIT] : [], process.env.PATH ?? ''].join(delimiter),
     CORTICO_NODE_EXE: process.execPath,
     CORTICO_PNPM_CJS: join(APP_ROOT, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
     // reported with the usage statistics (core/telemetry.ts)
     COOPANION_VERSION: app.getVersion(),
+    // the introduction offers the whale's persona outside Steam (core/guide.ts)
+    COOPANION_CHANNEL: STEAM ? 'steam' : 'github',
   },
 });
 
@@ -166,11 +202,11 @@ const settingsUrl = (path = '') => consoleUrl(`coopanion/${path}`);
 /**
  * The settings window lives in a session of its own (SETTINGS_PARTITION), and serveWindow answers every
  * http request of that session. Its files (scripts/stage.ts builds them) are served for `/coopanion/…` on
- * the Core's console origin, so the page and the console API share one origin and Core's same-origin check
+ * the Core's WebUI origin, so the page and the WebUI API share one origin and Core's same-origin check
  * applies.
  *
  * Who runs what in that session: the settings page, and the extension panels it loads into its own
- * document, run with the Core's full rights, as in Cortico's own console. The pet's pages (its preview on
+ * document, run with the Core's full rights, as in Cortico's own WebUI. The pet's pages (its preview on
  * 开始, the 装扮 page) are frames from the desktop-pet World's own server, and a figure pack's code runs
  * inside them sandboxed: it is not trusted, and must neither read nor write the Core's API.
  *
@@ -182,8 +218,8 @@ const settingsUrl = (path = '') => consoleUrl(`coopanion/${path}`);
  * referrer: Chromium hands this handler neither the Origin
  * header nor cookies, so the Origin sent on is the referrer's and no cookie goes along (a console behind a
  * login password does not open here). The answer streams back as it arrives; a redirect comes back as it
- * is, unfollowed. WebSockets do not pass through here; keepRemoteOut keeps the session's other traffic and
- * its frames on this machine.
+ * is, unfollowed. WebSockets do not pass through here; keepRemoteOut keeps the session's other traffic on
+ * this machine, apart from the release check and the extension market's images, and its frames too.
  */
 const SETTINGS_PARTITION = 'persist:coopanion-settings';
 const WINDOW_DIR = join(APP_ROOT, 'build', 'console');
@@ -251,11 +287,14 @@ function forward(request, url, origin) {
 
 /** The only remote address the settings page asks: the latest Coopanion release, for the hint under the wordmark. */
 const RELEASE_CHECK = 'https://api.github.com/repos/Colezhm/mosaico-coopanion/releases/latest';
+/** Images of the extension market: package icons and screenshots of the official index, and GitHub avatars. */
+const MARKET_IMAGES = ['https://raw.githubusercontent.com/Pal-AI-Lab/cortico-extensions/', 'https://avatars.githubusercontent.com/'];
 const isLocal = (url) => /^(https?|wss?):\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\//.test(url);
-/** Requests of the settings session leave the machine only for the release check. */
+/** Requests of the settings session leave the machine only for the release check and the market's images. */
 function keepRemoteOut(ses) {
   ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (details, answer) => {
-    answer({ cancel: !(isLocal(details.url) || details.url === RELEASE_CHECK) });
+    const marketImage = details.resourceType === 'image' && MARKET_IMAGES.some((prefix) => details.url.startsWith(prefix));
+    answer({ cancel: !(isLocal(details.url) || details.url === RELEASE_CHECK || marketImage) });
   });
 }
 
@@ -324,9 +363,9 @@ function openSettings(path = '') {
   settings.loadURL(url ?? loadingPage(T().starting));
 }
 
-/** Calls a panel method of a World page through the console API. */
+/** Calls a panel method of a World page through the WebUI API. */
 async function panel(pageId, panelId, method) {
-  const url = consoleUrl(`api/console/providers/${encodeURIComponent(pageId)}/panels/${panelId}/${method}`);
+  const url = consoleUrl(`api/webui/providers/${encodeURIComponent(pageId)}/panels/${panelId}/${method}`);
   if (!url) return null;
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ args: [] }) });
   return res.ok ? res.json() : null;
@@ -425,7 +464,10 @@ core.on('hide', () => {
   if (MAC) app.dock?.hide();
 });
 core.on('quit', () => app.quit());
-const bringBack = () => { if (core.state === 'running') ensurePet().catch(() => { /* Core went away meanwhile */ }); };
+const bringBack = () => {
+  if (core.state === 'failed') void core.start();
+  else if (core.state === 'running') ensurePet().catch(() => { /* Core went away meanwhile */ });
+};
 app.on('second-instance', bringBack);
 // macOS: opening the app again while it runs
 app.on('activate', bringBack);
@@ -475,7 +517,7 @@ app.whenReady().then(() => {
   if (STEAM) core.opts.env.COOPANION_PACK_ROOTS = require('./steam.cjs').workshopPackRoots(BUILD.steamAppId, join(userData, 'logs')).join(delimiter);
   buildTray();
   noteAutostart();
-  core.start();
+  void core.start();
   if (!STEAM) updater = startUpdater({
     logDir: join(userData, 'logs'),
     tell: (step) => { updateStep = { type: 'companion:update', ...step }; core.send(updateStep); },

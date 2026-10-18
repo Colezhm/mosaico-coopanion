@@ -16,6 +16,7 @@ export default {
   'heard.done': 'Riconosciuto',
   'heard.more': 'In ascolto…',
   'heard.listening': 'In ascolto…',
+  'heard.cancel': 'Annulla',
 
   // the status bubble
   'status.more': ' e altri {others}',

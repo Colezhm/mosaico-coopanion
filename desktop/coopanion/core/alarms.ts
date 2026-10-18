@@ -110,6 +110,37 @@ export function dueTime(timezone: string, now: number, at: unknown, inMinutes: u
   return ms > now ? ms : ms + DAY_MS;
 }
 
+/** The tools' declarations; `Alarms.tools()` binds the handlers. */
+export const ALARM_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'>> = [
+  {
+    name: 'alarm_set',
+    tags: ['write'],
+    description: 'Set an alarm for yourself: when it is due you are woken by an event carrying the note as you wrote it. The person does not see alarms. Use one to remind the person on time, to do something at a set time, or to come back and check after a while. One that falls due while the app is closed arrives at the next start, with the time it was meant for.',
+    parameters: {
+      type: 'object',
+      properties: {
+        at: { type: 'string', description: 'The person\'s local time: HH:MM (tomorrow if today\'s has passed), or YYYY-MM-DD HH:MM. Give this or in_minutes.' },
+        in_minutes: { type: 'number', minimum: 1, description: 'Minutes from now.' },
+        note: { type: 'string', description: 'What to do when it is due and why you set it, written for yourself at that time.' },
+        daily: { type: 'boolean', description: 'true wakes you at this time every day until alarm_cancel.' },
+      },
+      required: ['note'],
+    },
+  },
+  {
+    name: 'alarm_list',
+    tags: ['read'],
+    description: 'List the alarms you have set: id, time (the person\'s local time) and note.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'alarm_cancel',
+    tags: ['write'],
+    description: 'Cancel an alarm; a daily one stops altogether.',
+    parameters: { type: 'object', properties: { id: { type: 'string', description: 'The id from the alarm_set receipt or alarm_list, such as a3.' } }, required: ['id'] },
+  },
+];
+
 export class Alarms {
   private saved: Saved;
 
@@ -153,54 +184,28 @@ export class Alarms {
     const tz = this.timezone;
     const list = () => this.saved.alarms.slice().sort((a, b) => a.at - b.at)
       .map((a) => this.t.listLine(a.id, localLabel(tz, a.at), a.daily, a.note)).join('\n');
-    return [
-      {
-        name: 'alarm_set',
-        tags: ['write'],
-        description: 'Set an alarm for yourself: when it is due you are woken by an event carrying the note as you wrote it. The person does not see alarms. Use one to remind the person on time, to do something at a set time, or to come back and check after a while. One that falls due while the app is closed arrives at the next start, with the time it was meant for.',
-        parameters: {
-          type: 'object',
-          properties: {
-            at: { type: 'string', description: 'The person\'s local time: HH:MM (tomorrow if today\'s has passed), or YYYY-MM-DD HH:MM. Give this or in_minutes.' },
-            in_minutes: { type: 'number', minimum: 1, description: 'Minutes from now.' },
-            note: { type: 'string', description: 'What to do when it is due and why you set it, written for yourself at that time.' },
-            daily: { type: 'boolean', description: 'true wakes you at this time every day until alarm_cancel.' },
-          },
-          required: ['note'],
-        },
-        handler: async (args) => {
-          const t = this.t;
-          const note = typeof args.note === 'string' ? args.note.trim() : '';
-          if (!note) return { text: t.noteEmpty, failed: true };
-          const time = now();
-          const at = dueTime(tz, time, args.at, args.in_minutes, this.language());
-          if (typeof at === 'string') return { text: t.setFailed(at), failed: true };
-          const alarm: Alarm = { id: `a${this.saved.next++}`, at, note, daily: args.daily === true, setAt: time };
-          this.saved.alarms.push(alarm);
-          this.save();
-          return { text: t.set(alarm.id, localLabel(tz, at), alarm.daily) };
-        },
+    const handlers: Record<string, ToolDef['handler']> = {
+      alarm_set: async (args) => {
+        const t = this.t;
+        const note = typeof args.note === 'string' ? args.note.trim() : '';
+        if (!note) return { text: t.noteEmpty, failed: true };
+        const time = now();
+        const at = dueTime(tz, time, args.at, args.in_minutes, this.language());
+        if (typeof at === 'string') return { text: t.setFailed(at), failed: true };
+        const alarm: Alarm = { id: `a${this.saved.next++}`, at, note, daily: args.daily === true, setAt: time };
+        this.saved.alarms.push(alarm);
+        this.save();
+        return { text: t.set(alarm.id, localLabel(tz, at), alarm.daily) };
       },
-      {
-        name: 'alarm_list',
-        tags: ['read'],
-        description: 'List the alarms you have set: id, time (the person\'s local time) and note.',
-        parameters: { type: 'object', properties: {} },
-        handler: async () => ({ text: this.saved.alarms.length ? list() : this.t.none }),
+      alarm_list: async () => ({ text: this.saved.alarms.length ? list() : this.t.none }),
+      alarm_cancel: async (args) => {
+        const before = this.saved.alarms.length;
+        this.saved.alarms = this.saved.alarms.filter((a) => a.id !== args.id);
+        if (this.saved.alarms.length === before) return { text: this.t.missing(JSON.stringify(args.id)), failed: true };
+        this.save();
+        return { text: this.t.cancelled(String(args.id)) };
       },
-      {
-        name: 'alarm_cancel',
-        tags: ['write'],
-        description: 'Cancel an alarm; a daily one stops altogether.',
-        parameters: { type: 'object', properties: { id: { type: 'string', description: 'The id from the alarm_set receipt or alarm_list, such as a3.' } }, required: ['id'] },
-        handler: async (args) => {
-          const before = this.saved.alarms.length;
-          this.saved.alarms = this.saved.alarms.filter((a) => a.id !== args.id);
-          if (this.saved.alarms.length === before) return { text: this.t.missing(JSON.stringify(args.id)), failed: true };
-          this.save();
-          return { text: this.t.cancelled(String(args.id)) };
-        },
-      },
-    ];
+    };
+    return ALARM_TOOL_DECLS.map((decl) => ({ ...decl, handler: handlers[decl.name]! }));
   }
 }

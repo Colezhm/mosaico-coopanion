@@ -39,15 +39,15 @@ type NotAsked = 'unavailable' | 'timeout' | 'no';
 const zh = {
   /** Locale of the weekday in an event's time stamp. */
   dateLocale: 'zh-CN',
-  typed: (user: string, text: string) => `[打字] ${user}:${text}`,
-  heard: (user: string, text: string) => `[语音] ${user}:${text}`,
+  typed: (user: string, text: string) => `[typed] ${user}:${text}`,
+  heard: (user: string, text: string) => `[voice] ${user}:${text}`,
   image: (user: string, i: number, total: number) => `[${user}发来的图片 ${i}/${total}]`,
 
-  answerClosed: (user: string, question: string) => `[回答] ${user}关掉了提问「${question}」,没有作答。`,
-  answerPicked: (user: string, question: string, n: number, option: string) => `[回答] ${user}回答「${question}」:选了第 ${n} 项「${option}」`,
-  answerWrote: (user: string, question: string, text: string) => `[回答] ${user}回答「${question}」:自己写了:「${text}」`,
+  answerClosed: (user: string, question: string) => `[answer] ${user}关掉了提问「${question}」,没有作答。`,
+  answerPicked: (user: string, question: string, n: number, option: string) => `[answer] ${user}回答「${question}」:选了第 ${n} 项「${option}」`,
+  answerWrote: (user: string, question: string, text: string) => `[answer] ${user}回答「${question}」:自己写了:「${text}」`,
 
-  touch: (text: string) => `[互动] ${text}`,
+  touch: (text: string) => `[touch] ${text}`,
   pokedAwake: (user: string) => `${user}把睡着的你戳醒了`,
   poked: (user: string, n: number) => (n > 1 ? `${user}戳了你 ${n} 下` : `${user}戳了你一下`),
   pettedAsleep: (user: string) => `${user}摸了摸睡着的你`,
@@ -57,10 +57,10 @@ const zh = {
   dropped: (user: string, at: string | null, crashed: boolean) => `${user}把你拎起来,放到了屏幕横向 ${at ?? '某'} 处${crashed ? ',你摔晕了一会儿' : ''}`,
   crashed: '你重重落地,摔晕了一会儿',
 
-  figureFailed: (name: string, reason: string, body: string, note: string) => `[形象] ${name}没能显示出来(${reason}),你现在是${body}。${note ? `\n${note}` : ''}`,
+  figureFailed: (name: string, reason: string, body: string, note: string) => `[figure] ${name}没能显示出来(${reason}),你现在是${body}。${note ? `\n${note}` : ''}`,
   reasonUnknown: '原因不明',
-  figureNow: (body: string) => `[形象] 你现在的样子:${body}。`,
-  figureNote: (note: string) => `[形象] ${note}`,
+  figureNow: (body: string) => `[figure] 你现在的样子:${body}。`,
+  figureNote: (note: string) => `[figure] ${note}`,
   lookNow: (body: string) => `你现在的样子:${body}。`,
   /** The body as the prompt and the figure events describe it: name, looks, picked options. */
   body: (name: string, about: string, picks: string[]) => `${name},${about}${picks.length ? `(${picks.join(',')})` : ''}`,
@@ -111,7 +111,7 @@ const zh = {
     + (r.replaced !== null ? `替换了还没回答的上一个提问「${r.replaced}」。` : '')
     + (r.cut ? '只显示了前 3 个选项。' : '')
     + (r.chatOpen ? '对话页开着,问题也显示在那里,两边都能回答。' : '')
-    + '回答到了会以 [回答] 事件送达。',
+    + '回答到了会以 [answer] 事件送达。',
 
   selfAdjustOff: (tool: string, user: string) => `[${tool} 没执行] ${user}在「习惯」页把「自主配置权限」设成了「禁止」。`,
   setErrors: (errors: string[]) => `[pet_set 没执行] ${errors.join(';')}。`,
@@ -147,7 +147,7 @@ const zh = {
   /** `{{pet.self}}` while the person allows no change. */
   selfNone: (user: string) => `${user}在「习惯」页把「自主配置权限」设成了「禁止」,现在这些你都改不了,\`pet_quiet\` 也用不了。`,
   /** `{{pet.chat}}`, when the app has a chat page. */
-  chatPage: (_user: string) => '应用的「对话」页按时间列出这些气泡、对方的话,以及你两句话之间调用过的工具名;对方也能在那里打字、发图片(同样是 `[打字]` 事件,图片接在正文后),回答 `pet_ask`。`pet_say` 带的 `images` 只显示在对话页,头顶气泡不显示。',
+  chatPage: (_user: string) => '应用的「对话」页按时间列出这些气泡、对方的话,以及你两句话之间调用过的工具名;对方也能在那里打字、发图片(同样是 `[typed]` 事件,图片接在正文后),回答 `pet_ask`。`pet_say` 带的 `images` 只显示在对话页,头顶气泡不显示。',
   /** `{{pet.reply}}`: the language to talk to the person in, named by the app. */
   reply: (user: string, language: string) => `对${user}说的话,气泡、提问和选项,都用${language}。`,
 };

@@ -195,6 +195,8 @@ export interface DesktopPetConfigSection extends WorldSection {
       hotkey: string;
       /** Browser media device id of the microphone; empty uses the system default. */
       deviceId: string;
+      /** Hold mode: the microphone opens when the talk key goes down and closes after it goes up; off keeps it open while voice input is on. */
+      openOnPress: boolean;
     };
   };
 }
@@ -234,7 +236,7 @@ export const DESKTOP_PET_DEFAULTS: DesktopPetConfigSection = {
     simplified: true,
     timeoutMs: 20_000,
     segment: { thresholdDb: -42, minSpeechMs: 180, dispatchSilenceMs: 250, silenceMs: 600, maxUtteranceMs: 15_000, preRollMs: 320, minUtteranceMs: 350 },
-    mic: { mode: 'hold', hotkey: DEFAULT_HOTKEY, deviceId: '' },
+    mic: { mode: 'hold', hotkey: DEFAULT_HOTKEY, deviceId: '', openOnPress: false },
   },
 };
 

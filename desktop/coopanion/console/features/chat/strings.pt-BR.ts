@@ -4,8 +4,8 @@ import type { en, stepEn } from './strings.ts';
 export const S: Partial<typeof en> = {
   nav: 'Chat',
   title: 'Chat',
-  trace: 'Terminal',
-  traceHint: 'A página Terminal do modo avançado: contexto, chamadas de ferramentas e eventos brutos',
+  trace: 'Console',
+  traceHint: 'A página Console do modo avançado: contexto, chamadas de ferramentas e eventos brutos',
   placeholder: (bot: string) => `Mensagem para ${bot}…`,
   connecting: 'Conectando…',
   empty: (bot: string) => `Nada foi dito para ${bot} ainda.`,

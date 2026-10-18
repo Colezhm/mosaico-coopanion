@@ -24,8 +24,7 @@ export default {
     notRunning: '识别服务没有运行',
     modelMissing: (mb: number) => `识别模型尚未下载（约 ${mb} MB），请在「语音输入」页下载`,
     badKey: (hotkey: string) => `无法识别按键「${hotkey}」`,
-    /** 说话键读不了:收音方式不变,没有声音送去识别 */
-    fallback: (problem: string) => `说话键不可用，暂不识别说话：${problem}`,
+    keyProblem: (problem: string) => `说话键不可用，暂不识别说话：${problem}`,
     always: '持续收音，直接说话即可',
     /** 用说话键开关收音;label 是含连击的完整按键名(「双击 左 Alt」) */
     toggleTaps: (label: string, taps: number) => `${label} 开始收音，再${taps === 2 ? '双击' : '三击'}停止`,
@@ -270,6 +269,7 @@ export default {
     voice: '语音输入',
     enable: '开启语音输入',
     enabledHint: '麦克风保持开启，按收音方式发送给 Coo',
+    enabledHintOnPress: '按住说话键时打开麦克风，松开后关闭',
     disabledHint: '已关闭：不打开麦克风，下面的设置暂不生效',
     engine: '识别引擎',
     funasr: 'FunASR（本机识别）',
@@ -298,6 +298,10 @@ export default {
     micN: (n: number) => `麦克风 ${n}`,
     mode: '收音方式',
     modes: { hold: '按住说话键时收音', toggle: '用说话键切换收音', always: '持续收音' } as Record<'hold' | 'toggle' | 'always', string>,
+    openOnPress: '按住时才打开麦克风',
+    openOnPressHint: '用蓝牙耳机等一打开麦克风就切到通话模式的耳机时开启；按下后稍等再说话，否则开头的字可能听不到',
+    switchOn: '已开启',
+    switchOff: '已关闭',
     /** 说话键怎么按:按住说话、开关收音两种模式下的说法,按连按次数 */
     presses: {
       2: { hold: '双击再按住', toggle: '双击开始，再双击停止' },
@@ -307,7 +311,6 @@ export default {
     capture: '按下新的说话键，可以是组合键或鼠标侧键…（Esc 取消）',
     listening: '正在倾听',
     waitingKey: '等待说话键',
-    keyProblem: (problem: string) => `${problem}，暂不识别说话`,
     results: '识别结果',
     resultsHint: '划线的条目过短或疑似幻觉，未发送',
     /** 语音输入页:说话键单独一行、识别结果为空时的那一行、音量条左边的字 */

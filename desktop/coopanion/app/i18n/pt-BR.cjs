@@ -8,7 +8,7 @@ module.exports = {
   trayRestart: 'Reiniciar',
   trayQuit: 'Sair',
 
-  coreFailed: (times, code, logFile) => `O Core fechou ${times} vezes em 5 minutos (código de saída ${code}) e não será mais reiniciado. Log: ${logFile}`,
+  coreFailed: (times, code, logFile) => `O Core fechou ${times} vezes em 5 minutos (código de saída ${code}) e não será mais reiniciado. Se o app acabou de ser atualizado, escolha "Sair" no menu da bandeja e abra o Coopanion de novo. Log: ${logFile}`,
   coreRestarting: (code) => `O Core fechou inesperadamente (código de saída ${code}); reiniciando em 3 segundos`,
   coreLocked: (pid, file) => `Outro processo${pid ? ` (PID ${pid})` : ''} está usando os dados do Coopanion, então o Core não foi iniciado. Espere ele terminar ou encerre-o e depois escolha "Reiniciar" no menu da bandeja. Arquivo de bloqueio: ${file}`,
 
@@ -17,4 +17,6 @@ module.exports = {
     + `Voltar para elas renomeia os dados atuais para data-replaced-<horário> e os mantém em ${parent}; nada é excluído. Depois de “Manter as atuais”, isso não será perguntado de novo.`,
   strandedRestore: 'Usar as configurações de antes',
   strandedKeep: 'Manter as atuais',
+
+  dataNotWritable: (dir, suggested) => `O Coopanion não consegue gravar na pasta de dados e não foi iniciado:\n${dir}\n\nExecute o instalador de novo e instale em uma pasta em que sua conta possa gravar, por exemplo:\n${suggested}`,
 };

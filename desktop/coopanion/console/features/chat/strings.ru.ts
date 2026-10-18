@@ -10,8 +10,8 @@ const plural = (n: number, one: string, few: string, many: string) => {
 export const S: Partial<typeof en> = {
   nav: 'Чат',
   title: 'Чат',
-  trace: 'Терминал',
-  traceHint: 'Страница «Терминал» в расширенном режиме: контекст, вызовы инструментов и исходные события',
+  trace: 'Консоль',
+  traceHint: 'Страница «Консоль» в расширенном режиме: контекст, вызовы инструментов и исходные события',
   placeholder: (bot: string) => `Сообщение для ${bot}…`,
   connecting: 'Подключение…',
   empty: (bot: string) => `Разговоров с ${bot} пока нет.`,

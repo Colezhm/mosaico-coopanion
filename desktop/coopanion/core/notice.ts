@@ -26,11 +26,11 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { ToolDef, World, WorldConsoleDecl, WorldHost } from 'cortico/core/types.ts';
+import type { ToolDef, World, WorldWebUiDecl, WorldHost } from 'cortico/core/types.ts';
 import type { Language } from 'cortico/core/language.ts';
-import type { WorldDefinition, WorldSection } from 'cortico/world.ts';
+import { describeTools, type WorldDefinition, type WorldDescribe, type WorldSection } from 'cortico/world.ts';
 import { SELF_KEYS, selfAdjustMode } from 'cortico-world-desktop-pet';
-import { Alarms } from './alarms.ts';
+import { ALARM_TOOL_DECLS, Alarms } from './alarms.ts';
 import type { GuideEnd } from './guide.ts';
 import { coreText } from './i18n/index.ts';
 import { modelLanguage, type ModelLanguage } from './language.ts';
@@ -226,6 +226,7 @@ const zh = {
     `接下来可以和${name}商量你们之间的设定:你的性格和说话方式、你怎么称呼对方、对方想怎么叫你、希望你平时做什么不做什么。`,
     '- 你的人设是工作区里的 CONSTITUTION.md,每次开新 session 都放进你的系统前缀。商量出结果后你可以自己改它,下一次 session 生效。',
     '- 对方的称呼是设置窗口「习惯」页的「称呼」,由对方自己改;商量好的称呼和其他偏好可以记进你的工作区。',
+    '- 工作区里的 PARTNER.md 每次都整份放进你的系统前缀,适合记你对对方的了解,要保持精简;细节写进 partner/ 目录下的文件,需要时再读。要不要写、写什么由你决定。',
     '- 设置窗口的「系统提示词」页能看到并编辑你的整份系统提示词,CONSTITUTION 也在里面。可以引导对方去那里按自己的喜好改;对方想改什么,你也可以替对方改。',
     '不用一次说完,看对方的兴致。',
   ],
@@ -284,6 +285,7 @@ const en: typeof zh = {
     `Next you can work out with ${name} how things are between you: your personality and way of talking, what you call them, what they want to call you, what they would like you to do or not do day to day.`,
     '- Your persona is CONSTITUTION.md in your workspace, which goes into your system prefix at the start of every new session. Once you have agreed on something you can edit it yourself; it takes effect from the next session.',
     '- What you call them is "Your name" on the Habits page of the settings window, which they change themselves; a name you agreed on and other preferences can go into your workspace.',
+    '- PARTNER.md in your workspace goes into your system prefix whole every time, a place for what you know about them, so keep it short; details go in files under partner/, read when needed. Whether to write it and what goes in is yours to decide.',
     '- The System prompt page of the settings window shows your whole system prompt, CONSTITUTION included, and lets them edit it. You can point them there to change it to their liking; you can also make the changes they want for them.',
     'No need to cover it all at once; follow their interest.',
   ],
@@ -362,7 +364,7 @@ export class NoticeWorld implements World {
   envPromptVars(): null { return null; }
 
   /** Its name in the console's rail in the language of each request, so it follows a language change without a restart. */
-  console(language: Language = 'zh'): WorldConsoleDecl {
+  webUi(language: Language = 'zh'): WorldWebUiDecl {
     return { label: coreText(language).noticeLabel };
   }
   tools(): ToolDef[] { return this.alarms.tools(); }
@@ -451,6 +453,20 @@ export class NoticeWorld implements World {
   }
 }
 
+const DESCRIBE: WorldDescribe = {
+  tools: describeTools(ALARM_TOOL_DECLS, {
+    alarm_set: { zh: '给自己定一个唤醒,到时带着备注叫醒自己;可每天重复。', en: 'Sets a wake-up for itself, due with its note; it can repeat daily.' },
+    alarm_list: { zh: '列出已定的唤醒。', en: 'Lists the wake-ups it has set.' },
+    alarm_cancel: { zh: '取消一个唤醒。', en: 'Cancels a wake-up.' },
+  }),
+  events: [
+    { type: 'coopanion.guide', description: { zh: '使用向导结束,附向导里发生的事。', en: 'The introduction ended, with what happened in it.' }, trigger: 'flush' },
+    { type: 'coopanion.alarm', description: { zh: '自己定的唤醒到时间了。', en: 'A wake-up it set is due.' }, trigger: 'flush' },
+    { type: 'coopanion.updated', description: { zh: '应用升级了,附新版本的更新说明。', en: 'The app was updated, with the release notes of the new version.' }, trigger: 'flush' },
+    { type: 'coopanion.settings-changed', description: { zh: '使用者改了桌宠的外观或习惯。', en: "The person changed the pet's looks or habits." }, trigger: 'debounce' },
+  ],
+};
+
 export function noticeDefinition(assembly: NoticeAssembly): WorldDefinition<WorldSection> {
   return {
     id: NOTICE_ID,
@@ -461,5 +477,6 @@ export function noticeDefinition(assembly: NoticeAssembly): WorldDefinition<Worl
       assembly.onCreate?.(world);
       return world;
     },
+    describe: DESCRIBE,
   };
 }

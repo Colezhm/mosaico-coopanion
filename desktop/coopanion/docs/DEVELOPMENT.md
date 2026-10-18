@@ -50,14 +50,25 @@ $env:CORTICO_COMPANION_DATA = "$env:TEMP\coo-test"; pnpm run start
 | `packages/cortico-world-desktop-pet` | 桌宠 World,电脑操作在其中的 `src/cua/`;源码由本仓库直接管理 |
 | `packages/cortico-provider-coo` | Coo Pet Provider:DeepSeek、千问、Kimi 等几家模型服务的 provider,DeepSeek 排第一 |
 | `core/` | Core 子进程的入口:装配 Cormini、World、provider;首次运行的种子文件;没填 Key 时让桌宠提醒;`coopanion` World(`notice.ts`)在更新后把更新说明、在引导结束后把引导里的对话、在对方改设置后把改了什么告诉 Coo,并提供 Coo 给自己设唤醒器的工具(`alarms.ts`,不在界面上显示);匿名使用统计(`telemetry.ts`,字段见 [TELEMETRY.md](TELEMETRY.md)) |
-| `console/` | 设置窗口：Coopanion 自己的前端，只经 Core 的控制台 HTTP API 读写状态。`base/` 是请求、语言、流、路由、主题、UI 原语与面板宿主;`rail/` 是左栏;「开始」「习惯」(电脑操作是其中一节)「装扮」「语音输入」「用量与成本」「对话」各页在 `features/`,「系统提示词」(完整的系统提示词与「清空重开」)两种模式共用 `advanced/` 里的那一页;普通/高级两种模式见 `features/mode.ts`;高级模式的页面(模型供应商、扩展、终端、Core、World 总览)与按 manifest 挂 World、Persona、Memory 页的页面宿主是从 Cortico 控制台复制来的，在 `advanced/`,归 Coopanion 维护;字标下的版本与更新提示在 `features/release.ts`(版本号与渠道由 `scripts/stage.ts` 构建时写入) |
-| `app/` | Electron 主进程:托盘(Mac 上是菜单栏图标)、设置窗口(启动时不打开，用自己的 session;在 Core 控制台的源下以 `/coopanion/` 应答 `build/console` 的文件;只把来自 Core 自己的源的请求转给 Core,桌宠服务器只接来自 Core 或它自己的源的请求和无 referrer 的帧文件读取(`/figure-frame`、`/web/`、`/packs/`,以 Origin `null` 转发),其余一律 403;发往本机以外的请求被拦，子 frame 只能留在本机;离开 Core 控制台的链接交给系统浏览器;信任模型见 `main.cjs` 的注释)、Core 子进程托管、桌宠窗口模式、自动更新(`updater.cjs`)、Steam 版读创意工坊(`steam.cjs`);`app/shims/` 是扩展安装用的 corepack 替身 |
-| `scripts/stage.ts` | 从 `vendor/cortico` 生成应用使用的 `build/cortico`(去掉内建的平台 World 与 llamacpp,`src/web/client` 原样),构建 Cortico 控制台、桌宠面板与设置窗口 `build/console` |
+| `console/` | 设置窗口：Coopanion 自己的前端，只经 Core 的 WebUI HTTP API 读写状态。`base/` 是请求、语言、流、路由、主题、UI 原语与面板宿主;`rail/` 是左栏;「开始」「习惯」(电脑操作是其中一节)「装扮」「语音输入」「用量与成本」「对话」各页在 `features/`,「系统提示词」(完整的系统提示词与「清空对话并重开」)两种模式共用 `advanced/` 里的那一页;普通/高级两种模式见 `features/mode.ts`;高级模式的页面(模型供应商、扩展、控制台、Core、World 总览)与按 manifest 挂 World、Persona、Memory 页的页面宿主是从 Cortico WebUI 复制来的，在 `advanced/`,归 Coopanion 维护;字标下的版本与更新提示在 `features/release.ts`(版本号与渠道由 `scripts/stage.ts` 构建时写入) |
+| `app/` | Electron 主进程:托盘(Mac 上是菜单栏图标)、设置窗口(启动时不打开，用自己的 session;在 Core WebUI 的源下以 `/coopanion/` 应答 `build/console` 的文件;只把来自 Core 自己的源的请求转给 Core,桌宠服务器只接来自 Core 或它自己的源的请求和无 referrer 的帧文件读取(`/figure-frame`、`/web/`、`/packs/`,以 Origin `null` 转发),其余一律 403;发往本机以外的请求只放行新版本查询与扩展市场的图片(官方索引里的包图标与截图、GitHub 头像),子 frame 只能留在本机;离开 Core WebUI 的链接交给系统浏览器;信任模型见 `main.cjs` 的注释)、Core 子进程托管、桌宠窗口模式、自动更新(`updater.cjs`)、Steam 版读创意工坊(`steam.cjs`);`app/shims/` 是扩展安装用的 corepack 替身 |
+| `scripts/stage.ts` | 从 `vendor/cortico` 生成应用使用的 `build/cortico`(去掉内建的平台 World 与 llamacpp,`src/web/client` 原样),构建 Cortico WebUI、桌宠面板与设置窗口 `build/console` |
 | `scripts/pack.ts` | 组装扁平的 `build/app` 并调用 electron-builder;`installer/nsis.nsh` 定 Windows 默认安装位置、卸载时保留 `data`、卸载(非升级)时报告给统计服务;Mac 包是临时签名(ad hoc)的 dmg 与 zip |
 | `scripts/make-icons.cjs` | 用 Electron 把 Coo 的造型(`web/coo/coo.js`)画成 `app/icons` 与 `core/seed/avatar.png` |
 | `installer/install.ps1` | 一行命令安装用的脚本:下载最新 Release 的安装包并运行 |
 | `telemetry-server/` | 匿名使用统计的服务端(单文件 Node + SQLite),部署在 `survey.palailab.org`,说明见 [telemetry-server/README.md](../telemetry-server/README.md) |
 | `promo/` | 宣传片与仓库 banner,网页渲染,说明见 [promo/README.md](../promo/README.md) |
+
+## 应用界面与 World 的边界
+
+Cortico 是内核,Coopanion 是用它做的一个产品。使用者看到的界面按下面分工:
+
+- **Coopanion 只渲染自己绑定的 World**:桌宠 World(含电脑操作)、`coopanion` World 和控制台 World。应用壳和这些 World 之间的接口(比如桌宠 World 的 `PetBotControls`)归 Coopanion 所有，随产品需要修改，不属于 Cortico 的契约。
+- **应用壳不为其他 World 提供界面入口。** 桌宠菜单和设置窗口的普通模式里，不放扩展提供的按钮、页面或菜单项。高级模式的扩展页、World 总览等页面复制自 Cortico WebUI,是给开发者用的，扩展 World 用 `webUi()` 声明的面板和链接显示在那里。
+- **扩展 World 想让使用者看到内容，走下面两条路之一:**
+  - **经过 Bot。** World 给 Bot 提供读写内容的工具，把使用者需要知道的事投递成事件,Coo 再用桌宠的气泡、选项和对话页告诉使用者。怎么呈现由桌宠 World 决定;呈现能力不够时扩充桌宠 World,不对扩展开放。适合偶尔看一眼的内容。
+  - **托管自己的环境。** 使用者要直接、频繁操作的界面，做成扩展自己的小应用：由 World 启动时拉起、停止时关闭,World 在应用和 Bot 之间转递事件和工具。这类扩展需要和使用者在同一台电脑上，发布时用 `os` 字段和 `local` 等标签写明。不要借用 Coopanion 的运行时(`CORTICO_NODE_EXE` 指向的 Electron)开窗口：它只供扩展安装使用，随时可能改。
+- v0.2.2 在桌宠右键菜单里加过「扩展页面」,列出扩展 World 声明的链接，越过了上面第二条,v0.2.3 已撤回。
 
 ## 发布
 
@@ -85,7 +96,7 @@ GitHub Actions 会构建 Windows 安装包和两个 Mac 包(Apple 芯片、Intel
 
 ## 代理、主题与字标
 
-Core 使用内置 Electron 的 Node 环境代理支持，读取 HTTP_PROXY/HTTPS_PROXY 等变量。NO_PROXY 与 no_proxy 合并后补齐 localhost、127.0.0.1 和 IPv6 回环地址，避免本机控制台和桌宠通信被代理。变量必须存在于应用启动环境中；Finder 启动不自动读取 shell 配置。
+Core 使用内置 Electron 的 Node 环境代理支持，读取 HTTP_PROXY/HTTPS_PROXY 等变量。启动环境里没有这些变量时，主进程在每次启动 Core 前用 `session.resolveProxy` 查询系统代理(对 `https://api.openai.com/` 的结果用于所有目标),HTTP/HTTPS 代理写成这四个变量,DIRECT、SOCKS 或查询失败时不设;`core.log` 每次启动记一行代理来源。NO_PROXY 与 no_proxy 合并后补齐 localhost、127.0.0.1 和 IPv6 回环地址，避免本机控制台和桌宠通信被代理。变量必须存在于应用启动环境中；Finder 启动不自动读取 shell 配置。
 
 装扮页通过 URL 初始值和父窗口消息跟随控制台主题，消息校验精确来源与父窗口；桌宠配色独立保存。控制台打开装扮页时带 `fit=1`，装扮页把自身高度以 `companion:height` 发回控制台，控制台只收这个 iframe 自己的窗口和来源发来的消息，把框设成同高。
 

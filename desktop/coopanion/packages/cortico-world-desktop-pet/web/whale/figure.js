@@ -464,7 +464,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
   // the ninja run leans her whole body forward from the soles, in a straight line: bent at the waist instead,
   // the bodice comes away from the skirt and its bow and the tops of the legs show at the waist
   let wTilt = 0, wLean = 0, facing = 1;
-  let finMood = 0, tailMood = 0, wagAmp = 0, sitK = 0, walkK = 0, runK = 0;
+  let finMood = 0, tailMood = 0, wagAmp = 0, sitK = 0, walkK = 0, runK = 0, swingK = 0;
   const groupTilt = (mode, tilt, lean) => tilt * wTilt + lean * wLean + runK * 14 * facing;
   const st = { z: {}, alpha: {} };
 
@@ -594,21 +594,25 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     // running is a ninja run: both arms swept straight back, the whole body leaning forward (groupTilt)
     walkK = lerp(walkK, walking ? 1 : 0, ease(8, dt));
     runK = lerp(runK, mode === 'run' ? 1 : 0, ease(7, dt));
-    let aN = 4, aF = -2;
-    if (walking) { aN = -legA[0] * 1.3 + 4; aF = -legA[1] * 1.3 - 2; }
+    // `swing` is whether the walk swings the arms: a pose that sets both arms holds them still
+    let aN = 4, aF = -2, swing = walking ? 1 : 0;
     if (airborne) { aN = 40; aF = -30; }
     if (held) { aN = 70 + 16 * Math.sin(t * 13); aF = -45 - 12 * Math.sin(t * 13 + 1.3); }
     if (sitK > .5 && !walking) { aN = lerp(aN, -4, sitK); aF = lerp(aF, -6, sitK); }
     if (face === 'happy' || face === 'love') { aN += 12 + 5 * Math.sin(t * 8); aF -= 8 + 4 * Math.sin(t * 8); }
-    if (face === 'angry') { aN = 20 + 3 * Math.sin(t * 30); aF = -18 - 3 * Math.sin(t * 30); }
-    if (face === 'determined') { aN = 14; aF = -10; }
+    if (face === 'angry') { aN = 20 + 3 * Math.sin(t * 30); aF = -18 - 3 * Math.sin(t * 30); swing = 0; }
+    if (face === 'determined') { aN = 14; aF = -10; swing = 0; }
     if (face === 'excited') { aN += 18; aF -= 12; }
     if (mode === 'dance') { const b = Math.sin((o.modeT || 0) * Math.PI * 2 * 1.1); aN = 16 + 24 * Math.max(0, b); aF = -8 - 22 * Math.max(0, -b); }
     if (runK > .001) { aN = lerp(aN, 38, runK); aF = lerp(aF, 32, runK); }
     if (wave) aN = lerp(aN, 108, wave);
     if (shiver) { aN = lerp(aN, -10, shiver); aF = lerp(aF, 8, shiver); }
-    const armN = sp.armN.step(aN, dt) + wave * 13 * Math.sin(t * 15) + shiver * 1.4 * Math.sin(t * 47) + flap * 9 * Math.sin(t * 24);
-    const armF = sp.armF.step(aF, dt) - shiver * 1.2 * Math.sin(t * 43 + 1) - flap * 9 * Math.sin(t * 24 + 1);
+    // each arm swings against the leg on its side. The swing goes on after the arm springs, which settle at about
+    // 1.2 Hz: the walk's 2.1 Hz stride would come out of them about 120° late, each arm moving with its own leg.
+    swingK = lerp(swingK, swing, ease(8, dt));
+    const gait = swingK * (1 - runK) * (1 - wave) * (1 - shiver) * .5;
+    const armN = sp.armN.step(aN, dt) - legA[0] * gait + wave * 13 * Math.sin(t * 15) + shiver * 1.4 * Math.sin(t * 47) + flap * 9 * Math.sin(t * 24);
+    const armF = sp.armF.step(aF, dt) - legA[1] * gait - shiver * 1.2 * Math.sin(t * 43 + 1) - flap * 9 * Math.sin(t * 24 + 1);
 
     /* deformer states */
     // the kit sinks the hips 29 when seated; the sitting drawing's lowest point is 19.4 above the soles
@@ -806,7 +810,7 @@ export async function createWhaleFigure(base = new URL('./', import.meta.url), o
     reset() {
       endFade();
       for (const k in sp) { sp[k].x = 0; sp[k].v = 0; }
-      lastT = null; rootWas = {}; prevTilt = 0; prevYaw = 0; prevLow = 0; headTilt = 0; wTilt = 0; wLean = 0; finMood = 0; tailMood = 0; wagAmp = 0; sitK = 0; walkK = 0; runK = 0;
+      lastT = null; rootWas = {}; prevTilt = 0; prevYaw = 0; prevLow = 0; headTilt = 0; wTilt = 0; wLean = 0; finMood = 0; tailMood = 0; wagAmp = 0; sitK = 0; walkK = 0; runK = 0; swingK = 0;
     },
     /** Loads every scheme's and outfit's textures, so later switches are immediate. */
     preload: () => Promise.all(SCHEMES.flatMap(sc => OUTFITS.map(of => loadScheme(sc.id, of.id)))),

@@ -1,14 +1,14 @@
 /**
- * Connecting a service through a Cortico console's provider routes, as the app's guide and its
+ * Connecting a service through the provider routes of Cortico's WebUI, as the app's guide and its
  * Start page do: each service gets its own endpoint for each of its platforms (`endpointName`), so
  * switching back and forth keeps each key. A ChatGPT plan is signed in instead (`connectChatGPT`),
- * through the `chatgpt` module's console methods. `call` is the caller's way to reach the console (fetch in the Core, the
- * console's own api in the browser); nothing here imports Node or the DOM.
+ * through the `chatgpt` module's WebUI panel methods. `call` is the caller's way to reach the WebUI routes (fetch in the Core, the
+ * settings window's own api in the browser); nothing here imports Node or the DOM.
  */
 import { CHATGPT, CHATGPT_MODULE, chatgptEntry, connectionVendor, endpointName, vendorEntry, type Region, type Vendor } from './vendors.ts';
 
 /** GET when `body` is left out, POST otherwise; throws on an error status. */
-export type ConsoleCall = <T>(path: string, body?: unknown) => Promise<T>;
+export type WebUiCall = <T>(path: string, body?: unknown) => Promise<T>;
 
 export interface Connection {
   /** The active endpoint has its model and key and its module is available. */
@@ -28,14 +28,14 @@ interface TestReply { ok?: boolean; elapsedMs?: number; error?: string; status?:
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-export async function currentConnection(call: ConsoleCall): Promise<Connection> {
+export async function currentConnection(call: WebUiCall): Promise<Connection> {
   const mc = (await call<Status>('/api/status').catch(() => null))?.modelConnection;
   const at = mc ? connectionVendor(mc) : null;
   return { ready: !!mc?.ready, vendor: at?.vendor ?? null, region: at?.region ?? null, model: mc?.model ?? '' };
 }
 
 /** Tests the endpoint `name` as it is saved. */
-export async function testEndpoint(call: ConsoleCall, name: string): Promise<ConnectResult> {
+export async function testEndpoint(call: WebUiCall, name: string): Promise<ConnectResult> {
   try {
     const r = await call<TestReply>(`/api/providers/${encodeURIComponent(name)}/test`, {});
     const ok = r?.ok !== false && !r?.error;
@@ -52,7 +52,7 @@ export async function testEndpoint(call: ConsoleCall, name: string): Promise<Con
  * `model` keeps the endpoint's model, or takes the service's default for a new endpoint. `region`
  * matters only for a service with a platform per region.
  */
-export async function connectVendor(call: ConsoleCall, vendor: Vendor, key: string, model = '', region: Region = 'cn'): Promise<ConnectResult> {
+export async function connectVendor(call: WebUiCall, vendor: Vendor, key: string, model = '', region: Region = 'cn'): Promise<ConnectResult> {
   const secretValue = key.trim() || undefined;
   const typed = model.trim();
   const name = endpointName(vendor, region);
@@ -76,7 +76,7 @@ export async function connectVendor(call: ConsoleCall, vendor: Vendor, key: stri
 }
 
 /** Tests the endpoint `name` and, once the test passes, makes it the active endpoint and resumes the run. */
-async function testAndStart(call: ConsoleCall, name: string): Promise<ConnectResult> {
+async function testAndStart(call: WebUiCall, name: string): Promise<ConnectResult> {
   const r = await testEndpoint(call, name);
   if (!r.ok) return r;
   try {
@@ -98,16 +98,16 @@ export interface SignInState {
   models?: string[];
 }
 
-/** The console panel of the `chatgpt` module's sign-in methods. */
+/** The WebUI panel of the `chatgpt` module's sign-in methods. */
 export const SIGN_IN_PANEL = 'chatgpt';
 
-/** The console route of a sign-in method of the `chatgpt` module. */
-const signInRoute = (method: string) => `/api/console/providers/${encodeURIComponent(`llm:${CHATGPT_MODULE}`)}/panels/${SIGN_IN_PANEL}/${method}`;
+/** The WebUI route of a sign-in method of the `chatgpt` module. */
+const signInRoute = (method: string) => `/api/webui/providers/${encodeURIComponent(`llm:${CHATGPT_MODULE}`)}/panels/${SIGN_IN_PANEL}/${method}`;
 
-export const chatgptState = (call: ConsoleCall, name: string) => call<SignInState>(signInRoute('state'), { args: [name] });
+export const chatgptState = (call: WebUiCall, name: string) => call<SignInState>(signInRoute('state'), { args: [name] });
 
 /** Revokes and removes the tokens of the ChatGPT endpoint `name`. */
-export const signOutChatGPT = (call: ConsoleCall, name: string) => call<SignInState>(signInRoute('signOut'), { args: [name] });
+export const signOutChatGPT = (call: WebUiCall, name: string) => call<SignInState>(signInRoute('signOut'), { args: [name] });
 
 /** How often a sign-in under way is looked at. */
 const SIGN_IN_POLL_MS = 1000;
@@ -125,7 +125,7 @@ interface SignInOptions { signal?: AbortSignal; pollMs?: number }
  * browser, and the sign-in is looked at until the browser comes back, it fails or times out
  * (`SIGN_IN_MS` in chatgpt/auth.ts), or `signal` aborts the wait (which throws).
  */
-export async function signInChatGPT(call: ConsoleCall, name: string, open: (url: string) => void, opts: SignInOptions = {}): Promise<SignInState> {
+export async function signInChatGPT(call: WebUiCall, name: string, open: (url: string) => void, opts: SignInOptions = {}): Promise<SignInState> {
   const { url } = await call<{ url: string }>(signInRoute('signIn'), { args: [name] });
   open(url);
   let state: SignInState;
@@ -141,7 +141,7 @@ export async function signInChatGPT(call: ConsoleCall, name: string, open: (url:
  * and once it is in and its test passes makes it active and resumes the run. When the plan's model
  * list leaves out the endpoint's model, the endpoint takes the first model it lists.
  */
-export async function connectChatGPT(call: ConsoleCall, open: (url: string) => void, opts: SignInOptions & { name?: string } = {}): Promise<ConnectResult> {
+export async function connectChatGPT(call: WebUiCall, open: (url: string) => void, opts: SignInOptions & { name?: string } = {}): Promise<ConnectResult> {
   const name = opts.name ?? endpointName(CHATGPT, 'cn');
   try {
     const list = await call<{ providers: Array<{ name: string }> }>('/api/providers');

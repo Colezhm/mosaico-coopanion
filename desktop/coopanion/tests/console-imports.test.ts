@@ -1,6 +1,6 @@
 /**
  * The settings window (console/, and the desktop-pet World's panels it loads) depends on Core only
- * through the console HTTP API: it imports no module of Cortico's WebUI (`src/web/client/`), and from
+ * through the WebUI HTTP API: it imports no module of Cortico's WebUI (`src/web/client/`), and from
  * Cortico it takes types only (the panel contract and the shapes of the API's replies), which leave no
  * code in the bundle.
  */
@@ -10,7 +10,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const CONSOLE = join(ROOT, 'console');
-const PET_PANELS = join(ROOT, 'packages', 'cortico-world-desktop-pet', 'src', 'console');
+const PET_PANELS = join(ROOT, 'packages', 'cortico-world-desktop-pet', 'src', 'webui');
 const CORTICO_SRC = join(ROOT, 'vendor', 'cortico', 'src');
 
 function sources(dir: string): string[] {

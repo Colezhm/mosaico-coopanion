@@ -1,13 +1,12 @@
 import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
-  // advanced/features/clear-session.ts
-  button: 'Leeren und neu starten',
-  title: 'Dieses Gespräch leeren und Coo von vorn beginnen lassen?',
-  body: 'Coo vergisst den Kontext dieses Gesprächs und beginnt wieder mit dem aktuellen System-Prompt. Das lässt sich nicht rückgängig machen. Gedächtnis und Persona im Arbeitsbereich bleiben erhalten.',
-  clearing: 'Wird geleert…',
-  cleared: 'Geleert und neu gestartet',
-  failed: (why: string) => `Nicht geleert: ${why}`,
+  // advanced/features/prompts/index.ts
+  button: "Gespräch löschen und neu starten",
+  title: "Aktuelles Gespräch löschen und neu starten?",
+  body: "Speichert Änderungen dieser Seite, löscht dann Coos aktuellen Gesprächskontext und startet mit dem aktualisierten Systemprompt neu. Das Löschen lässt sich nicht rückgängig machen. Memory und Persona bleiben erhalten.",
+  clearing: "Neues Gespräch wird gestartet…",
+  cleared: "Neues Gespräch gestartet",
   // release.ts
   repoHint: 'Das Coopanion-Projekt auf GitHub öffnen',
   update: (latest: string) => `Coopanion ${latest} ist da: Update herunterladen`,

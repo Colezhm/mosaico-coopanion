@@ -4,7 +4,7 @@ import type { ContextRecord } from 'cortico/protocol/open-responses/context.ts';
  * 轮询受 lifecycle 管理，session 结束或离开视图时停止；内容变化才重画，并保留用户滚动位置。
  */
 
-import type { ConsoleUi, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi, Disposable } from 'cortico/web/shared/client-panel.ts';
 import { get } from '../../../base/api.ts';
 import type { Lifecycle } from '../../../base/lifecycle.ts';
 import type { SessionStat } from './protocol.ts';
@@ -23,7 +23,7 @@ function messageRevision(messages: readonly ContextRecord[]): string {
 }
 
 export interface ForkDeps {
-  ui: ConsoleUi;
+  ui: WebUi;
   lifecycle: Lifecycle;
   signal: AbortSignal;
   timeline: TimelineView;

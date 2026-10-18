@@ -1,10 +1,10 @@
 /**
- * The parts of the console HTTP API the settings window shares with Core: the headers and query
+ * The parts of the WebUI HTTP API the settings window shares with Core: the headers and query
  * parameter that carry the window's language and the login state, and the paths of panel methods
  * and panel streams. Types of the panel contract come from Cortico (`import type` only);
  * tests/console-api.test.ts locks the routes these build.
  */
-import type { ConsoleClientBundle, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiClientBundle, Disposable } from 'cortico/web/shared/client-panel.ts';
 
 export type { Disposable };
 
@@ -17,7 +17,7 @@ export const AUTH_HEADER = 'x-cortico-auth';
 
 /** POST `{ args }` to call a panel method; the reply is what the method returns. */
 export function panelRoute(pageId: string, panelId: string, method: string): string {
-  return `/api/console/providers/${encodeURIComponent(pageId)}/panels/${encodeURIComponent(panelId)}/${encodeURIComponent(method)}`;
+  return `/api/webui/providers/${encodeURIComponent(pageId)}/panels/${encodeURIComponent(panelId)}/${encodeURIComponent(method)}`;
 }
 
 /** The WebSocket path of a panel's stream. */
@@ -48,11 +48,11 @@ export function toDisposable(cleanup: () => void): Disposable {
 }
 
 export type {
-  ConsoleClientBundle, ConsoleMemo, ConsolePanel, ConsolePanelContext, ConsoleStreamHandle, ConsoleStreamHandlers,
+  WebUiClientBundle, WebUiMemo, WebUiPanel, WebUiPanelContext, WebUiStreamHandle, WebUiStreamHandlers,
 } from 'cortico/web/shared/client-panel.ts';
 
 /** What a panel bundle's default export must look like: an object of panels by id. */
-export function isConsoleClientBundle(v: unknown): v is ConsoleClientBundle {
+export function isConsoleClientBundle(v: unknown): v is WebUiClientBundle {
   const panels = (v as { panels?: unknown } | null)?.panels;
   return !!panels && typeof panels === 'object' && !Array.isArray(panels);
 }

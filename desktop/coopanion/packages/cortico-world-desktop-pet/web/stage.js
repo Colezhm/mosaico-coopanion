@@ -77,6 +77,19 @@ export function glowColor(pack, skin) {
   return null;
 }
 
+/**
+ * The page's theme color (`--skin-eye`: the bubble's picked cards, step dots and marks) for another pack's body: its
+ * preset's settings-window color, light and dark, else its accent for both; null for Coo, whose palette sets it.
+ */
+export function accentColors(pack, skin) {
+  if (!pack || pack.id === 'coo') return null;
+  const preset = (pack.presets ?? []).find((p) => p.id === (skin?.scheme || pack.presets?.[0]?.id));
+  const light = preset?.console?.light?.a, dark = preset?.console?.dark?.a;
+  if (light && dark) return { light, dark };
+  const one = glowColor(pack, skin);
+  return one ? { light: one, dark: one } : null;
+}
+
 /** Colors the light on `wall` (glowColor's answer). */
 export function setGlow(wall, color) {
   if (color) wall.style.setProperty('--glow', color);

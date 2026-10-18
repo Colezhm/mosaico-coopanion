@@ -235,7 +235,7 @@ export interface ConsolePromptDocDecl {
  * 一页交给框架的完整贡献。
  *
  * 每次组装 manifest 时重新取一遍（`badges` 是活数据），所以字段是值不是 thunk——
- * 与既有的 `World.console()` 同一个用法。
+ * 与既有的 `World.webUi()` 同一个用法。
  */
 export interface ConsolePageContribution {
   /** `world:chat` / `persona:demo`；`parsePageId` 校验 */
@@ -407,10 +407,10 @@ export interface ConsoleManifest {
 // ---------------------------------------------------------------------------
 
 /** Manifest 端点。 */
-export const CONSOLE_MANIFEST_ROUTE = '/api/console/manifest';
+export const CONSOLE_MANIFEST_ROUTE = '/api/webui/manifest';
 
 /** 状态灯接口：{ lamps: { [pageId]: ConsoleLamp[] } }，用于独立轮询灯状态。 */
-export const CONSOLE_LAMPS_ROUTE = '/api/console/lamps';
+export const CONSOLE_LAMPS_ROUTE = '/api/webui/lamps';
 
 /** `CONSOLE_LAMPS_ROUTE` 的响应体：page id → 它那排灯。 */
 export interface ConsoleLampsResponse {
@@ -431,7 +431,7 @@ export const PROVIDERS_LAMP_ID = 'framework:providers';
  * 路径里的 `providers` 段是**线协议形状**,与自带前端的构建产物同步,故未随类型改名。
  */
 export function panelRoute(pageId: string, panelId: string, method: string): string {
-  return `/api/console/providers/${encodeURIComponent(pageId)}`
+  return `/api/webui/providers/${encodeURIComponent(pageId)}`
     + `/panels/${encodeURIComponent(panelId)}`
     + `/${encodeURIComponent(method)}`;
 }

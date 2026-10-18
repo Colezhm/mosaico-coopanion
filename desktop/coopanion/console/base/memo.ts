@@ -1,7 +1,7 @@
-import type { ConsoleMemo } from 'cortico/web/shared/client-panel.ts';
+import type { WebUiMemo } from 'cortico/web/shared/client-panel.ts';
 
 /** Values kept in localStorage under `prefix`; without storage (private mode, full quota) they last this session. */
-export function createMemo(prefix: string): ConsoleMemo {
+export function createMemo(prefix: string): WebUiMemo {
   const fallback = new Map<string, unknown>();
   return {
     get<T>(key: string, dflt: T): T {

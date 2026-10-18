@@ -4,7 +4,7 @@
  * process sends every page off the console there); the sign-in runs in the Core, in Coo Pet
  * Provider's `chatgpt` module, through its console methods (`connect.ts`).
  */
-import type { ConsoleUi } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi } from 'cortico/web/shared/client-panel.ts';
 import { chatgptState, signInChatGPT, signOutChatGPT, type SignInState } from 'cortico-provider-coo/src/connect.ts';
 import { signInReason } from 'cortico-provider-coo/src/strings.ts';
 import { LANGUAGE } from '../../base/language.ts';
@@ -20,7 +20,7 @@ export const openInBrowser = (url: string): void => { window.open(url, '_blank')
 export const signOutBeforeDelete = (name: string, signal?: AbortSignal): Promise<unknown> => signOutChatGPT(consoleCall(signal), name).catch(() => {});
 
 /** The account line of the saved `chatgpt` endpoint `name` with its sign-in and sign-out buttons, and the quota note. */
-export function accountRow(ui: ConsoleUi, name: string, signal: AbortSignal): HTMLElement {
+export function accountRow(ui: WebUi, name: string, signal: AbortSignal): HTMLElement {
   const call = consoleCall(signal);
   const line = ui.msgline('');
   const signIn = ui.button(S.go, { variant: 'primary' });

@@ -33,6 +33,14 @@ export const ICONS = {
   roam_off: icon('<path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16 7 13.2"/><circle cx="12" cy="16" r="1.2" fill="currentColor"/>'),
   roam_calm: icon('<path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16V10"/><circle cx="12" cy="16" r="1.2" fill="currentColor"/>'),
   roam_free: icon('<path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l5-2.8"/><circle cx="12" cy="16" r="1.2" fill="currentColor"/><path d="M19.5 6.5l1.5-1.5M21 10h1.5"/>'),
+  // the personas the introduction offers (pet.css gives each its move when picked): a magnifier, a goblet, a hammer,
+  // a heart, a snowflake, the whale with its spout
+  persona_coo: icon('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>'),
+  persona_grail: icon('<path d="M6.5 4h11v3.5a5.5 5.5 0 0 1-11 0z"/><path d="M12 13v6M8 20h8"/>'),
+  persona_forge: icon('<path d="M12.5 5.5l3-3 5 5-3 3z"/><path d="M14 9l-9.5 9.5"/>'),
+  persona_heart: icon('<path d="M12 19.5s-7-4.3-7-9.6a3.9 3.9 0 0 1 7-2.4 3.9 3.9 0 0 1 7 2.4c0 5.3-7 9.6-7 9.6z"/>'),
+  persona_winter: icon('<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/><path d="M9.5 4.5L12 6l2.5-1.5M9.5 19.5L12 18l2.5 1.5"/>'),
+  persona_whale: icon('<path d="M3 13c0-3 2.6-5 6.5-5 3.3 0 5.4 1.6 7 3.3.8.8 1.6 1.2 2.5 1.2"/><path d="M3 13c0 3.1 3 5 7.5 5 4.4 0 7.5-2.2 8.5-5.5"/><path d="M19 12.5c.2-1.8 1-3.2 2.5-4-1.6-.2-2.8.3-3.6 1.4-.4-1.4-1.4-2.2-3-2.4"/><path class="spout" d="M8 5.5V3.5M6.3 4.3 8 5.5l1.7-1.2"/><circle cx="7" cy="12" r=".6" fill="currentColor"/>'),
   // activity above the pet; separate parts let each small icon move in its own way
   status_think: icon('<circle cx="4" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="20" cy="12" r="1.5"/>'),
   status_read: icon('<path d="M6 3h9l4 4v14H6zM14 3v5h5"/><path class="scan" d="M9 11h7"/>'),

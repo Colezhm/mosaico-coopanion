@@ -16,6 +16,7 @@ export default {
   'heard.done': 'Reconocido',
   'heard.more': 'Escuchando…',
   'heard.listening': 'Escuchando…',
+  'heard.cancel': 'Cancelar',
 
   // the status bubble: added when the same kind of thing was done several times
   'status.more': ' y {others} más',

@@ -5,7 +5,7 @@
  */
 
 import { pageIdFor } from '../../lib/web/shared/console-protocol.ts';
-import type { ConsoleBadge, ConsoleLamp, ConsoleLink } from 'cortico/web/shared/console-protocol.ts';
+import type { WebUiBadge, WebUiLamp, WebUiLink } from 'cortico/web/shared/webui-protocol.ts';
 import { get, post } from '../../../base/api.ts';
 import { PROVIDER_ROUTE } from '../../console-pages/host.ts';
 import { resolveConsoleLinkHref } from '../../../base/theme/handoff.ts';
@@ -31,7 +31,7 @@ export interface WorldView {
   id: string;
   status: 'active' | 'inactive' | 'missing';
   /** World 自报的状态灯,一条链路一颗(仅 active 有意义)。 */
-  lamps?: ConsoleLamp[];
+  lamps?: WebUiLamp[];
   /** 人类可读名;没有就退回 id。 */
   label?: string;
   /** Persona定义的渠道;false = 部署侧选配的外挂;undefined = 没说。 */
@@ -44,8 +44,8 @@ export interface WorldView {
   reason?: string;
   workspace?: string;
   tools?: string[];
-  badges?: ConsoleBadge[];
-  links?: ConsoleLink[];
+  badges?: WebUiBadge[];
+  links?: WebUiLink[];
 }
 
 function errText(err: unknown): string {

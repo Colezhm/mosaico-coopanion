@@ -6,7 +6,7 @@
  * x-options 动态获取候选；x-path 选择服务器本机路径；x-download 提供浏览器下载链接。
  */
 
-import type { ConsoleUi, Disposable } from 'cortico/web/shared/client-panel.ts';
+import type { WebUi, Disposable } from 'cortico/web/shared/client-panel.ts';
 import { get, pickPath, post } from '../../../base/api.ts';
 import type { Lifecycle } from '../../../base/lifecycle.ts';
 import { icon } from '../../../base/ui/icons.ts';
@@ -60,7 +60,7 @@ function mergeOptionList(live: OptionItem[], current: string): OptionItem[] {
   return out;
 }
 
-function fillSelect(ui: ConsoleUi, sel: HTMLSelectElement, items: OptionItem[], current: string): void {
+function fillSelect(ui: WebUi, sel: HTMLSelectElement, items: OptionItem[], current: string): void {
   sel.replaceChildren();
   for (const item of items) {
     const opt = ui.h('option', null, item.label);
@@ -114,7 +114,7 @@ function isAbort(err: unknown): boolean {
  * pointerdown/focus 再探,给下次打开用。探测失败只留当前值。
  */
 function optionsField(
-  ui: ConsoleUi,
+  ui: WebUi,
   kind: string,
   current: string,
   onChange: () => void,
@@ -156,7 +156,7 @@ function httpDownloadHref(raw: string): string | null {
 }
 
 function pathField(
-  ui: ConsoleUi,
+  ui: WebUi,
   prop: ConfigProperty,
   current: string,
   onChange: () => void,
@@ -217,7 +217,7 @@ function pathField(
 
 /** 渲染属性并返回存储单位的取值器；值变化经 onChange 提交。 */
 export function configField(
-  ui: ConsoleUi,
+  ui: WebUi,
   prop: ConfigProperty,
   val: unknown,
   onChange?: () => void,
@@ -294,7 +294,7 @@ export function configField(
 }
 
 export interface ConfigViewDeps {
-  ui: ConsoleUi;
+  ui: WebUi;
   lifecycle: Lifecycle;
   signal: AbortSignal;
   /**

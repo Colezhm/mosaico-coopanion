@@ -2,7 +2,7 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   // index.ts
-  navAria: 'Konsolennavigation',
+  navAria: 'Einstellungsnavigation',
   groupWorlds: 'World',
   moduleInstancesAria: 'World-Instanzen',
 
@@ -11,7 +11,7 @@ export const S: Partial<typeof en> = {
   shutdownAria: 'Herunterfahren',
   finishing: 'Wird heruntergefahren…',
   shutdownTitle: 'Herunterfahren',
-  shutdownBody: 'Der Prozess wird beendet und die Konsole getrennt.',
+  shutdownBody: 'Der Prozess wird beendet und die Verbindung getrennt.',
   confirmShutdownTitle: '⚠ Herunterfahren',
   confirmShutdownAgainTitle: '⚠⚠ Herunterfahren bestätigen?',
   confirmShutdownAgainBody: 'Lauf stoppen und Prozess beenden?',
@@ -24,7 +24,7 @@ export const S: Partial<typeof en> = {
   resultDefault: 'Schritte zum Herunterfahren ausgeführt.',
   noReceipt: (msg: string) =>
     `Kein Ergebnis des Herunterfahrens erhalten (${msg}); der Prozess ist möglicherweise beendet.`,
-  docTitle: (name: string) => `Konsole · ${name}`,
+  docTitle: (name: string) => `Einstellungen · ${name}`,
   renameTitle: 'Zum Umbenennen klicken',
   renameSaved: 'Anzeigename gespeichert',
   renameFailed: (msg: string) => `Anzeigename nicht gespeichert: ${msg}`,

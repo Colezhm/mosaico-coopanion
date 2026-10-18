@@ -11,7 +11,7 @@ import { S as ru } from './strings.ru.ts';
 
 const zh = {
   // index.ts
-  navAria: '控制台导航',
+  navAria: '设置导航',
   groupWorlds: 'World',
   moduleInstancesAria: 'World 实例',
 
@@ -20,7 +20,7 @@ const zh = {
   shutdownAria: '关机',
   finishing: '正在关闭…',
   shutdownTitle: '关机',
-  shutdownBody: '进程将退出，控制台连接将断开。',
+  shutdownBody: '进程将退出，连接将断开。',
   confirmShutdownTitle: '⚠ 关机',
   confirmShutdownAgainTitle: '⚠⚠ 确认关机？',
   confirmShutdownAgainBody: '停止运行并退出进程？',
@@ -33,7 +33,7 @@ const zh = {
   resultDefault: '关闭步骤已执行。',
   noReceipt: (msg: string) =>
     `未收到关闭结果（${msg}）；进程可能已退出。`,
-  docTitle: (name: string) => `控制台 · ${name}`,
+  docTitle: (name: string) => `设置 · ${name}`,
   renameTitle: '点击改名',
   renameSaved: '展示名已保存',
   renameFailed: (msg: string) => `展示名没保存成：${msg}`,
@@ -54,7 +54,7 @@ const zh = {
 
 export const en: typeof zh = {
   // index.ts
-  navAria: 'Console navigation',
+  navAria: 'Settings navigation',
   groupWorlds: 'World',
   moduleInstancesAria: 'World instances',
 
@@ -63,7 +63,7 @@ export const en: typeof zh = {
   shutdownAria: 'Shut down',
   finishing: 'Shutting down…',
   shutdownTitle: 'Shut down',
-  shutdownBody: 'The process will exit and disconnect the console.',
+  shutdownBody: 'The process will exit and the connection will close.',
   confirmShutdownTitle: '⚠ Shut down',
   confirmShutdownAgainTitle: '⚠⚠ Confirm shutdown?',
   confirmShutdownAgainBody: 'Stop running and exit the process?',
@@ -76,7 +76,7 @@ export const en: typeof zh = {
   resultDefault: 'Shutdown steps executed.',
   noReceipt: (msg: string) =>
     `No shutdown result received (${msg}); the process may have exited.`,
-  docTitle: (name: string) => `Console · ${name}`,
+  docTitle: (name: string) => `Settings · ${name}`,
   renameTitle: 'Click to rename',
   renameSaved: 'Display name saved',
   renameFailed: (msg: string) => `Display name not saved: ${msg}`,

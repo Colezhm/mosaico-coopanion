@@ -6,8 +6,8 @@
 
 import {
   isConsoleClientBundle,
-  type ConsoleClientBundle,
-  type ConsolePanel,
+  type WebUiClientBundle,
+  type WebUiPanel,
 } from '../../base/protocol.ts';
 import { isSafeAssetUrl, type ConsoleAssetEntry } from '../lib/web/shared/console-protocol.ts';
 import { S } from './strings.ts';
@@ -38,8 +38,8 @@ export class PanelBundleError extends Error {
 
 export class ConsolePageLoader {
   private readonly deps: LoaderDeps;
-  private readonly loaded = new Map<string, ConsoleClientBundle>();
-  private readonly inFlight = new Map<string, Promise<ConsoleClientBundle>>();
+  private readonly loaded = new Map<string, WebUiClientBundle>();
+  private readonly inFlight = new Map<string, Promise<WebUiClientBundle>>();
   private readonly styled = new Set<string>();
 
   constructor(deps: LoaderDeps) {
@@ -51,7 +51,7 @@ export class ConsolePageLoader {
     return [...this.loaded.keys()];
   }
 
-  async load(pageId: string, asset: ConsoleAssetEntry | undefined): Promise<ConsoleClientBundle> {
+  async load(pageId: string, asset: ConsoleAssetEntry | undefined): Promise<WebUiClientBundle> {
     const cached = this.loaded.get(pageId);
     if (cached) return cached;
 
@@ -73,7 +73,7 @@ export class ConsolePageLoader {
   private async loadOnce(
     pageId: string,
     asset: ConsoleAssetEntry | undefined,
-  ): Promise<ConsoleClientBundle> {
+  ): Promise<WebUiClientBundle> {
     if (!asset) {
       throw new PanelBundleError(pageId, S.noBundle(pageId));
     }
@@ -116,7 +116,7 @@ export class ConsolePageLoader {
     pageId: string,
     panelId: string,
     asset: ConsoleAssetEntry | undefined,
-  ): Promise<ConsolePanel> {
+  ): Promise<WebUiPanel> {
     const bundle = await this.load(pageId, asset);
     const panel = bundle.panels[panelId];
     // 分别报告键缺失与实现不合法。

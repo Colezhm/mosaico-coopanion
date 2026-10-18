@@ -2,10 +2,10 @@ import type { en } from './strings.ts';
 
 export const S: Partial<typeof en> = {
   protocolMismatch: (server: string, page: string) =>
-    `Konsolen-Protokollversion stimmt nicht überein: Server ${server}, diese Seite ${page}.`
+    `Seiten-Protokollversion stimmt nicht überein: Server ${server}, diese Seite ${page}.`
     + ' Erzwinge ein Neuladen der Seite.',
   pageFailed: (pageId: string) => `„${pageId}“ konnte nicht geöffnet werden`,
-  noPage: (pageId: string) => `Konsolenseite nicht gefunden: „${pageId}“`,
+  noPage: (pageId: string) => `Seite nicht gefunden: „${pageId}“`,
   noPageHint: 'Prüfe die Seitenadresse und den Aktivierungsstatus des Moduls.',
   noPanels: (label: string) => `„${label}“ deklariert keine Panels.`,
   noSuchPanel: (label: string, wanted: string) => `„${label}“ hat kein Panel „${wanted}“`,

@@ -1,5 +1,5 @@
 /**
- * 「终端」: Cortico's live page under the heading every page has (features/intro.ts); the live
+ * 「控制台」: Cortico's live page under the heading every page has (features/intro.ts); the live
  * band and the timeline below it keep the same content width (companion.css).
  */
 import { liveFeature } from './live/index.ts';
